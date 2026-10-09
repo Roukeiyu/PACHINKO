@@ -86,7 +86,8 @@ export function createRenderer(canvas) {
       if (rail.plugin.motion) {
         const motion = rail.plugin.motion;
         ctx.save(); ctx.setLineDash([3, 6]); ctx.strokeStyle = '#c7b4a86b'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(motion.x - motion.amplitude, motion.y); ctx.lineTo(motion.x + motion.amplitude, motion.y); ctx.stroke(); ctx.restore();
+        const dx = motion.axisX * motion.amplitude, dy = motion.axisY * motion.amplitude;
+        ctx.beginPath(); ctx.moveTo(motion.x - dx, motion.y - dy); ctx.lineTo(motion.x + dx, motion.y + dy); ctx.stroke(); ctx.restore();
       }
       bodyShape(rail, rail.plugin.glow > .3 ? '#ffdea2' : theme.accent, '#fff5df');
       ctx.save(); ctx.translate(rail.position.x, rail.position.y); ctx.rotate(rail.angle); text('›  ›  ›', 0, -1, 13, '#fff8ec', 'bold'); ctx.restore();

@@ -48,7 +48,7 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
   [[156, 304, 228, 363], [536, 335, 601, 290], [125, 578, 217, 541], [496, 568, 581, 611]].forEach(args => segment(...args, 16, rails, 'rail', .93));
   for (const [index, amplitude, period, direction] of [[0, 36, 4600, 1], [3, 34, 5200, -1]]) {
     const rail = rails[index];
-    rail.plugin.motion = { x: rail.position.x, y: rail.position.y, amplitude, period, direction };
+    rail.plugin.motion = { x: rail.position.x, y: rail.position.y, axisX: Math.cos(rail.angle), axisY: Math.sin(rail.angle), amplitude, period, direction };
   }
   [[254, 668], [442, 695]].forEach(([x, y]) => add(Bodies.polygon(x, y, 4, 23, { isStatic: true, label: 'diamond', restitution: .95, friction: 0, angle: Math.PI / 4 }), diamonds));
   const spinner = add(Bodies.rectangle(351, 540, 122, 13, { isStatic: true, label: 'spinner', chamfer: { radius: 6 }, restitution: .85, friction: .01 }), spinners);
@@ -77,8 +77,9 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
   const layoutRandom = () => { layoutSeed = (Math.imul(layoutSeed, 1664525) + 1013904223) >>> 0; return layoutSeed / 2 ** 32; };
   const clearance = 35;
   const exclusionPolygons = [...walls, ...rails, ...diamonds].map(body => {
-    const amplitude = body.plugin.motion?.amplitude || 0;
-    return Matter.Vertices.hull(body.vertices.flatMap(v => [{ x: v.x - amplitude, y: v.y }, { x: v.x + amplitude, y: v.y }]));
+    const motion = body.plugin.motion;
+    const dx = motion ? motion.axisX * motion.amplitude : 0, dy = motion ? motion.axisY * motion.amplitude : 0;
+    return Matter.Vertices.hull(body.vertices.flatMap(v => [{ x: v.x - dx, y: v.y - dy }, { x: v.x + dx, y: v.y + dy }]));
   });
   const distanceToEdge = (p, a, b) => {
     const dx = b.x - a.x, dy = b.y - a.y;
@@ -209,7 +210,10 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
     Body.setAngle(spinner, Math.sin(clock / 1350) * .85, true);
     for (const rail of rails) {
       const motion = rail.plugin.motion;
-      if (motion) Body.setPosition(rail, { x: motion.x + Math.sin(clock / motion.period * Math.PI * 2) * motion.amplitude * motion.direction, y: motion.y }, true);
+      if (motion) {
+        const travel = Math.sin(clock / motion.period * Math.PI * 2) * motion.amplitude * motion.direction;
+        Body.setPosition(rail, { x: motion.x + motion.axisX * travel, y: motion.y + motion.axisY * travel }, true);
+      }
     }
     Engine.update(engine, dt);
     // Apply the active platform's kick after the solver so the contact response
