@@ -92,7 +92,7 @@ try {
   assert.equal(await page.locator('#settings').evaluate(el => el.open), true, 'settings remain available in landscape');
   await page.locator('#close-settings').tap();
   await page.locator('#compact-sound').tap();
-  assert.equal(await page.locator('#compact-sound').getAttribute('aria-label'), '开启音效');
+  assert.equal(await page.locator('#compact-sound').getAttribute('aria-label'), '开启声音');
   assert.deepEqual(errors, []);
   console.log('PASS: settings pause; H5 portrait at 320/390/430px and landscape retain visible controls, aspect ratio and no overflow.');
 } finally { await browser.close(); }

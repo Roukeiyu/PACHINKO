@@ -85,7 +85,7 @@ try {
   await page.locator('#sound-button').click();
   await page.reload();
   await page.waitForFunction(() => window.__ponpon?.slots === 9 && window.__ponpon.theme === 'flower');
-  assert.equal(await page.locator('#sound-button').getAttribute('aria-label'), '开启音效');
+  assert.equal(await page.locator('#sound-button').getAttribute('aria-label'), '开启声音');
   assert.ok(Number((await page.locator('#best').textContent()).replaceAll(',', '')) > 0);
   await page.locator('#settings-button').click();
   assert.equal(await page.locator('#calm').isChecked(), true);
