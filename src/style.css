@@ -43,9 +43,23 @@ header{height:76px}.intro{padding:20px 0}.intro h1{font-size:27px;margin:6px 0}.
   .bottom-info{font-size:8px;margin:14px 0 12px;letter-spacing:0;gap:8px}.footer{font-size:7px;letter-spacing:.5px;gap:15px;padding:12px 0}.toast{max-width:calc(100vw - 24px);width:max-content;text-align:center;font-size:11px;bottom:calc(20px + env(safe-area-inset-bottom,0px))}
   .dialog-inner{padding:21px}.dialog-head h2{font-size:19px}.dialog-sub{margin-bottom:18px}.choices{margin-bottom:19px}.setting-row{margin-bottom:17px}.choice{min-height:46px}.setting-row input[type=checkbox]{width:24px;height:24px}
 }
+/* A single mobile header leaves the viewport for the table and controls. */
+.mobile-title{display:none}
+@media(max-width:740px){
+  .shell{padding-top:env(safe-area-inset-top,0px)}
+  header{height:54px;border-bottom:0}
+  .brand-copy,.intro,.bottom-info,.footer,.machine-foot{display:none}
+  .mobile-title{display:block;font-size:16px;letter-spacing:.5px;margin:0;white-space:nowrap}
+  .game-layout{margin-top:4px}
+  .board-wrap{max-width:min(100%,calc((100svh - 224px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)) * .84444))}
+  .reward-dashboard{margin-top:10px;padding-top:8px;gap:7px}
+  .reward-dashboard small{display:none}
+}
 @media(max-height:500px) and (orientation:landscape){
   .reward-dashboard{display:none}
-  .shell{max-width:850px}.intro,header,.sidebar,.bottom-info,.footer{display:none}.game-layout{display:block;margin:8px auto;max-width:calc(84svh + 175px)}.machine{display:grid;grid-template-columns:minmax(0,1fr) 205px;gap:8px;padding:8px}.mobile-hud{grid-column:1/-1;padding-bottom:2px}.machine-top{display:none}.board-wrap{grid-column:1;max-width:calc(84svh - 56px);width:100%}.launch-control{grid-column:2;grid-row:2;align-self:center}.launch-row{flex-direction:column;gap:12px}.power-row{flex-wrap:wrap}.power-row input{order:3;flex-basis:100%}.power-row output{margin-left:auto}.machine-foot{line-height:1.8}.auto-button{justify-content:center}.compact-tools{display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px}.compact-tools button{min-height:44px;min-width:44px}.compact-tools .settings-button{font-size:11px;width:auto;gap:7px}.compact-tools .settings-button span{display:inline}
+  .shell{max-width:850px}.intro,header,.sidebar,.bottom-info,.footer{display:none}.game-layout{display:block;margin:8px auto;max-width:calc(84svh + 175px)}.machine{display:grid;grid-template-columns:minmax(0,1fr) 205px;gap:8px;padding:8px}.mobile-hud{grid-column:1/-1;padding-bottom:2px}.machine-top{display:none}.board-wrap{grid-column:1;max-width:calc(84svh - 62px);width:100%}.launch-control{grid-column:2;grid-row:2;align-self:center}.launch-row{flex-direction:column;gap:12px}.power-row{flex-wrap:wrap}.power-row input{order:3;flex-basis:100%}.power-row output{margin-left:auto}.machine-foot{line-height:1.8}.auto-button{justify-content:center}.compact-tools{display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px}.compact-tools button{min-height:44px;min-width:44px}.compact-tools .settings-button{font-size:11px;width:auto;gap:7px}.compact-tools .settings-button span{display:inline}
 }
 
 .settings-theme{display:flex;align-items:center;gap:14px;margin:0 0 14px;padding:10px 14px;border:1px solid #e4e6d6;border-radius:15px;background:#f6f7ed}.settings-theme .theme-preview{flex:0 0 66px;width:66px;height:70px;margin:0}.settings-theme .mascot{width:62px}.settings-theme .theme-emoji{font-size:48px}.settings-theme .theme-name{text-align:left;font-size:14px;margin:0 0 5px}.settings-theme .theme-description{text-align:left;font-size:11px;line-height:1.6;min-height:0}
+
+.auto-setting{padding-bottom:18px;border-bottom:1px solid #e4e6d6}.auto-setting small{display:block;margin-top:5px;font-size:10px;line-height:1.6;color:#8e9681}.auto-setting input{flex-shrink:0}

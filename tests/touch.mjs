@@ -16,11 +16,11 @@ try {
     const r = await page.locator(selector).boundingBox();
     await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: r.x + r.width / 2, y: r.y + r.height / 2 }] });
   }
-  await touchStart('h1'); await page.waitForTimeout(900);
+  await touchStart('.mobile-title'); await page.waitForTimeout(900);
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   assert.equal(await page.evaluate(() => getSelection().toString()), '', 'long-pressing interface text cannot select it');
   const protections = await page.evaluate(() => {
-    const elements = ['h1', '#launch-label', '.brand-name', '.theme-name', '#board'];
+    const elements = ['.mobile-title', '#launch-label', '.brand-name', '.theme-name', '#board'];
     return elements.every(selector => {
       const el = document.querySelector(selector);
       return getComputedStyle(el).userSelect === 'none' && !el.dispatchEvent(new Event('selectstart', { bubbles: true, cancelable: true })) && !el.dispatchEvent(new Event('contextmenu', { bubbles: true, cancelable: true })) && !el.dispatchEvent(new Event('dragstart', { bubbles: true, cancelable: true }));
@@ -77,10 +77,11 @@ try {
   await page.locator('#done-settings').tap();
   assert.equal(await page.evaluate(() => window.__ponpon.slots), 9);
   assert.equal(await page.evaluate(() => window.__ponpon.theme), 'dessert');
-  for (const [width, height] of [[320,568], [390,844], [430,932], [844,390]]) {
+  for (const [width, height] of [[320,568], [390,664], [390,844], [430,932], [844,390]]) {
     await page.setViewportSize({ width, height }); await page.evaluate(() => scrollTo(0, 0));
     await page.waitForTimeout(100);
-    const layout = await page.evaluate(() => { const r = document.querySelector('#launch').getBoundingClientRect(); const c = document.querySelector('canvas').getBoundingClientRect(); return { overflow: document.documentElement.scrollWidth > innerWidth, launchBottom: r.bottom, launchHeight: r.height, viewport: innerHeight, ratio: c.width / c.height }; });
+    const layout = await page.evaluate(() => { const r = document.querySelector('#launch').getBoundingClientRect(); const c = document.querySelector('canvas').getBoundingClientRect(); return { pageHeight: document.documentElement.scrollHeight, overflow: document.documentElement.scrollWidth > innerWidth, launchBottom: r.bottom, launchHeight: r.height, viewport: innerHeight, ratio: c.width / c.height }; });
+    assert.ok(layout.pageHeight <= layout.viewport + 1, `${width}×${height}: the full mobile game fits without vertical scrolling`);
     assert.equal(layout.overflow, false, `${width}×${height}: no horizontal overflow`);
     assert.ok(layout.launchBottom <= layout.viewport + 1, `${width}×${height}: launch control must be visible without scrolling (${JSON.stringify(layout)})`);
     assert.ok(layout.launchHeight >= 44, 'touch targets at least 44px high');

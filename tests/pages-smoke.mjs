@@ -28,9 +28,14 @@ try {
   page.on('requestfailed', req => errors.push(req.url()));
   page.on('response', res => { if (res.status() >= 400) errors.push(`${res.status()} ${res.url()}`); });
   await page.goto(`http://127.0.0.1:${server.address().port}${prefix}`);
-  await page.locator('#auto').click();
+  async function toggleAuto() {
+    await page.locator('#settings-button').click();
+    await page.locator('#auto').click();
+    await page.locator('#done-settings').click();
+  }
+  await toggleAuto();
   await page.waitForFunction(() => Number(document.querySelector('#score').textContent.replaceAll(',', '')) > 0, null, { timeout: 30000 });
-  await page.locator('#auto').click();
+  await toggleAuto();
   await page.locator('#settings-button').click();
   await page.locator('[data-slots="9"]').click();
   await page.locator('.theme-choice[data-theme="flower"]').click();
