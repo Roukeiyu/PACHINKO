@@ -32,13 +32,13 @@ try {
   assert.ok(await page.evaluate(() => window.__ponpon.charging && window.__ponpon.charge < .1), 'each press starts at zero');
   await page.waitForTimeout(600);
   assert.equal(await count(), 0, 'holding must not fire prematurely');
-  assert.ok(await page.evaluate(() => window.__ponpon.charging && window.__ponpon.charge > .35 && window.__ponpon.charge < .65), '600ms charges about 40% of the 1.5-second range');
+  assert.ok(await page.evaluate(() => window.__ponpon.charging && window.__ponpon.charge > .65 && window.__ponpon.charge < .85), '600ms reaches about 70% on the exponential curve');
   await page.screenshot({ path: 'test-results/mobile-charging.png', fullPage: true });
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await page.waitForTimeout(400);
   assert.equal(await count(), 1, 'touch release must fire exactly once, not again on synthesized click');
   assert.equal(await page.evaluate(() => window.__ponpon.charge), 0, 'release clears the charge');
-  assert.ok(await page.evaluate(() => window.__ponpon.positions.some(p => p.power > .35 && p.power < .65)), 'the shot uses the actual held charge');
+  assert.ok(await page.evaluate(() => window.__ponpon.positions.some(p => p.power > .65 && p.power < .87)), 'the shot uses the same exponential curve as the display');
   assert.equal(await page.evaluate(() => getSelection().toString()), '');
   await page.waitForFunction(() => window.__ponpon.stats.entered === 1);
   assert.ok(await page.evaluate(() => window.__ponpon.canonNotes > 0 && window.__ponpon.canonNotes === window.__ponpon.stats.impacts));
@@ -57,10 +57,13 @@ try {
   await page.locator('#launch').focus();
   await page.keyboard.down('Space');
   assert.ok(await page.evaluate(() => window.__ponpon.charge < .1), 'keyboard charging starts from zero');
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(3500);
+  assert.equal(await page.evaluate(() => window.__ponpon.charge), 1, 'holding through 99.9% snaps to full charge');
+  assert.match(await page.locator('#launch-label').textContent(), /100%/);
   assert.equal(await count(), 2);
   await page.keyboard.up('Space'); await page.waitForTimeout(400);
   assert.equal(await count(), 3, 'keyboard release fires exactly once even when launch button has focus');
+  assert.ok(await page.evaluate(() => window.__ponpon.positions.some(p => p.power === 1)), 'a full-charge release actually uses 100% power');
   console.log('PASS: canceled gestures, right-hand spring tapping and keyboard charge/release.');
 
   await page.locator('#settings-button').tap();

@@ -1,6 +1,7 @@
 import { createTable, STEP } from './physics.js';
 import { createRenderer } from './renderer.js';
 import { createCanon } from './canon.js';
+import { chargeAt, chargePercent } from './charge.js';
 import './style.css';
 
 const icons = {
@@ -134,7 +135,7 @@ function beginCharge(source) {
 }
 function endCharge(fire = true) {
   if (!state.charging) return;
-  const power = Math.max(0, Math.min(1, (performance.now() - chargeStart) / 1500));
+  const power = chargeAt(performance.now() - chargeStart);
   state.charging = false; state.charge = 0; chargeSource = null; $('#launch').classList.remove('charging');
   $('#launch').style.setProperty('--charge', '0%'); $('#launch-label').textContent = '按住蓄力 · 松开发射'; $('#power-value').textContent = `${state.power}%`;
   if (fire) launch(power);
@@ -181,8 +182,8 @@ function tick(now) {
     }
     $('#reward-timer').textContent = game.rewards.enlargedUntil > game.clock ? `放大中 ${(Math.max(0, game.rewards.enlargedUntil - game.clock) / 1000).toFixed(1)}s` : '持续 5 秒';
     if (state.charging) {
-      state.charge = Math.max(0, Math.min(1, (now - chargeStart) / 1500));
-      const percent = Math.round(state.charge * 100);
+      state.charge = chargeAt(now - chargeStart);
+      const percent = chargePercent(state.charge);
       $('#launch').style.setProperty('--charge', `${percent}%`); $('#launch-label').textContent = `蓄力 ${percent}% · 松开发射`; $('#shot-state').textContent = percent === 100 ? '✦ 蓄力已满，松手！' : '弹簧蓄力中…';
     } else if (now - lastDrop > 1700) $('#shot-state').textContent = game.balls.length ? `${game.balls.length} 颗小快乐在冒险` : '右下角 · 弹珠就位';
     if (state.auto && now - lastAuto > 1100) { launch(); lastAuto = now; }
