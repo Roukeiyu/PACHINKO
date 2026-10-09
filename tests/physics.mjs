@@ -81,7 +81,7 @@ const totals = { scored: 0, jackpots: 0, returns: 0, timeouts: 0 };
 // Sample several launch/reward sequences per slot count on the fixed layout.
 for (const slots of [5, 7, 9]) for (const seedOffset of [0, 100, 200]) {
   const outcomes = [], columns = new Set();
-  const game = createTable({ slots, random: seeded(42 + slots + seedOffset), onScore: result => { outcomes.push(result); if (result.kind === 'slot') columns.add(result.column); } });
+  const game = createTable({ slots, random: seeded(42 + slots + seedOffset), slotRandom: seeded(4242 + slots + seedOffset), onScore: result => { outcomes.push(result); if (result.kind === 'slot') columns.add(result.column); } });
   let escaped = 0;
   for (let shot = 0; shot < 120; shot++) {
     const ball = game.launch(.65 + (shot % 15) * .025);
@@ -106,8 +106,9 @@ for (const slots of [5, 7, 9]) for (const seedOffset of [0, 100, 200]) {
     let factor = r.scoreFactor;
     if (!Number.isInteger(factor) || factor < 1) return false;
     for (const prime of [2, 5]) while (factor % prime === 0) factor /= prime;
-    return factor === 1 && r.points === r.basePoints * r.scoreFactor && (r.kind === 'jackpot' ? r.basePoints === 500 : [2, 3, 5, 10].includes(r.multiplier) && r.basePoints === r.multiplier * 10);
+    return factor === 1 && [1, 2, 5].includes(r.globalMultiplier) && r.points === r.basePoints * r.scoreFactor * r.globalMultiplier && (r.kind === 'jackpot' ? r.basePoints === 500 : [2, 3, 5, 10].includes(r.multiplier) && r.basePoints === r.multiplier * 10);
   }));
+  assert.equal(game.slotMachine.entries, game.stats.scored, 'each actual scoring entry advances the slot machine once');
   for (const k of Object.keys(totals)) totals[k] += game.stats[k];
   console.log(`PASS: ${slots} slots, sequence ${seedOffset}, ${JSON.stringify(game.stats)}, ${columns.size} distinct scoring slots.`);
 }

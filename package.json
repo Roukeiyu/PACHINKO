@@ -7,11 +7,12 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "npm run test:physics && npm run test:appearance && npm run test:music && node tests/smoke.mjs && node tests/touch.mjs",
-    "test:physics": "node tests/physics.mjs && node tests/surprises.mjs && node tests/stars.mjs && node tests/storage.mjs && node tests/reward-effects.mjs",
+    "test": "npm run test:physics && npm run test:appearance && npm run test:music && node tests/slot-machine-browser.mjs && node tests/smoke.mjs && node tests/touch.mjs",
+    "test:physics": "node tests/physics.mjs && node tests/surprises.mjs && node tests/stars.mjs && node tests/storage.mjs && node tests/reward-effects.mjs && node tests/slot-machine.mjs",
     "test:appearance": "node tests/appearance.mjs",
     "test:pages": "node tests/pages-smoke.mjs",
-    "test:music": "node tests/music.mjs"
+    "test:music": "node tests/music.mjs",
+    "test:slots": "node tests/slot-machine.mjs && node tests/slot-machine-browser.mjs"
   },
   "dependencies": {
     "matter-js": "^0.20.0"

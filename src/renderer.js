@@ -1,4 +1,5 @@
 import { TABLE, slotMultipliers } from './physics.js';
+import { SLOT_DISPLAY, SLOT_SYMBOLS, slotBonusLabel } from './slot-machine.js';
 import { rewardProfile } from './reward-effects.js';
 
 export function createRenderer(canvas) {
@@ -39,7 +40,9 @@ export function createRenderer(canvas) {
     ctx.save(); ctx.strokeStyle = '#afc09a75'; ctx.lineWidth = 2; ctx.setLineDash([3, 10]); ctx.beginPath(); ctx.moveTo(713, 750); ctx.lineTo(713, 154); ctx.stroke(); ctx.restore();
     for (let i = 0; i < 3; i++) { const y = 650 + i * 60 - (t * 45 % 60); ctx.beginPath(); ctx.moveTo(704, y + 8); ctx.lineTo(713, y); ctx.lineTo(722, y + 8); ctx.strokeStyle = '#86a869a0'; ctx.lineWidth = 3; ctx.stroke(); }
     text('P O N  P O N', 351, 112, 24, '#69815d', 'bold');
-    text('LITTLE PINBALL CLUB', 351, 133, 11, '#9ca184');
+    const bonus = game.slotMachine, bonusLabel = slotBonusLabel(bonus, game.clock);
+    text(bonusLabel || 'LITTLE PINBALL CLUB', 351, 133, 11, bonus.multiplier === 5 ? '#8b59b5' : bonus.multiplier === 2 ? '#99712d' : '#9ca184', bonusLabel ? 'bold' : '');
+    if (bonusLabel) { ctx.save(); ctx.lineWidth = 2; ctx.strokeStyle = bonus.multiplier === 5 ? '#b494d0' : '#d5b069'; ctx.strokeRect(43, 46, 609, 737); ctx.restore(); }
     text('↖', 651, 103, 27, '#a0b28d');
     star(209, 112, 7, '#d7b57a', t * .3); star(495, 112, 7, '#d7b57a', -t * .3);
     [[104, 209], [597, 647], [402, 196], [86, 639]].forEach(([x, y], i) => star(x, y + Math.sin(t + i) * 3, 4, '#d4b78475', t * .1));
@@ -57,8 +60,9 @@ export function createRenderer(canvas) {
       box(x + 3, TABLE.slotTop, sw - 6, 86, 12, theme.colors[Math.round(i * 6 / (state.slots - 1))]);
       if (glow) { const p = rewardProfile({ multiplier: multipliers[i] }); ctx.save(); ctx.globalAlpha = glow * .65; ctx.shadowBlur = 8 + p.tier * 5; ctx.shadowColor = p.color; box(x + 3, TABLE.slotTop, sw - 6, 86, 12, p.color); ctx.restore(); }
       text(theme.motifs[i % 4], x + sw / 2, TABLE.slotTop + 23, state.slots === 9 ? 22 : 26, '#627454');
-      text(`×${multipliers[i]}`, x + sw / 2, TABLE.slotTop + 54, 17, '#4c6648', 'bold');
-      if (multipliers[i] === 10) text('LUCKY', x + sw / 2, TABLE.slotTop + 73, 9, '#aa8243');
+      text(`×${multipliers[i] * bonus.multiplier}`, x + sw / 2, TABLE.slotTop + 54, 17, '#4c6648', 'bold');
+      if (bonus.multiplier > 1) text(`进洞 ×${bonus.multiplier}`, x + sw / 2, TABLE.slotTop + 73, 9, bonus.multiplier === 5 ? '#8b59b5' : '#99712d');
+      else if (multipliers[i] === 10) text('LUCKY', x + sw / 2, TABLE.slotTop + 73, 9, '#aa8243');
     }
     for (const hole of game.holes) {
       const pulse = 1 + Math.sin(t * 2.5) * .07;
@@ -67,7 +71,7 @@ export function createRenderer(canvas) {
       const gradient = ctx.createRadialGradient(hole.x, hole.y, 0, hole.x, hole.y, 19); gradient.addColorStop(0, '#293b39'); gradient.addColorStop(.7, '#536753'); gradient.addColorStop(1, '#b5b697');
       circle(hole.x, hole.y, 18, gradient, '#ede0a2', 3);
       star(hole.x, hole.y, 7, '#ecda90', t * .25);
-      text('+500', hole.x, hole.y - 51, 15, '#b39153', 'bold');
+      text(`+${500 * bonus.multiplier}`, hole.x, hole.y - 51, 15, '#b39153', 'bold');
       text('秘密洞', hole.x, hole.y + 52, 12, '#9e9375');
     }
     for (const guard of game.guards) bodyShape(guard, guard.plugin.storage ? '#b9a6ce' : '#d8c69c', guard.plugin.storage ? '#f4eafb' : '#efe5c8', false);
@@ -135,16 +139,39 @@ export function createRenderer(canvas) {
       circle(x, y, r + 6 + glow * 4, glow > .2 ? '#ffd879' : theme.accent, '#fff9ec', 3);
       circle(x, y - 2, r - 3, theme.colors[bumper.plugin.index * 2], '#fffefa', 3);
       ctx.restore();
-      text(theme.motifs[bumper.plugin.index], x, y - 3 + (state.calm ? 0 : Math.sin(t * 2 + bumper.id)), r * .85, '#6e7f60');
+      text(theme.motifs[bumper.plugin.index], x, y - (bumper.plugin.index === 2 ? 10 : 3) + (state.calm ? 0 : Math.sin(t * 2 + bumper.id)), r * .85, '#6e7f60');
       for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; circle(x + Math.cos(a) * (r + 10), y + Math.sin(a) * (r + 10), 2.2, Math.sin(t * 3 + i) > 0 ? '#ecd5a4' : '#ffffff90'); }
       const index=bumper.plugin.index,goal=game.rewards.goals[index],count=game.rewards.hits[index]%goal;
       ctx.beginPath();ctx.arc(x,y,r+14,-Math.PI/2,-Math.PI/2+Math.PI*2*(count/goal));ctx.strokeStyle='#c59450';ctx.lineWidth=3;ctx.stroke();
-      box(x-39,y+r+21,78,22,11,'#fff9e9dd','#ddd3b6');text(`${count} / ${goal}`,x,y+r+32,12,'#997747','bold');
-      if(index===2&&game.rewards.enlargedUntil>game.clock)text(`变大 ${((game.rewards.enlargedUntil-game.clock)/1000).toFixed(1)}s`,x,y-r-27,13,'#b38643','bold');
+      // The center counter sits inside its drum, reserving the gap above the
+      // swinging bar for the three reels even while the drum is enlarged.
+      if (index === 2) {
+        const enlarged = game.rewards.enlargedUntil > game.clock;
+        box(x-28,y+10,56,17,8,'#fff9e9ee','#ddd3b6');text(`${count} / ${goal}`,x,y+19,10,'#997747','bold');
+        if (enlarged) text(`变大 ${((game.rewards.enlargedUntil-game.clock)/1000).toFixed(1)}s`,x,y+39,10,'#b38643','bold');
+      } else { box(x-39,y+r+21,78,22,11,'#fff9e9dd','#ddd3b6');text(`${count} / ${goal}`,x,y+r+32,12,'#997747','bold'); }
       if(index===2&&game.rewards.burstUntil>game.clock){
         for(let i=0;i<12;i++){const angle=-Math.PI/2+i*Math.PI/6;circle(x+Math.cos(angle)*(r+27),y+Math.sin(angle)*(r+27),i===game.rewards.burstStep?5:3,i<=game.rewards.burstStep?'#dbaa45':'#e3d8b8');}
       }
     }
+    // Painted display: balls remain free to pass in front of it.
+    const cabinet = SLOT_DISPLAY, left = cabinet.x - cabinet.width / 2, top = cabinet.y - cabinet.height / 2;
+    box(left, top + 2, cabinet.width, cabinet.height, 9, '#887a6830');
+    box(left, top, cabinet.width, cabinet.height, 9, '#e8d7b7', bonus.multiplier === 5 ? '#a78ac9' : '#c8ae7e');
+    text(bonusLabel || 'L U C K Y  P O N', cabinet.x, top + 6, 8, bonus.multiplier === 5 ? '#7856a3' : '#856842', 'bold');
+    for (let reel = 0; reel < 3; reel++) {
+      const x = cabinet.x + (reel - 1) * 46, moving = bonus.spinning && !bonus.stopped[reel];
+      box(x - 21, top + 12, 42, 21, 4, '#fffaf0', moving ? '#b59ac8' : '#d0bd98');
+      ctx.save(); ctx.beginPath(); ctx.rect(x - 20, top + 13, 40, 19); ctx.clip();
+      if (moving && !state.calm) {
+        const phase = (game.clock - bonus.startedAt) / (70 + reel * 15), index = Math.floor(phase) % SLOT_SYMBOLS.length, offset = (phase % 1) * 21;
+        text(SLOT_SYMBOLS[index], x, top + 22 + offset, 20, '#52664c');
+        text(SLOT_SYMBOLS[(index + 1) % SLOT_SYMBOLS.length], x, top + 1 + offset, 20, '#52664c');
+      } else text(moving ? '·' : SLOT_SYMBOLS[bonus.reels[reel]], x, top + 22, 20, '#52664c');
+      ctx.restore();
+    }
+    const reelStatus = bonus.spinning ? `转动中${bonus.queued ? ` · 排队 ${bonus.queued}` : ''}` : `${bonus.progress}/100 · 进洞蓄好运${bonus.queued ? ` · 排队 ${bonus.queued}` : ''}`;
+    text(reelStatus, cabinet.x, top + 37, 8, '#856842');
     // The spring compresses while held. A ready ball remains visually separate
     // from any live ball travelling along the lane.
     const compression = state.charging ? state.charge * 22 : 0;

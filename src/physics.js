@@ -1,4 +1,5 @@
 import Matter from 'matter-js';
+import { createSlotMachine, SLOT_DISPLAY } from './slot-machine.js';
 
 const { Engine, Bodies, Body, Composite, Events } = Matter;
 export const TABLE = Object.freeze({ width: 760, height: 900, left: 39, right: 655, slotTop: 797, scoreLine: 865, launchX: 713, launchY: 787 });
@@ -8,7 +9,7 @@ export const slotMultipliers = count => count === 5 ? [2, 3, 10, 3, 2] : count =
 
 // Physics is independent of rendering, so trajectory and scoring can be tested at
 // the same fixed time step used on desktop and mobile (including fast launches).
-export function createTable({ slots = 7, random = Math.random, starRandom = Math.random, onHit = () => {}, onScore = () => {}, onReturn = () => {}, onSurprise = () => {} } = {}) {
+export function createTable({ slots = 7, random = Math.random, starRandom = Math.random, slotRandom = Math.random, onHit = () => {}, onScore = () => {}, onReturn = () => {}, onSurprise = () => {} } = {}) {
   const engine = Engine.create({ gravity: { x: 0, y: 1.05 }, positionIterations: 8, velocityIterations: 8 });
   const balls = [], walls = [], pins = [], kickers = [], bumpers = [], rails = [], diamonds = [], spinners = [], guards = [], dividers = [], gates = [];
   const holes = [{ x: 615, y: 482, facing: Math.PI, glow: 0 }];
@@ -18,6 +19,7 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
   const pendingShots = [], pendingDrops = [];
   const collector = { x: 100, y: 650, radius: 18, capacity: 20, stored: [], remaining: 0, glow: 0, outlets: [] };
   const rewards = { hits: [0, 0, 0], goals: [10, 10, 50], enlargedUntil: 0, burstUntil: 0, burstStep: -1, gateGlow: 0, ordinaryStars: 0 };
+  const slotMachine = createSlotMachine({ random: slotRandom, onEvent: event => onSurprise({ ...event, x: SLOT_DISPLAY.x, y: SLOT_DISPLAY.y }) });
   const stats = { launches: 0, entered: 0, scored: 0, jackpots: 0, returns: 0, timeouts: 0, redirected: 0, bonusBalls: 0, randomShots: 0, clockBursts: 0, enlargements: 0, absorbed: 0, storageBursts: 0, storageDrops: 0, impacts: 0, hits: { pin: 0, kicker: 0, bumper: 0, rail: 0, spinner: 0, diamond: 0, wall: 0, deflector: 0 } };
   const add = (body, group, extra = {}) => { body.plugin = { glow: 0, ...extra }; group.push(body); Composite.add(engine.world, body); return body; };
   const segment = (x1, y1, x2, y2, thickness, group, label = 'wall', restitution = .65) => {
@@ -106,6 +108,8 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
     })) continue;
     if (bumpers.some(b => Math.hypot(x - b.position.x, y - b.position.y) < b.plugin.baseRadius * (b.plugin.index === 2 ? 1.5 : 1) + 26)) continue;
     if (Math.hypot(x - 351, y - 540) < 94 || Math.hypot(x - 99, y - 466) < 64 || holes.some(h => Math.hypot(x - h.x, y - h.y) < 62) || Math.hypot(x - collector.x, y - collector.y) < 62) continue;
+    // Keep collectible stars readable around the painted reel display.
+    if (Math.abs(x - SLOT_DISPLAY.x) < SLOT_DISPLAY.width / 2 + 26 && Math.abs(y - SLOT_DISPLAY.y) < SLOT_DISPLAY.height / 2 + 26) continue;
     starLocations.push({ x, y });
   }
   function placeStar() {
@@ -247,8 +251,18 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
     }
   });
   function remove(ball, index) { Composite.remove(engine.world, ball.body); balls.splice(index, 1); }
+  function settleScore(result, ball) {
+    const globalMultiplier = slotMachine.state.multiplier;
+    stats.scored++;
+    // The bonus is read at entry, never copied to a ball or to storage stock.
+    // The entry that earns a spin is scored before its future result activates.
+    onScore({ ...result, scoreFactor: ball.scoreFactor, globalMultiplier,
+      points: result.basePoints * ball.scoreFactor * globalMultiplier, ballId: ball.id });
+    slotMachine.recordEntry(clock);
+  }
   function step(dt = STEP) {
     clock += dt;
+    slotMachine.advance(clock);
     if (activeStar && clock + 1e-6 >= activeStar.expiresAt) {
       activeStar = null;
       nextStarAt = clock;
@@ -324,11 +338,11 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
         }
       }
       const hole = ball.entered && holes.find(h => Math.hypot(x - h.x, y - h.y) < 18);
-      if (hole) { hole.glow = 1; stats.jackpots++; stats.scored++; remove(ball, i); onScore({ kind: 'jackpot', basePoints: 500, scoreFactor: ball.scoreFactor, points: 500 * ball.scoreFactor, x: hole.x, y: hole.y, ballId: ball.id }); continue; }
+      if (hole) { hole.glow = 1; stats.jackpots++; remove(ball, i); settleScore({ kind: 'jackpot', basePoints: 500, x: hole.x, y: hole.y }, ball); continue; }
       if (ball.entered && x < 666 && y >= TABLE.scoreLine) {
         const column = Math.max(0, Math.min(slots - 1, Math.floor((x - TABLE.left) / ((TABLE.right - TABLE.left) / slots))));
         const multiplier = slotMultipliers(slots)[column];
-        stats.scored++; remove(ball, i); onScore({ kind: 'slot', column, multiplier, basePoints: multiplier * 10, scoreFactor: ball.scoreFactor, points: multiplier * 10 * ball.scoreFactor, x: TABLE.left + (column + .5) * (TABLE.right - TABLE.left) / slots, y: TABLE.scoreLine, ballId: ball.id }); continue;
+        remove(ball, i); settleScore({ kind: 'slot', column, multiplier, basePoints: multiplier * 10, x: TABLE.left + (column + .5) * (TABLE.right - TABLE.left) / slots, y: TABLE.scoreLine }, ball); continue;
       }
       // Balls falling back down the shooter lane are returned, never mis-scored
       // as the rightmost slot. A timeout is visible rather than a hidden teleport.
@@ -340,5 +354,5 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
       if (ball.stuck > 1000) { Body.setVelocity(body, { x: random() > .5 ? .9 : -.9, y: -.5 }); ball.stuck = 0; }
     }
   }
-  return { engine, balls, walls, pins, kickers, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, collector, stats, rewards, launch, step, setSlots, get star() { return activeStar; }, get clock() { return clock; }, get slots() { return slots; } };
+  return { engine, balls, walls, pins, kickers, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, collector, slotMachine: slotMachine.state, stats, rewards, launch, step, setSlots, get star() { return activeStar; }, get clock() { return clock; }, get slots() { return slots; } };
 }
