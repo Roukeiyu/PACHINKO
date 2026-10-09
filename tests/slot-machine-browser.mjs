@@ -35,8 +35,8 @@ try {
   });
   await page.goto(process.env.TEST_URL || 'http://127.0.0.1:5173');
   await page.waitForFunction(() => window.__slotFixture);
-  await page.evaluate(() => window.__slotFixture.enter(99));
-  assert.equal(await page.evaluate(() => window.__ponpon.slotMachine.progress), 99);
+  await page.evaluate(() => window.__slotFixture.enter(49));
+  assert.equal(await page.evaluate(() => window.__ponpon.slotMachine.progress), 49);
   assert.equal(await page.evaluate(() => window.__ponpon.slotMachine.spins), 0);
   await page.evaluate(() => window.__slotFixture.enter(1));
   assert.match(await page.locator('#slot-status').textContent(), /正在转动/);
@@ -46,7 +46,7 @@ try {
   assert.equal(await page.locator('#hole-points').textContent(), '+1000');
   await page.waitForFunction(() => window.__canvasLabels.includes('×20') && window.__canvasLabels.includes('+1000'));
   await page.screenshot({ path: 'test-results/slot-machine-x2.png', fullPage: true });
-  await page.evaluate(() => window.__slotFixture.enter(100));
+  await page.evaluate(() => window.__slotFixture.enter(50));
   await page.waitForFunction(() => window.__ponpon.slotMachine.completed === 2);
   await page.waitForFunction(() => document.querySelector('#machine-caption').textContent.includes('×5'));
   assert.equal(await page.locator('#hole-points').textContent(), '+2500');
@@ -67,7 +67,7 @@ try {
   await page.evaluate(() => { delete document.hidden; document.dispatchEvent(new Event('visibilitychange')); });
   await page.locator('#settings-button').click();
   await page.locator('[data-slots="9"]').click(); await page.locator('[data-theme="flower"]').click(); await page.locator('#calm').check(); await page.locator('#done-settings').click();
-  assert.equal(await page.evaluate(() => window.__ponpon.slotMachine.entries), 201);
+  assert.equal(await page.evaluate(() => window.__ponpon.slotMachine.entries), 101);
   assert.equal(await page.evaluate(() => window.__ponpon.slotMachine.multiplier), 5);
   await page.screenshot({ path: 'test-results/slot-machine-x5.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(100);
@@ -84,5 +84,5 @@ try {
   assert.equal(await page.locator('#hole-points').textContent(), '+500');
   assert.equal(await page.locator('#machine-caption').textContent(), 'THE HAPPY LITTLE PACHINKO');
   assert.deepEqual(errors, []);
-  console.log('PASS: real game/UI spins after 100 scores, shows x2/x5 labels and correct points, pauses in settings, retains state through layout/theme settings and restores expired bonuses on desktop/mobile.');
+  console.log('PASS: real game/UI spins after 50 scores, shows x2/x5 labels and correct points, pauses in settings, retains state through layout/theme settings and restores expired bonuses on desktop/mobile.');
 } finally { await browser.close(); }

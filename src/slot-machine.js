@@ -1,8 +1,8 @@
 // Each of the three reels independently samples the same five equally likely symbols.
 export const SLOT_SYMBOLS = Object.freeze(['🍒', '🍋', '🔔', '⭐', '🍀']);
-export const SLOT_DISPLAY = Object.freeze({ x: 350, y: 465, width: 192, height: 42 });
+export const SLOT_DISPLAY = Object.freeze({ x: 350, y: 466, width: 252, height: 44 });
 export function createSlotMachine({ random = Math.random, onEvent = () => {} } = {}) {
-  const state = { entries: 0, goal: 100, progress: 0, queued: 0, spins: 0, completed: 0,
+  const state = { entries: 0, goal: 50, progress: 0, queued: 0, spins: 0, completed: 0,
     reels: [0, 1, 2], target: [0, 1, 2], stopped: [true, true, true], spinning: false,
     startedAt: 0, stopAt: [0, 0, 0], nextSpinAt: 0, result: 1,
     pairUntil: 0, tripleUntil: 0, multiplier: 1, activeUntil: 0 };

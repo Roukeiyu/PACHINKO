@@ -166,18 +166,18 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     box(left, top, cabinet.width, cabinet.height, 9, '#e8d7b7', bonus.multiplier === 5 ? '#a78ac9' : '#c8ae7e');
     text(bonusLabel || 'L U C K Y  P O N', cabinet.x, top + 6, 8, bonus.multiplier === 5 ? '#7856a3' : '#856842', 'bold');
     for (let reel = 0; reel < 3; reel++) {
-      const x = cabinet.x + (reel - 1) * 46, moving = bonus.spinning && !bonus.stopped[reel];
-      box(x - 21, top + 12, 42, 21, 4, '#fffaf0', moving ? '#b59ac8' : '#d0bd98');
-      ctx.save(); ctx.beginPath(); ctx.rect(x - 20, top + 13, 40, 19); ctx.clip();
+      const x = cabinet.x + (reel - 1) * 70, moving = bonus.spinning && !bonus.stopped[reel];
+      box(x - 32, top + 11, 64, 25, 4, '#fffaf0', moving ? '#b59ac8' : '#d0bd98');
+      ctx.save(); ctx.beginPath(); ctx.rect(x - 31, top + 12, 62, 23); ctx.clip();
       if (moving && !state.calm) {
-        const phase = (game.clock - bonus.startedAt) / (70 + reel * 15), index = Math.floor(phase) % SLOT_SYMBOLS.length, offset = (phase % 1) * 21;
-        text(SLOT_SYMBOLS[index], x, top + 22 + offset, 20, '#52664c');
-        text(SLOT_SYMBOLS[(index + 1) % SLOT_SYMBOLS.length], x, top + 1 + offset, 20, '#52664c');
-      } else text(moving ? '·' : SLOT_SYMBOLS[bonus.reels[reel]], x, top + 22, 20, '#52664c');
+        const phase = (game.clock - bonus.startedAt) / (70 + reel * 15), index = Math.floor(phase) % SLOT_SYMBOLS.length, offset = (phase % 1) * 25;
+        text(SLOT_SYMBOLS[index], x, top + 24 + offset, 24, '#52664c');
+        text(SLOT_SYMBOLS[(index + 1) % SLOT_SYMBOLS.length], x, top - 1 + offset, 24, '#52664c');
+      } else text(moving ? '·' : SLOT_SYMBOLS[bonus.reels[reel]], x, top + 24, 24, '#52664c');
       ctx.restore();
     }
-    const reelStatus = bonus.spinning ? `转动中${bonus.queued ? ` · 排队 ${bonus.queued}` : ''}` : `${bonus.progress}/100 · 进洞蓄好运${bonus.queued ? ` · 排队 ${bonus.queued}` : ''}`;
-    text(reelStatus, cabinet.x, top + 37, 8, '#856842');
+    const reelStatus = bonus.spinning ? `转动中${bonus.queued ? ` · 排队 ${bonus.queued}` : ''}` : `${bonus.progress}/${bonus.goal} · 进洞蓄好运${bonus.queued ? ` · 排队 ${bonus.queued}` : ''}`;
+    text(reelStatus, cabinet.x, top + 40, 8, '#856842');
     // The spring compresses while held. A ready ball remains visually separate
     // from any live ball travelling along the lane.
     const compression = state.charging ? state.charge * 22 : 0;
@@ -261,7 +261,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
         }
         ctx.globalAlpha = Math.min(1, fade * 3);
         box(178, 119, 344, 48, 20, '#fff5dcf0', '#d9b667');
-        text('✦ 50 次碰撞 · 十二时钟盛典 ✦', 350, 144, 19, '#a27830', 'bold');
+        text('✦ 30 次碰撞 · 十二时钟盛典 ✦', 350, 144, 19, '#a27830', 'bold');
       } else if (p.tier >= 3 && !calm) {
         const height = 65 + p.tier * 23;
         const gradient = ctx.createLinearGradient(0, burst.y - height, 0, burst.y);

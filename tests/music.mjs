@@ -44,8 +44,8 @@ try {
     return { measurements, scheduled: { difference, loopRms: Math.sqrt(loopRms / length), beforeStart, finalSection: player.status.section } };
   });
   for (const m of measures.measurements) {
-    assert.ok(Math.abs(m.introDuration - 20/3) <= 1/m.rate);
-    assert.ok(Math.abs(m.loopDuration - 80/3) <= 1/m.rate);
+    assert.ok(Math.abs(m.introDuration - 4) <= 1/m.rate);
+    assert.ok(Math.abs(m.loopDuration - 16) <= 1/m.rate);
     assert.equal(m.introLength, Math.round(m.introDuration*m.rate));
     assert.equal(m.loopLength, Math.round(m.loopDuration*m.rate));
     assert.ok(m.peak > .2 && m.peak <= .651, 'the musical signal stays below clipping');

@@ -18,7 +18,7 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
   let clock = 0, nextId = 1;
   const pendingShots = [], pendingDrops = [], pendingLaunches = [];
   const collector = { x: 100, y: 650, radius: 18, capacity: 20, stored: [], remaining: 0, glow: 0, outlets: [] };
-  const rewards = { hits: [0, 0, 0], goals: [10, 10, 50], enlargedUntil: 0, burstUntil: 0, burstStep: -1, gateGlow: 0, ordinaryStars: 0 };
+  const rewards = { hits: [0, 0, 0], goals: [10, 10, 30], enlargedUntil: 0, burstUntil: 0, burstStep: -1, gateGlow: 0, ordinaryStars: 0 };
   const slotMachine = createSlotMachine({ random: slotRandom, onEvent: event => onSurprise({ ...event, x: SLOT_DISPLAY.x, y: SLOT_DISPLAY.y }) });
   const stats = { launches: 0, entered: 0, scored: 0, jackpots: 0, returns: 0, timeouts: 0, redirected: 0, bonusBalls: 0, randomShots: 0, clockBursts: 0, enlargements: 0, absorbed: 0, storageBursts: 0, storageDrops: 0, impacts: 0, hits: { pin: 0, kicker: 0, bumper: 0, rail: 0, spinner: 0, diamond: 0, wall: 0, deflector: 0 } };
   const add = (body, group, extra = {}) => { body.plugin = { glow: 0, ...extra }; group.push(body); Composite.add(engine.world, body); return body; };
@@ -226,7 +226,7 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
       pendingShots.push({ due: clock, index: 0, angle: random() * Math.PI * 2, kind: 'random', ordinal: 0 });
       onSurprise({ kind: 'random', x: bumper.position.x, y: bumper.position.y });
     } else if (index === 1) {
-      stats.enlargements++; rewards.enlargedUntil = clock + 5000;
+      stats.enlargements++; rewards.enlargedUntil = clock + 10000;
       resizeCenter(true);
       onSurprise({ kind: 'enlarge', x: bumpers[2].position.x, y: bumpers[2].position.y });
     } else {

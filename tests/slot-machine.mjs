@@ -8,7 +8,7 @@ const outcomes = { 1: 0, 2: 0, 5: 0 };
 assert.equal(new Set(SLOT_SYMBOLS).size, 5);
 for (let a = 0; a < 5; a++) for (let b = 0; b < 5; b++) for (let c = 0; c < 5; c++) {
   const events = [], machine = createSlotMachine({ random: choices([a,b,c]), onEvent: e => events.push(e) });
-  enter(machine, 99); assert.equal(machine.state.spins, 0); assert.equal(machine.state.progress, 99);
+  enter(machine, 49); assert.equal(machine.state.spins, 0); assert.equal(machine.state.progress, 49);
   enter(machine, 1); assert.equal(machine.state.spins, 1); assert.equal(machine.state.progress, 0);
   machine.advance(899); assert.deepEqual(machine.state.stopped, [false,false,false]);
   machine.advance(900); assert.deepEqual(machine.state.stopped, [true,false,false]);
@@ -28,11 +28,11 @@ for (let a = 0; a < 5; a++) for (let b = 0; b < 5; b++) for (let c = 0; c < 5; c
   }
 }
 assert.deepEqual(outcomes, { 1: 60, 2: 60, 5: 5 });
-console.log('PASS: all 125 independent five-symbol outcomes, exact 100-entry trigger, staggered stops and precise 3/1-minute deadlines.');
+console.log('PASS: all 125 independent five-symbol outcomes, exact 50-entry trigger, staggered stops and precise 3/1-minute deadlines.');
 
 const queued = createSlotMachine({ random: choices([0,0,0,1,1,2,2,3,4]) });
-enter(queued, 350);
-assert.equal(queued.state.spins, 1); assert.equal(queued.state.queued, 2); assert.equal(queued.state.progress, 50);
+enter(queued, 175);
+assert.equal(queued.state.spins, 1); assert.equal(queued.state.queued, 2); assert.equal(queued.state.progress, 25);
 queued.advance(1700); assert.equal(queued.state.multiplier, 5);
 queued.advance(2399); assert.equal(queued.state.spins, 1, 'completed reels stay visible before the next queued spin');
 queued.advance(2400); assert.equal(queued.state.spins, 2);
@@ -46,7 +46,7 @@ assert.equal(slotBonusLabel(queued.state, 61700), '进洞 ×2 · 02:03');
 queued.advance(184100); assert.equal(queued.state.multiplier, 1);
 assert.equal(slotBonusLabel(queued.state, 184100), '');
 const refreshed = createSlotMachine({ random: choices([0,0,1]) });
-enter(refreshed, 100); refreshed.advance(1700); enter(refreshed, 100, 3000); refreshed.advance(4700);
+enter(refreshed, 50); refreshed.advance(1700); enter(refreshed, 50, 3000); refreshed.advance(4700);
 assert.equal(refreshed.state.pairUntil, 184700, 'repeat wins refresh the exact duration rather than add durations');
 console.log('PASS: repeated milestones queue without losing entries, x5 has priority, x2 resumes, non-wins preserve bonuses and repeat wins refresh timers.');
 
@@ -68,12 +68,12 @@ function advanceTo(game, deadline) { while (game.clock + STEP < deadline - 1e-6)
 for (const [symbols, expected] of [[[0,0,1],2], [[4,4,4],5], [[0,1,2],1]]) {
   const scores = [], events = [];
   const game = createTable({ slotRandom: choices(symbols), onScore: e => scores.push(e), onSurprise: e => events.push(e), starRandom: () => .5 });
-  for (let i = 0; i < 99; i++) slot(game);
+  for (let i = 0; i < 49; i++) slot(game);
   assert.equal(game.slotMachine.spins, 0);
   hole(game);
-  assert.equal(game.stats.scored, 100); assert.equal(game.stats.jackpots, 1);
-  assert.equal(game.slotMachine.entries, 100); assert.equal(game.slotMachine.spins, 1);
-  assert.equal(scores.at(-1).points, 500, 'the hundredth scoring entry precedes the slot result');
+  assert.equal(game.stats.scored, 50); assert.equal(game.stats.jackpots, 1);
+  assert.equal(game.slotMachine.entries, 50); assert.equal(game.slotMachine.spins, 1);
+  assert.equal(scores.at(-1).points, 500, 'the fiftieth scoring entry precedes the slot result');
   while (game.slotMachine.spinning) game.step();
   assert.equal(game.slotMachine.multiplier, expected);
   const boosted = game.launch(), star = game.star;
@@ -82,7 +82,7 @@ for (const [symbols, expected] of [[[0,0,1],2], [[4,4,4],5], [[0,1,2],1]]) {
   assert.equal(scores.at(-1).points, scores.at(-1).basePoints * 2 * expected);
   assert.equal(scores.at(-1).scoreFactor, 2); assert.equal(scores.at(-1).globalMultiplier, expected);
   game.setSlots(9); // Preserve the bonus, counter and upcoming spin state.
-  assert.equal(game.slotMachine.entries, 101); assert.equal(game.slotMachine.multiplier, expected);
+  assert.equal(game.slotMachine.entries, 51); assert.equal(game.slotMachine.multiplier, expected);
   hole(game); assert.equal(scores.at(-1).points, 500 * expected);
   const deadline = game.slotMachine.activeUntil;
   if (expected > 1) {

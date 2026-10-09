@@ -23,7 +23,7 @@ for (const event of events) {
   assert.equal(fx.particles.length, count, 'finished celebrations cannot emit again');
 }
 assert.equal(new Set([2, 3, 5, 10].map(m => rewardProfile(result(m)).shape)).size, 4);
-console.log('PASS: four distinct slot styles scale up through the secret hole to the largest 50-hit celebration.');
+console.log('PASS: four distinct slot styles scale up through the secret hole to the largest 30-hit celebration.');
 
 for (const event of events) {
   const fx = makeFx(); celebrateReward(fx, event, true);
