@@ -105,6 +105,13 @@ export function createRenderer(canvas) {
       circle(x, y, pin.plugin.glow > 0 ? 8.5 : 7.5, pin.plugin.glow > .3 ? '#ffe2a1' : theme.pin, '#f4f8e1', 1.5);
       circle(x - 2, y - 2, 2.2, '#ffffffa0');
     }
+    for (const kicker of game.kickers) {
+      const { x, y } = kicker.position, glow = kicker.plugin.glow;
+      circle(x, y + 3, 15, '#65794c35');
+      circle(x, y, 13, glow > .3 ? '#ffe2a1' : theme.accent, '#fff8e8', 2);
+      circle(x, y, 8, null, '#fff8e8', 1);
+      text('✦', x, y, 13, '#fff8e8', 'bold');
+    }
     for (const bumper of game.bumpers) {
       const { x, y } = bumper.position, r = bumper.plugin.radius, glow = bumper.plugin.glow;
       circle(x, y + 7, r + 6, '#9b8b743b');

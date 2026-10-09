@@ -135,7 +135,7 @@ console.log('PASS: simultaneous contact rewards only one ball, and the secret ho
 for (const fraction of [0, .1, .25, .5, .75, .9, .999]) {
   const sample = createTable({ starRandom: () => fraction });
   const star = sample.star, probe = Matter.Bodies.circle(star.x, star.y, 22);
-  const obstacles = [...sample.walls, ...sample.pins, ...sample.rails, ...sample.bumpers, ...sample.diamonds, ...sample.spinners, ...sample.guards];
+  const obstacles = [...sample.walls, ...sample.pins, ...sample.rails, ...sample.bumpers, ...sample.kickers, ...sample.diamonds, ...sample.spinners, ...sample.guards];
   for (let i = 0; i < 624; i++) {
     sample.step(STEP);
     assert.equal(sample.star, star);

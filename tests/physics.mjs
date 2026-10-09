@@ -3,6 +3,26 @@ import Matter from 'matter-js';
 import { createTable, TABLE, STEP } from '../src/physics.js';
 
 function seeded(seed) { return () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 32; }; }
+// The two marked centerline positions always contain real, active spring studs.
+for (const slots of [5, 7, 9]) {
+  const hits = [], game = createTable({ slots, onHit: hit => hits.push(hit) });
+  const positions = game.kickers.map(k => ({ ...k.position }));
+  assert.deepEqual(positions, [{ x: 350, y: 50 }, { x: 350, y: 690 }]);
+  for (const [index, kicker] of game.kickers.entries()) {
+    game.setSlots(slots);
+    const ball = game.launch(); ball.entered = true;
+    const side = index === 0 ? 1 : -1;
+    Matter.Body.setPosition(ball.body, { x: kicker.position.x, y: kicker.position.y + side * 34 });
+    Matter.Body.setVelocity(ball.body, { x: 0, y: -side * 3 });
+    for (let step = 0; step < 20 && !hits.some(h => h.kind === 'kicker' && h.index === index); step++) game.step();
+    assert.ok(hits.some(h => h.kind === 'kicker' && h.index === index), 'physical contact triggers impact feedback');
+    assert.ok(ball.body.velocity.y * side > 5, 'the stud actively kicks the ball away');
+    assert.ok(kicker.plugin.glow > 0, 'contact lights up the stud');
+    assert.deepEqual(game.rewards.hits, [0, 0, 0], 'studs do not advance the three large bumper rewards');
+  }
+  assert.deepEqual(game.kickers.map(k => k.position), positions, 'slot changes and impacts preserve both fixed obstacles');
+}
+console.log('PASS: both fixed centerline spring studs actively rebound balls and trigger feedback in all slot layouts.');
 // The fixed, left/right mirrored layout remains identical across new games.
 const fixedPositions = createTable({ random: seeded(1) }).pins.map(p => ({ ...p.position }));
 for (const seed of [0, 1, 100]) {
@@ -32,7 +52,7 @@ for (const seed of [0, 1, 100]) {
       assert.ok(Math.abs(travel) <= m.amplitude + 1e-6);
     }
     if (tick % 12 === 0) {
-      const obstacles = [...game.rails, ...game.walls, ...game.bumpers, ...game.diamonds, ...game.spinners, ...game.guards];
+      const obstacles = [...game.rails, ...game.walls, ...game.bumpers, ...game.kickers, ...game.diamonds, ...game.spinners, ...game.guards];
       assert.ok(probes.every(p => obstacles.every(o => !Matter.Collision.collides(p, o))), 'fixed pins leave ball clearance around obstacles throughout their movement');
     }
   }

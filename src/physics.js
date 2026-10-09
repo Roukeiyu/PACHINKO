@@ -10,14 +10,14 @@ export const slotMultipliers = count => count === 5 ? [2, 3, 10, 3, 2] : count =
 // the same fixed time step used on desktop and mobile (including fast launches).
 export function createTable({ slots = 7, random = Math.random, starRandom = Math.random, onHit = () => {}, onScore = () => {}, onReturn = () => {}, onSurprise = () => {} } = {}) {
   const engine = Engine.create({ gravity: { x: 0, y: 1.05 }, positionIterations: 8, velocityIterations: 8 });
-  const balls = [], walls = [], pins = [], bumpers = [], rails = [], diamonds = [], spinners = [], guards = [], dividers = [], gates = [];
+  const balls = [], walls = [], pins = [], kickers = [], bumpers = [], rails = [], diamonds = [], spinners = [], guards = [], dividers = [], gates = [];
   const holes = [{ x: 615, y: 482, facing: Math.PI, glow: 0 }];
   const deflectors = [], pendingDeflections = [];
   let activeStar = null, nextStarAt = 0, nextStarId = 1, lastStarLocation = -1, nextStarMultiplier = 2;
   let clock = 0, nextId = 1;
   const pendingShots = [];
   const rewards = { hits: [0, 0, 0], goals: [10, 10, 100], enlargedUntil: 0, burstUntil: 0, burstStep: -1, gateGlow: 0, ordinaryStars: 0 };
-  const stats = { launches: 0, entered: 0, scored: 0, jackpots: 0, returns: 0, timeouts: 0, redirected: 0, bonusBalls: 0, randomShots: 0, clockBursts: 0, enlargements: 0, impacts: 0, hits: { pin: 0, bumper: 0, rail: 0, spinner: 0, diamond: 0, wall: 0, deflector: 0 } };
+  const stats = { launches: 0, entered: 0, scored: 0, jackpots: 0, returns: 0, timeouts: 0, redirected: 0, bonusBalls: 0, randomShots: 0, clockBursts: 0, enlargements: 0, impacts: 0, hits: { pin: 0, kicker: 0, bumper: 0, rail: 0, spinner: 0, diamond: 0, wall: 0, deflector: 0 } };
   const add = (body, group, extra = {}) => { body.plugin = { glow: 0, ...extra }; group.push(body); Composite.add(engine.world, body); return body; };
   const segment = (x1, y1, x2, y2, thickness, group, label = 'wall', restitution = .65) => {
     const length = Math.hypot(x2 - x1, y2 - y1);
@@ -45,6 +45,10 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
 
   [[238, 226, 32], [450, 247, 32], [350, 367, 39]].forEach(([x, y, r], i) => {
     add(Bodies.circle(x, y, r, { isStatic: true, label: 'bumper', restitution: 1.05, friction: 0 }), bumpers, { index: i, radius: r, baseRadius: r, lastKick: -1000 });
+  });
+  // Permanent spring studs at the two marked positions on the center axis.
+  [[350, 50], [350, 690]].forEach(([x, y], index) => {
+    add(Bodies.circle(x, y, 13, { isStatic: true, label: 'kicker', restitution: 1.05, friction: 0 }), kickers, { index, radius: 13 });
   });
   [[156, 304, 228, 363], [536, 335, 601, 290], [125, 578, 217, 541], [496, 568, 581, 611]].forEach(args => segment(...args, 16, rails, 'rail', .93));
   for (const [index, amplitude, period, direction] of [[0, 36, 4600, 1], [3, 34, 5200, -1]]) {
@@ -82,7 +86,7 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
   // Collectibles only appear in reachable gaps. Reserve every moving rail's
   // full swept area, the spinner's sweep and the center bumper's enlarged size.
   const starLocations = [], probe = Bodies.circle(0, 0, 26);
-  const starObstacles = [...walls, ...pins, ...rails, ...diamonds, ...guards];
+  const starObstacles = [...walls, ...pins, ...kickers, ...rails, ...diamonds, ...guards];
   for (let y = 180; y <= 740; y += 20) for (let x = 80; x <= 620; x += 20) {
     Body.setPosition(probe, { x, y });
     if (Matter.Query.collides(probe, starObstacles).length) continue;
@@ -183,7 +187,7 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
         ball.lastBumperHits[obstacle.plugin.index] = clock;
         recordBumperHit(obstacle);
       }
-      if (obstacle.label === 'bumper' && clock - ball.lastKick > 170) {
+      if (['bumper', 'kicker'].includes(obstacle.label) && clock - ball.lastKick > 170) {
         const dx = body.position.x - obstacle.position.x, dy = body.position.y - obstacle.position.y;
         const d = Math.hypot(dx, dy) || 1;
         // An active pinball bumper adds a bounded outward impulse.
@@ -241,7 +245,7 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
       ball.pickupFrom = { ...ball.body.position };
       onSurprise({ kind: 'deflect', x: obstacle.position.x, y: obstacle.position.y, angle: p.angle });
     }
-    for (const body of [...pins, ...bumpers, ...rails, ...diamonds, ...spinners, ...deflectors]) body.plugin.glow = Math.max(0, body.plugin.glow - dt / 320);
+    for (const body of [...pins, ...kickers, ...bumpers, ...rails, ...diamonds, ...spinners, ...deflectors]) body.plugin.glow = Math.max(0, body.plugin.glow - dt / 320);
     for (const hole of holes) hole.glow = Math.max(0, hole.glow - dt / 1500);
     for (let i = balls.length - 1; i >= 0; i--) {
       const ball = balls[i], { body } = ball, { x, y } = body.position;
@@ -276,5 +280,5 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
       if (ball.stuck > 1000) { Body.setVelocity(body, { x: random() > .5 ? .9 : -.9, y: -.5 }); ball.stuck = 0; }
     }
   }
-  return { engine, balls, walls, pins, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, stats, rewards, launch, step, setSlots, get star() { return activeStar; }, get clock() { return clock; }, get slots() { return slots; } };
+  return { engine, balls, walls, pins, kickers, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, stats, rewards, launch, step, setSlots, get star() { return activeStar; }, get clock() { return clock; }, get slots() { return slots; } };
 }
