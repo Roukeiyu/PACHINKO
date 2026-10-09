@@ -1,0 +1,9 @@
+{
+  "name": "pon-pon-pachinko",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "vite --host 0.0.0.0", "build": "vite build", "preview": "vite preview --host 0.0.0.0", "test": "node tests/smoke.mjs" },
+  "dependencies": { "matter-js": "^0.20.0" },
+  "devDependencies": { "vite": "^7.2.2", "playwright": "^1.56.1" }
+}
