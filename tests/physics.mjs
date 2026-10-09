@@ -11,7 +11,7 @@ for (const slots of [5, 7, 9]) {
   for (let shot = 0; shot < 120; shot++) {
     const ball = game.launch(.2 + (shot % 17) / 20);
     assert.ok(ball); assert.ok(ball.body.position.x > 680 && ball.body.position.y > 760, 'must spawn in lower right shooter lane');
-    assert.ok(ball.body.velocity.y < -24, 'plunger gives upward momentum');
+    assert.ok(ball.body.velocity.y < -12 && ball.boosting, 'spring starts upward, with the lower-lane booster engaged');
     for (let step = 0; step < 5500 && game.balls.length; step++) {
       game.step();
       for (const b of game.balls) if (b.body.position.x < 30 || b.body.position.x > 734 || b.body.position.y < 36) escaped++;

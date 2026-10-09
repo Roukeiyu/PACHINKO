@@ -16,6 +16,18 @@ try {
     const r = await page.locator(selector).boundingBox();
     await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: r.x + r.width / 2, y: r.y + r.height / 2 }] });
   }
+  await touchStart('h1'); await page.waitForTimeout(900);
+  await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  assert.equal(await page.evaluate(() => getSelection().toString()), '', 'long-pressing interface text cannot select it');
+  const protections = await page.evaluate(() => {
+    const elements = ['h1', '#launch-label', '.brand-name', '.theme-name', '#board'];
+    return elements.every(selector => {
+      const el = document.querySelector(selector);
+      return getComputedStyle(el).userSelect === 'none' && !el.dispatchEvent(new Event('selectstart', { bubbles: true, cancelable: true })) && !el.dispatchEvent(new Event('contextmenu', { bubbles: true, cancelable: true })) && !el.dispatchEvent(new Event('dragstart', { bubbles: true, cancelable: true }));
+    });
+  });
+  assert.ok(protections, 'all interface labels, logos and canvas block selection, drag and callouts');
+  console.log('PASS: long presses do not select text; selection, dragging and context-menu events are canceled across the game.');
   await touchStart('#launch');
   await page.waitForTimeout(600);
   assert.equal(await count(), 0, 'holding must not fire prematurely');
@@ -24,7 +36,9 @@ try {
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await page.waitForTimeout(400);
   assert.equal(await count(), 1, 'touch release must fire exactly once, not again on synthesized click');
+  assert.equal(await page.evaluate(() => getSelection().toString()), '');
   await page.waitForFunction(() => window.__ponpon.stats.entered === 1);
+  assert.ok(await page.evaluate(() => window.__ponpon.canonNotes > 0 && window.__ponpon.canonNotes === window.__ponpon.stats.impacts));
   console.log('PASS: mobile hold charges without firing; release launches once through the physical lane.');
 
   await touchStart('#plunger'); await page.waitForTimeout(200);

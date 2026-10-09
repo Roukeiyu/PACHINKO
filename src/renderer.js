@@ -36,7 +36,8 @@ export function createRenderer(canvas) {
     box(38, 43, 620, 741, 30, '#ffffff29', '#c3c4a93b');
     box(689, 128, 47, 739, 21, '#d9e6d299');
     ctx.save(); ctx.strokeStyle = '#afc09a75'; ctx.lineWidth = 2; ctx.setLineDash([3, 10]); ctx.beginPath(); ctx.moveTo(713, 750); ctx.lineTo(713, 154); ctx.stroke(); ctx.restore();
-    for (let i = 0; i < 5; i++) { const y = 211 + i * 103 - (t * 24 % 103); ctx.beginPath(); ctx.moveTo(704, y + 8); ctx.lineTo(713, y); ctx.lineTo(722, y + 8); ctx.strokeStyle = '#91aa7970'; ctx.lineWidth = 3; ctx.stroke(); }
+    for (let i = 0; i < 3; i++) { const y = 639 + i * 75 - (t * 45 % 75); ctx.beginPath(); ctx.moveTo(704, y + 8); ctx.lineTo(713, y); ctx.lineTo(722, y + 8); ctx.strokeStyle = '#86a869a0'; ctx.lineWidth = 3; ctx.stroke(); }
+    ctx.save();ctx.translate(713, 335);ctx.rotate(-Math.PI/2);text('惯 性 飞 行', 0, 0, 12, '#a1ae8f');ctx.restore();
     text('P O N  P O N', 351, 78, 24, '#69815d', 'bold');
     text('LITTLE PINBALL CLUB', 351, 108, 11, '#9ca184');
     text('↖', 651, 103, 27, '#a0b28d');
@@ -45,6 +46,12 @@ export function createRenderer(canvas) {
     // Painted guide rings provide motion cues without competing with the ball.
     for (const bumper of game.bumpers) { const { x, y } = bumper.position; ctx.save(); ctx.setLineDash([3, 9]); circle(x, y, bumper.plugin.radius + 17, null, '#cfbf9a55'); ctx.restore(); }
     for (const wall of game.walls) bodyShape(wall, '#aebf99', '#dce6ce');
+    // A diagonal one-way flap intercepts descending balls; the dashed vertical
+    // line shows the separate upward path, which is never blocked by the flap.
+    ctx.save();ctx.globalAlpha=.8;bodyShape(game.gates[1], game.rewards.gateGlow ? '#f8cc77' : '#d7bf97', '#fff3d6', false);ctx.restore();
+    ctx.save();ctx.setLineDash([5,6]);ctx.strokeStyle='#a7ba8e';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(676,539);ctx.lineTo(676,615);ctx.stroke();ctx.restore();
+    ctx.save();ctx.setLineDash([4,4]);ctx.strokeStyle='#da8d97';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(691,TABLE.boostEndY);ctx.lineTo(735,TABLE.boostEndY);ctx.stroke();ctx.restore();
+    text('↙ 回流口', 624, 640, 12, '#9b8965');
     const sw = (TABLE.right - TABLE.left) / state.slots, multipliers = slotMultipliers(state.slots);
     for (let i = 0; i < state.slots; i++) {
       const x = TABLE.left + i * sw, glow = fx.slotGlows[i] || 0;
@@ -91,6 +98,13 @@ export function createRenderer(canvas) {
       ctx.restore();
       text(theme.motifs[bumper.plugin.index], x, y - 3 + (state.calm ? 0 : Math.sin(t * 2 + bumper.id)), r * .85, '#6e7f60');
       for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; circle(x + Math.cos(a) * (r + 10), y + Math.sin(a) * (r + 10), 2.2, Math.sin(t * 3 + i) > 0 ? '#ecd5a4' : '#ffffff90'); }
+      const index=bumper.plugin.index,goal=game.rewards.goals[index],count=game.rewards.hits[index]%goal;
+      ctx.beginPath();ctx.arc(x,y,r+14,-Math.PI/2,-Math.PI/2+Math.PI*2*(count/goal));ctx.strokeStyle='#c59450';ctx.lineWidth=3;ctx.stroke();
+      box(x-39,y+r+21,78,22,11,'#fff9e9dd','#ddd3b6');text(`${count} / ${goal}`,x,y+r+32,12,'#997747','bold');
+      if(index===2&&game.rewards.enlargedUntil>game.clock)text(`变大 ${((game.rewards.enlargedUntil-game.clock)/1000).toFixed(1)}s`,x,y-r-27,13,'#b38643','bold');
+      if(index===2&&game.rewards.burstUntil>game.clock){
+        for(let i=0;i<12;i++){const angle=-Math.PI/2+i*Math.PI/6;circle(x+Math.cos(angle)*(r+27),y+Math.sin(angle)*(r+27),i===game.rewards.burstStep?5:3,i<=game.rewards.burstStep?'#dbaa45':'#e3d8b8');}
+      }
     }
     // The spring compresses while held. A ready ball remains visually separate
     // from any live ball travelling along the lane.
