@@ -2,6 +2,21 @@
 
 一个可爱、轻松的网页柏青哥游乐场。无需账号、后端或 API 密钥。
 
+## 网页直接玩（推荐）
+
+GitHub Pages 首次部署成功后，直接打开 **[PON PON 在线游戏](https://roukeiyu.github.io/PACHINKO/)** 即可游玩。手机、电脑都可以；玩家无需下载项目或安装 Node.js。
+
+仓库已配置自动发布：推送到 `main` 后，GitHub Actions 会安装依赖、构建并部署游戏。源码仓库页面用于查看代码，游戏链接才是可直接游玩的网页。
+
+仓库管理员首次开启：
+
+1. 打开 [Settings → Pages](https://github.com/Roukeiyu/PACHINKO/settings/pages)。
+2. 在 **Build and deployment → Source** 中选择 **GitHub Actions**。
+3. 到 [Actions](https://github.com/Roukeiyu/PACHINKO/actions/workflows/pages.yml) 选择 **Deploy game to GitHub Pages → Run workflow → main → Run workflow**。也可重新运行之前因 Pages 尚未开启而失败的工作流。
+4. 等待 `build` 和 `deploy` 均成功，再打开游戏链接。首次发布前或发布失败时，链接可能返回 404。
+
+在线版最高分与设置保存在当前浏览器中，不上传 GitHub。后续更新只需推送代码，无需重复配置 Pages。
+
 ## 从 GitHub 获取并运行
 
 克隆本仓库或通过 Code → Download ZIP 下载并解压。安装 Node.js 24 LTS 后，在项目目录运行：
