@@ -3,11 +3,15 @@ import Matter from 'matter-js';
 import { createTable, TABLE, STEP } from '../src/physics.js';
 
 function seeded(seed) { return () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 32; }; }
-// Random layouts remain well-spaced and leave room for both travelling rails.
-for (let seed = 0; seed < 16; seed++) {
+// The fixed, centrally symmetric layout remains identical across new games.
+const fixedPositions = createTable({ random: seeded(1) }).pins.map(p => ({ ...p.position }));
+for (const seed of [0, 1, 100]) {
   const game = createTable({ random: seeded(seed) });
   assert.equal(game.pins.length, 28);
   const positions = game.pins.map(p => ({ ...p.position }));
+  assert.deepEqual(positions, fixedPositions, 'random gameplay must not change pin placement');
+  for (const p of positions) assert.ok(positions.some(q => q.x === 700 - p.x && q.y === 900 - p.y), 'each pin has a counterpart across the table center');
+  for (const slots of [5, 9, 7]) { game.setSlots(slots); assert.deepEqual(game.pins.map(p => p.position), fixedPositions, 'changing slots preserves pin positions'); }
   for (let i = 0; i < positions.length; i++) for (let j = i + 1; j < positions.length; j++) {
     assert.ok(Math.hypot(positions[i].x - positions[j].x, positions[i].y - positions[j].y) >= 58, 'pins leave a passage for balls');
   }
@@ -26,14 +30,16 @@ for (let seed = 0; seed < 16; seed++) {
       assert.ok(Math.abs(dy * Math.cos(angles[i]) - dx * Math.sin(angles[i])) < 1e-8, 'motion follows the rail long edge, not the screen horizontal');
       assert.equal(rail.angle, angles[i], 'sliding does not rotate the rail');
       assert.ok(Math.abs(travel) <= m.amplitude + 1e-6);
-      if (tick % 12 === 0) assert.ok(probes.every(p => !Matter.Collision.collides(p, rail)), 'a moving rail never pinches a ball against a pin');
+    }
+    if (tick % 12 === 0) {
+      const obstacles = [...game.rails, ...game.walls, ...game.bumpers, ...game.diamonds, ...game.spinners, ...game.guards];
+      assert.ok(probes.every(p => obstacles.every(o => !Matter.Collision.collides(p, o))), 'fixed pins leave ball clearance around obstacles throughout their movement');
     }
   }
   assert.ok(extremes.every(e => e.max - e.min > 67), 'both rails reach both ends of their travel');
   assert.deepEqual(game.pins.map(p => p.position), positions, 'pins remain still during play');
 }
-assert.notDeepEqual(createTable({ random: seeded(1) }).pins.map(p => p.position), createTable({ random: seeded(2) }).pins.map(p => p.position), 'new games have different layouts');
-console.log('PASS: 16 random layouts clear both rails throughout diagonal travel along their own long edges, with fixed angles and full return motion.');
+console.log('PASS: fixed pins retain central symmetry across new games and slot changes, and clear moving obstacles throughout their travel.');
 {
   const game = createTable({ random: seeded(5) }), ball = game.launch();
   Matter.Body.setPosition(ball.body, { x: 713, y: 350 });
@@ -52,8 +58,7 @@ console.log('PASS: 16 random layouts clear both rails throughout diagonal travel
 }
 console.log('PASS: left guard blocks descending balls and the restored upper divider contains the shooter lane.');
 const totals = { scored: 0, jackpots: 0, returns: 0, timeouts: 0 };
-// Sample several layouts per slot count: a rare cup entry is not guaranteed
-// in just one random layout, even when the mouth remains physically reachable.
+// Sample several launch/reward sequences per slot count on the fixed layout.
 for (const slots of [5, 7, 9]) for (const seedOffset of [0, 100, 200]) {
   const outcomes = [], columns = new Set();
   const game = createTable({ slots, random: seeded(42 + slots + seedOffset), onScore: result => { outcomes.push(result); if (result.kind === 'slot') columns.add(result.column); } });
@@ -76,7 +81,7 @@ for (const slots of [5, 7, 9]) for (const seedOffset of [0, 100, 200]) {
   for (const kind of ['bumper', 'rail', 'spinner', 'diamond', 'pin', 'deflector']) assert.ok(game.stats.hits[kind] > 0, `${kind} participates in physical trajectories`);
   assert.ok(outcomes.every(r => r.kind === 'jackpot' ? r.points === 500 : [2, 3, 5, 10].includes(r.multiplier) && r.points === r.multiplier * 10));
   for (const k of Object.keys(totals)) totals[k] += game.stats[k];
-  console.log(`PASS: ${slots} slots, layout ${seedOffset}, ${JSON.stringify(game.stats)}, ${columns.size} distinct scoring slots.`);
+  console.log(`PASS: ${slots} slots, sequence ${seedOffset}, ${JSON.stringify(game.stats)}, ${columns.size} distinct scoring slots.`);
 }
 assert.ok(totals.jackpots > 0 && totals.jackpots < 108, 'physical bonus cups should be attainable and uncommon (<10% in seeded sample)');
 

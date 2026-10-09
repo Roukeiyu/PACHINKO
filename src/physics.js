@@ -69,40 +69,15 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
   // Cover the outer seam between the recessed cup and the side wall, so a
   // falling ball cannot wedge into the narrow space behind the cup.
   segment(665, 413, 615, 438, 13, walls);
-  // Best-candidate sampling spreads pins evenly without a visible grid. Keep
-  // clearance for a ball between pins and every obstacle's full motion range.
-  // A separate seeded stream makes layout stable during play and also works
-  // when callers supply a constant random function for reward tests.
-  let layoutSeed = (random() * 0xffffffff) >>> 0;
-  const layoutRandom = () => { layoutSeed = (Math.imul(layoutSeed, 1664525) + 1013904223) >>> 0; return layoutSeed / 2 ** 32; };
-  const clearance = 35;
-  const exclusionPolygons = [...walls, ...rails, ...diamonds].map(body => {
-    const motion = body.plugin.motion;
-    const dx = motion ? motion.axisX * motion.amplitude : 0, dy = motion ? motion.axisY * motion.amplitude : 0;
-    return Matter.Vertices.hull(body.vertices.flatMap(v => [{ x: v.x - dx, y: v.y - dy }, { x: v.x + dx, y: v.y + dy }]));
+  // Fixed pairs rotated 180 degrees around the playing-field center (350, 450).
+  // Coordinates leave space for moving rails, enlarged bumpers and the hole.
+  const pinAnchors = [[350, 160], [610, 360], [90, 230], [570, 150],
+    [250, 430], [460, 320], [270, 290], [210, 150], [140, 360],
+    [460, 170], [560, 260], [380, 260], [520, 400], [180, 260]];
+  const pinPositions = pinAnchors.flatMap(([x, y]) => [[x, y], [700 - x, 900 - y]]);
+  pinPositions.forEach(([x, y], index) => {
+    add(Bodies.circle(x, y, 7.5, { isStatic: true, label: 'pin', restitution: .85, friction: 0 }), pins, { index });
   });
-  const distanceToEdge = (p, a, b) => {
-    const dx = b.x - a.x, dy = b.y - a.y;
-    const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy)));
-    return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
-  };
-  const isOpen = p => !exclusionPolygons.some(vertices => Matter.Vertices.contains(vertices, p) || vertices.some((v, i) => distanceToEdge(p, v, vertices[(i + 1) % vertices.length]) < clearance))
-    && !bumpers.some(b => Math.hypot(p.x - b.position.x, p.y - b.position.y) < b.plugin.radius * (b.plugin.index === 2 ? 1.5 : 1) + clearance)
-    && Math.hypot(p.x - triangle.position.x, p.y - triangle.position.y) > 34 + clearance
-    && Math.hypot(p.x - spinner.position.x, p.y - spinner.position.y) > 68 + clearance
-    && !(p.x > 485 && Math.abs(p.y - holes[0].y) < 48)
-    && !holes.some(h => Math.hypot(p.x - h.x, p.y - h.y) < 40 + clearance);
-  for (let i = 0; i < 28; i++) {
-    let best = null, spacing = 58;
-    for (let attempt = 0; attempt < 500; attempt++) {
-      const p = { x: 77 + layoutRandom() * 541, y: 150 + layoutRandom() * 604 };
-      if (!isOpen(p)) continue;
-      const distance = pins.length ? Math.min(...pins.map(pin => Math.hypot(p.x - pin.position.x, p.y - pin.position.y))) : Infinity;
-      if (distance > spacing) { best = p; spacing = distance; }
-    }
-    if (!best) break;
-    add(Bodies.circle(best.x, best.y, 7.5, { isStatic: true, label: 'pin', restitution: .85, friction: 0 }), pins, { index: i });
-  }
   function clearBalls() { for (const ball of balls) Composite.remove(engine.world, ball.body); balls.length = 0; pendingShots.length = 0; rewards.burstUntil = 0; rewards.burstStep = -1; }
   function setSlots(count) {
     if (![5, 7, 9].includes(count)) throw new RangeError('Slots must be 5, 7, or 9');
