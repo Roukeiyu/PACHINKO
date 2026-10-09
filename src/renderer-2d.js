@@ -1,7 +1,8 @@
 import { chargeEffectsAt } from './charge.js';
 import { TABLE, slotMultipliers } from './physics.js';
 import { SLOT_DISPLAY, SLOT_SYMBOLS, slotBonusLabel } from './slot-machine.js';
-import { rewardProfile } from './reward-effects.js';
+import { rewardProfile, activeRewardScenes, rewardSceneAt, marqueePoint } from './reward-effects.js';
+import { slotIcon, slotColorIndex } from './slot-icons.js';
 
 export function createRenderer(canvas, { textureMode = false } = {}) {
   const ctx = canvas.getContext('2d');
@@ -63,16 +64,18 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     const sw = (TABLE.right - TABLE.left) / state.slots, multipliers = slotMultipliers(state.slots);
     for (let i = 0; i < state.slots; i++) {
       const x = TABLE.left + i * sw, glow = fx.slotGlows[i] || 0;
-      box(x + 3, TABLE.slotTop, sw - 6, 86, 12, theme.colors[Math.round(i * 6 / (state.slots - 1))]);
+      box(x + 3, TABLE.slotTop, sw - 6, 86, 12, theme.colors[slotColorIndex(multipliers[i])]);
       if (glow) { const p = rewardProfile({ multiplier: multipliers[i] }); ctx.save(); ctx.globalAlpha = glow * .65; ctx.shadowBlur = 8 + p.tier * 5; ctx.shadowColor = paintColor(p.color, 'glow'); box(x + 3, TABLE.slotTop, sw - 6, 86, 12, p.color); ctx.restore(); }
-      text(theme.motifs[i % 4], x + sw / 2, TABLE.slotTop + 23, state.slots === 9 ? 22 : 26, '#627454');
+      text(slotIcon(multipliers[i]), x + sw / 2, TABLE.slotTop + 23, state.slots === 9 ? 22 : 26, '#627454');
       text(`×${multipliers[i] * bonus.multiplier}`, x + sw / 2, TABLE.slotTop + 54, 17, '#4c6648', 'bold');
       if (bonus.multiplier > 1) text(`进洞 ×${bonus.multiplier}`, x + sw / 2, TABLE.slotTop + 73, 9, bonus.multiplier === 5 ? '#8b59b5' : '#99712d');
       else if (multipliers[i] === 10) text('LUCKY', x + sw / 2, TABLE.slotTop + 73, 9, '#aa8243');
     }
     for (const hole of game.holes) {
+      const treasure = (fx.celebrations || []).find(b => b.kind === 'jackpot' && b.x === hole.x && b.y === hole.y);
+      const glow = Math.max(hole.glow, treasure ? rewardSceneAt(treasure, state.calm).alpha * .8 : 0);
       const pulse = 1 + Math.sin(t * 2.5) * .07;
-      circle(hole.x, hole.y, 23 * pulse + hole.glow * 8, null, hole.glow ? '#efb750' : '#d6bc8170', 2);
+      circle(hole.x, hole.y, 23 * pulse + glow * 8, null, glow ? '#efb750' : '#d6bc8170', 2);
       circle(hole.x, hole.y + 2, 19, '#968873');
       const gradient = ctx.createRadialGradient(hole.x, hole.y, 0, hole.x, hole.y, 19); gradient.addColorStop(0, paintColor('#293b39')); gradient.addColorStop(.7, paintColor('#536753')); gradient.addColorStop(1, paintColor('#b5b697'));
       circle(hole.x, hole.y, 18, gradient, '#ede0a2', 3);
@@ -239,6 +242,71 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       text(`×${s.multiplier} · ${Math.ceil(remaining / 1000)}s`, 0, 29, 10, purple ? '#8b59b5' : '#b58b42', 'bold'); ctx.restore();
     }
     // Celebration scenery stays behind every live ball.
+    for (const burst of activeRewardScenes(fx.celebrations || [])) {
+      const scene = rewardSceneAt(burst, state.calm), age = burst.age, color = burst.profile.color;
+      ctx.save();
+      // Restrict the wash and sparkles to the tabletop; balls render afterwards.
+      ctx.beginPath(); ctx.roundRect(12, 16, W - 24, H - 28, 24); ctx.clip();
+      if (scene.scene === 'lucky') {
+        if (!scene.reduced) {
+          const glow = ctx.createRadialGradient(350, 435, 35, 350, 435, 570);
+          glow.addColorStop(0, paintColor('#fff1b9', 'glow')); glow.addColorStop(1, paintColor('#efbc5630', 'glow'));
+          ctx.globalAlpha = scene.alpha * .2; ctx.fillStyle = glow; ctx.fillRect(12, 16, W - 24, H - 28);
+          ctx.globalAlpha = scene.alpha * .1;
+          for (let i = 0; i < 11; i++) {
+            const angle = Math.PI + i * Math.PI / 10;
+            ctx.beginPath(); ctx.moveTo(burst.x, burst.y);
+            ctx.lineTo(burst.x + Math.cos(angle - .022) * 1100, burst.y + Math.sin(angle - .022) * 1100);
+            ctx.lineTo(burst.x + Math.cos(angle + .022) * 1100, burst.y + Math.sin(angle + .022) * 1100);
+            ctx.closePath(); ctx.fillStyle = paintColor('#efc264', 'glow'); ctx.fill();
+          }
+          // One advancing head, never modulo-wrapped into a second lap.
+          for (let i = 0; i < 96; i++) {
+            const position = i / 96, point = marqueePoint(position);
+            const behind = scene.progress - position;
+            const trail = scene.marquee && behind >= 0 && behind < .09 ? 1 - behind / .09 : 0;
+            ctx.globalAlpha = scene.alpha * (.14 + trail * .86);
+            ctx.shadowBlur = trail ? 14 : 0; ctx.shadowColor = paintColor('#ffe199', 'glow');
+            circle(point.x, point.y, trail ? 4.2 : 2.4, trail ? '#fff3be' : '#d9b46c');
+          }
+          ctx.shadowBlur = 0;
+          for (let i = 0; i < 30; i++) {
+            const x = 65 + (i * 137 % 580), y = 65 + (i * 211 % 695);
+            ctx.globalAlpha = scene.alpha * (.25 + .35 * (1 + Math.sin(age / 200 + i)) / 2);
+            star(x, y - age / 90 % 15, 3 + i % 4, i % 3 ? '#efc264' : '#fff3ce', age / 900 + i);
+          }
+        }
+        ctx.globalAlpha = scene.alpha * (scene.reduced ? .75 : .95);
+        box(193, 158, 314, 42, 18, '#fff5dcf0', '#d9b667');
+        text('✦ LUCKY · 全台金色庆典 ✦', 350, 180, 17, '#a27830', 'bold');
+      } else if (scene.scene === 'stars' && !scene.reduced) {
+        // Staggered star clusters appear across the playfield, beyond the slot.
+        for (let i = 0; i < 18; i++) {
+          const localAge = age - i % 6 * 105;
+          if (localAge < 0) continue;
+          const life = Math.max(0, Math.sin(Math.min(1, localAge / 2100) * Math.PI));
+          const x = 80 + (i * 131 % 545), y = 170 + (i * 173 % 540);
+          ctx.globalAlpha = scene.alpha * life * .75;
+          circle(x, y, 9 + localAge / 80, null, '#b4a0d8', 1);
+          star(x, y, 4 + life * 5, color, localAge / 800 + i);
+          for (let j = 0; j < 3; j++) {
+            const angle = j * Math.PI * 2 / 3 + i, radius = 12 + localAge / 100;
+            star(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius, 2.5, '#f1c774', angle);
+          }
+        }
+      } else if (scene.scene === 'treasure') {
+        ctx.globalAlpha = scene.alpha * (scene.reduced ? .3 : .65);
+        circle(burst.x, burst.y, 33 + (scene.reduced ? 0 : Math.sin(age / 350) * 4), null, color, 3);
+        if (!scene.reduced) {
+          circle(burst.x, burst.y, 53 + Math.sin(age / 450) * 5, null, '#efcf81', 1.5);
+          for (let i = 0; i < 10; i++) {
+            const angle = i * Math.PI / 5 + age / 2200;
+            star(burst.x + Math.cos(angle) * 48, burst.y + Math.sin(angle) * 48, 3 + i % 2, '#efc264', angle);
+          }
+        }
+      }
+      ctx.restore();
+    }
     for (const burst of fx.celebrations || []) {
       const p = burst.profile, fade = Math.max(0, 1 - burst.age / p.duration), calm = state.calm || burst.calm;
       ctx.save();

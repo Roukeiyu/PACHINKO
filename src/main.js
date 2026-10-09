@@ -18,9 +18,9 @@ const icons = {
 };
 const icon = (name, size = 18) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
 const themes = {
-  animal: { label: '动物', name: '小动物的游乐园', description: '和毛茸茸的朋友，接住好运气', emoji: '🐰', motifs: ['🐰','🐻','🐾','🥕'], bg: '#fbf3e9', pin: '#b2c3a1', accent: '#e994a4', colors: ['#e6ecca','#f8dfb1','#efc2cb','#d5e6d3','#f6dba7','#efc2cb','#e6ecca'] },
-  dessert: { label: '甜品', name: '甜甜的白日梦', description: '每一次落下，都有一点点甜', emoji: '🍰', motifs: ['🍰','🍩','🍓','🍬'], bg: '#fff0ef', pin: '#d6b3c9', accent: '#d980ae', colors: ['#f6d7d8','#e6d5f2','#f8dfb1','#d6eae2','#f8dfb1','#e6d5f2','#f6d7d8'] },
-  flower: { label: '花朵', name: '花园里的小确幸', description: '让快乐发芽，让心情开一朵花', emoji: '🌷', motifs: ['🌷','🌼','🍀','🌸'], bg: '#f4f6e9', pin: '#a5be9d', accent: '#d49ca7', colors: ['#d9e9c7','#f6e4b2','#efcbd5','#cadfd2','#f6e4b2','#efcbd5','#d9e9c7'] },
+  animal: { label: '动物', name: '小动物的游乐园', description: '和毛茸茸的朋友，接住好运气', emoji: '🐰', motifs: ['🐰','🐻','🐱'], bg: '#fbf3e9', pin: '#b2c3a1', accent: '#e994a4', colors: ['#e6ecca','#f8dfb1','#efc2cb','#d5e6d3','#f6dba7','#efc2cb','#e6ecca'] },
+  dessert: { label: '甜品', name: '甜甜的白日梦', description: '每一次落下，都有一点点甜', emoji: '🍰', motifs: ['🍰','🍩','🍬'], bg: '#fff0ef', pin: '#d6b3c9', accent: '#d980ae', colors: ['#f6d7d8','#e6d5f2','#f8dfb1','#d6eae2','#f8dfb1','#e6d5f2','#f6d7d8'] },
+  flower: { label: '花朵', name: '花园里的小确幸', description: '让快乐发芽，让心情开一朵花', emoji: '🌷', motifs: ['🌷','🌼','🌸'], bg: '#f4f6e9', pin: '#a5be9d', accent: '#d49ca7', colors: ['#d9e9c7','#f6e4b2','#efcbd5','#cadfd2','#f6e4b2','#efcbd5','#d9e9c7'] },
 };
 let saved = {};
 try { saved = JSON.parse(localStorage.getItem('ponpon-settings') || '{}'); } catch {}
@@ -74,7 +74,7 @@ for (const type of ['selectstart', 'dragstart', 'contextmenu']) $('#app').addEve
 const canon = createCanon();
 let currentNote = null;
 let toastTimer;
-function toast(message) { $('#toast').textContent=message;$('#toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('show'),2200); }
+function toast(message, duration = 2200) { $('#toast').textContent=message;$('#toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('show'),duration); }
 
 // All sounds are synthesized locally: no downloads, no autoplay and no audio assets.
 let audio, master, backgroundMusic;
@@ -192,8 +192,8 @@ function award(result) {
   if (!jackpot) fx.slotGlows[result.column] = 1;
   const title = jackpot ? '✦ 秘密洞！ ' : profile.tier >= 3 ? `${profile.name} · ` : '';
   fx.popups.push({ x: result.x, y: result.y - 45, text: `${title}+${result.points}${result.scoreFactor > 1 ? ` · 星星 ×${result.scoreFactor}` : ''}${result.globalMultiplier > 1 ? ` · 全场 ×${result.globalMultiplier}` : ''}`,
-    life: 1, big: profile.tier >= 4, color: profile.color, size: 19 + profile.tier * 2 });
-  if (jackpot) toast(`✦ 发现秘密洞！收下 ${result.points} 分惊喜`);
+    life: 1, decay: jackpot ? 1000 / (60 * profile.duration) : .012, rise: jackpot ? .2 : .6, big: profile.tier >= 4, color: profile.color, size: 19 + profile.tier * 2 });
+  if (jackpot) toast(`✦ 发现秘密洞！收下 ${result.points} 分惊喜`, profile.duration);
   rewardSound(profile);
 }
 function rewardSound(profile) {
@@ -287,7 +287,7 @@ function updateEffects(dt) {
   for (let i = 0; i < fx.slotGlows.length; i++) fx.slotGlows[i] = Math.max(0, fx.slotGlows[i] - .015 * factor);
   for (let i = fx.ripples.length - 1; i >= 0; i--) { fx.ripples[i].life -= (fx.ripples[i].decay ?? .032) * factor; if (fx.ripples[i].life <= 0) fx.ripples.splice(i, 1); }
   for (let i = fx.particles.length - 1; i >= 0; i--) { const p = fx.particles[i]; p.x += p.vx * factor; p.y += p.vy * factor; p.vy += (p.gravity ?? .19) * factor; p.vx *= .99 ** factor; p.rotation += .07 * factor; p.life -= (p.decay ?? .016) * factor; if (p.life <= 0) fx.particles.splice(i, 1); }
-  for (let i = fx.popups.length - 1; i >= 0; i--) { fx.popups[i].y -= .6 * factor; fx.popups[i].life -= .012 * factor; if (fx.popups[i].life <= 0) fx.popups.splice(i, 1); }
+  for (let i = fx.popups.length - 1; i >= 0; i--) { fx.popups[i].y -= (fx.popups[i].rise ?? .6) * factor; fx.popups[i].life -= (fx.popups[i].decay ?? .012) * factor; if (fx.popups[i].life <= 0) fx.popups.splice(i, 1); }
 }
 function tick(now) {
   updateTimeFlow(now);
