@@ -13,7 +13,7 @@ try {
   await page.clock.install({time:epoch}); await page.clock.pauseAt(epoch+1000);
   // A previous version's camera preference must not opt an existing user into 3D.
   await page.addInitScript(()=>{if(!localStorage.getItem('ponpon-settings'))localStorage.setItem('ponpon-settings',JSON.stringify({sound:false,calm:false,cameraAngle:5}));});
-  await page.route('**/src/physics.js',async route=>{
+  await page.route('**/src/physics.js*',async route=>{
     const response=await route.fetch(); let body=await response.text();
     assert.ok(body.includes('return { engine, balls'));
     body=body.replace('return { engine, balls',`window.__modelFixture = {
@@ -72,7 +72,9 @@ try {
   assert.ok(r.bodies.find(b=>b.kind==='bumper'&&b.x===350).scale>1.3);
   await page.locator('#launch').focus();await page.keyboard.down('Space');await page.clock.fastForward(5100);await page.clock.runFor(100);
   r=await page.evaluate(()=>window.__ponpon.rendering);
-  assert.equal(r.motion.intensity,1);assert.ok(Math.abs(r.motion.rotation)>0 && Math.abs(r.motion.rotation)<=5);
+  assert.equal(r.motion.intensity,1);assert.ok(Math.abs(r.motion.rotation)>0 && Math.abs(r.motion.rotation)<=3);
+  assert.deepEqual(r.tableTransform,{position:[0,0,0],rotation:[0,0,0]},'camera shake never translates or rotates the model');
+  assert.notDeepEqual(r.cameraPosition,[0,-Math.sin(14*Math.PI/180)*1400,Math.cos(14*Math.PI/180)*1400],'shake moves the actual camera');
   const matrix=await page.evaluate(()=>{const m=new DOMMatrix(getComputedStyle(document.querySelector('.game-layout')).transform);return {a:m.a,b:m.b,c:m.c,d:m.d,x:m.e,y:m.f};});
   assert.deepEqual([matrix.a,matrix.b,matrix.c,matrix.d],[1,0,0,1],'the UI never rotates');
   assert.ok(Math.abs(matrix.x)<=.45 && Math.abs(matrix.y)<=.3,'UI movement stays below half a pixel');

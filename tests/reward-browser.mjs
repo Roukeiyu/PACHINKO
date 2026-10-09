@@ -21,7 +21,7 @@ async function setup(fallback = false, viewport = { width: 1440, height: 1180 })
     CanvasRenderingContext2D.prototype.fillText = function(value, x, y, ...args) { window.__rewardLabels.push({ value: String(value), x, y }); return text.call(this, value, x, y, ...args); };
   }, fallback);
   // Real Matter balls enter actual scoring sensors; no fake score callbacks.
-  await page.route('**/src/physics.js', async route => {
+  await page.route('**/src/physics.js*', async route => {
     const response = await route.fetch(); let body = await response.text();
     assert.ok(body.includes('return { engine, balls'));
     body = body.replace('return { engine, balls', `window.__rewardPhysics = {
@@ -30,14 +30,19 @@ async function setup(fallback = false, viewport = { width: 1440, height: 1180 })
         Body.setPosition(ball.body, {x: TABLE.left + (column + .5) * (TABLE.right - TABLE.left) / slots, y: TABLE.scoreLine-1});
         Body.setVelocity(ball.body, {x:0,y:6}); step();
       }, secret() {
+        // Keep one real ball in play so the treasure effect is visible while
+        // the new secret workflow waits for the remaining field to drain.
+        const waiting=launch();waiting.entered=true;Body.setPosition(waiting.body,{x:350,y:200});Body.setVelocity(waiting.body,{x:0,y:0});
         const hole = holes[0], ball = launch(); ball.entered = true;
         Body.setPosition(ball.body, {x:hole.x-47,y:hole.y-2}); Body.setVelocity(ball.body,{x:5,y:-1});
         for(let i=0;i<45 && balls.includes(ball);i++) step();
+      }, drain() {
+        for(const ball of [...balls]) {ball.entered=true;Body.setPosition(ball.body,{x:347,y:TABLE.scoreLine-1});Body.setVelocity(ball.body,{x:0,y:6});}step();
       }
     }; return { engine, balls`);
     await route.fulfill({ response, body });
   });
-  await page.route('**/src/main.js', async route => {
+  await page.route('**/src/main.js*', async route => {
     const response = await route.fetch(); let body = await response.text();
     const anchor = "const renderer = createRenderer($('#board'));"; assert.ok(body.includes(anchor));
     body = body.replace(anchor, anchor + `
@@ -53,7 +58,7 @@ async function setup(fallback = false, viewport = { width: 1440, height: 1180 })
   });
   await page.goto(process.env.TEST_URL || 'http://127.0.0.1:5173');
   await page.clock.runFor(50);
-  assert.ok(await page.evaluate(() => window.__rewardFixture));
+  assert.ok(await page.evaluate(() => window.__rewardFixture),`reward fixture failed to load: ${JSON.stringify(errors)}`);
   return page;
 }
 try {
@@ -101,6 +106,9 @@ try {
   await page.evaluate(() => window.__rewardFixture.advance(600));
   await page.clock.runFor(50);
   assert.equal(await page.evaluate(() => window.__rewardFixture.snapshot().bursts.length), 0);
+  await page.evaluate(()=>window.__rewardPhysics.drain());await page.clock.runFor(50);
+  assert.equal(await page.locator('#mini-game').evaluate(el=>el.open),true);
+  await page.clock.fastForward(30100);await page.locator('#mini-return').click();await page.clock.runFor(50);
   await page.setViewportSize({width:390,height:844});
   await page.evaluate(() => { window.__rewardFixture.reset(); window.__rewardFixture.night(); window.__rewardPhysics.slot(10); window.__rewardFixture.advance(800); });
   await page.clock.runFor(50);

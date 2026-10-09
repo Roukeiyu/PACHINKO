@@ -65,8 +65,26 @@ try {
   await page.reload();
   assert.equal(await page.locator('#board').getAttribute('data-renderer'), '2d');
   assert.equal(await page.locator('#three-d').isChecked(), false);
+  // Hidden GM shortcuts and mini-game scoring must work in the production
+  // bundle too, without relying on development-only diagnostics or fixtures.
+  const beforeMini=await page.locator('#score').textContent();
+  await page.locator('#settings-button').click();
+  for(let i=0;i<3;i++) await page.locator('#gm-dot').click();
+  assert.equal(await page.locator('#gm-tools').isVisible(),true);
+  await page.locator('[data-mini="pairs"]').click();
+  assert.equal(await page.locator('#mini-grid button').count(),40);
+  await page.evaluate(()=>{
+    const pairs=new Map();
+    for(const button of document.querySelectorAll('#mini-grid button')) {const group=pairs.get(button.textContent)||[];group.push(button);pairs.set(button.textContent,group);}
+    for(const group of pairs.values()) for(const button of group) button.click();
+  });
+  assert.equal(await page.locator('#mini-score').textContent(),'1,000');
+  assert.equal(await page.locator('#mini-result').isVisible(),true);
+  assert.equal(Number((await page.locator('#score').textContent()).replaceAll(',','')),Number(beforeMini.replaceAll(',',''))+1000);
+  await page.locator('#mini-return').click();
+  assert.equal(await page.locator('#settings').evaluate(el=>el.open),true);
   assert.deepEqual(errors, []);
-  console.log('PASS: production assets load under /PACHINKO/, a ball scores, 2D/3D switching and preferences persist, and no browser errors occur.');
+  console.log('PASS: production assets load under /PACHINKO/, a ball scores, 2D/3D switching and preferences persist, GM mini-games score correctly, and no browser errors occur.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

@@ -81,7 +81,11 @@ export function createTimePalette(elapsed) {
   }
   const filters = { day: [0,0,0,1,1,0], dusk: [.15,.35,-18,.95,1.05,0], night: [.55,.55,170,.8,1.35,.7], dawn: [.15,.18,135,.85,1.1,0] };
   const [gray,sepia,hue,saturation,brightness,glow] = lerp(filters[phase.previous], filters[phase.id], phase.blend);
-  return { phase, color, emojiFilter: `grayscale(${gray}) sepia(${sepia}) hue-rotate(${hue}deg) saturate(${saturation}) brightness(${brightness}) drop-shadow(0 0 1.4px rgba(212,224,255,${glow}))` };
+  // Semantic game colors retain their own hues under the changing ambient
+  // light, so four-color puzzles never collapse into one blue/purple palette.
+  const strengths = { day: .85, dusk: .72, night: .28, dawn: .8 };
+  const gameColorStrength = `${(strengths[phase.previous] + (strengths[phase.id] - strengths[phase.previous]) * phase.blend) * 100}%`;
+  return { phase, color, gameColorStrength, emojiFilter: `grayscale(${gray}) sepia(${sepia}) hue-rotate(${hue}deg) saturate(${saturation}) brightness(${brightness}) drop-shadow(0 0 1.4px rgba(212,224,255,${glow}))` };
 }
 // Tokens include CSS rules and SVG presentation attributes. Discovering them
 // keeps the shared palette aligned with newly added controls and decorations.
@@ -99,6 +103,6 @@ export function applyTimePalette(root, tokens, palette) {
     if (palette) root.style.setProperty(token.name, palette.color(token.value, token.role));
     else root.style.removeProperty(token.name);
   }
-  if (palette) root.style.setProperty('--flow-emoji-filter', palette.emojiFilter);
-  else root.style.removeProperty('--flow-emoji-filter');
+  if (palette) { root.style.setProperty('--flow-emoji-filter', palette.emojiFilter); root.style.setProperty('--mini-color-strength', palette.gameColorStrength); }
+  else { root.style.removeProperty('--flow-emoji-filter'); root.style.removeProperty('--mini-color-strength'); }
 }

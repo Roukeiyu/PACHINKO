@@ -27,11 +27,11 @@ try {
     await page.clock.fastForward(1400);s=await snapshot();assert.equal(s.charge,1);assert.ok(s.effects.coronaRadius>0 && s.effects.overcharge<.01);
     await page.screenshot({path:`test-results/charge-${render3D ? '3d' : '2d'}-${mode}-full.png`});
     const faint=s.effects;
-    await page.clock.fastForward(1400);s=await snapshot();assert.ok(s.effects.coronaRadius>faint.coronaRadius && s.effects.coronaAlpha>faint.coronaAlpha);assert.ok(s.effects.overcharge>.45 && s.effects.overcharge<.55);
+    await page.clock.fastForward(1400);s=await snapshot();assert.ok(s.effects.coronaRadius>faint.coronaRadius && s.effects.coronaAlpha>faint.coronaAlpha);assert.ok(s.effects.overcharge>.45 && s.effects.overcharge<.55);assert.equal(s.motion.rotation,0,'unfinished rainbow charge must not rotate');
     await page.screenshot({path:`test-results/charge-${render3D ? '3d' : '2d'}-${mode}-growing.png`});
     await page.clock.fastForward(1600);s=await snapshot();assert.equal(s.effects.overcharge,1);assert.equal(s.count,0);assert.equal(s.overflow,false);
     assert.equal(s.motion.intensity,mode==='calm'?0:1);
-    assert.ok(Math.abs(s.motion.rotation)<=5 && Math.abs(s.motion.uiX)<=.45 && Math.abs(s.motion.uiY)<=.3);
+    assert.ok(Math.abs(s.motion.rotation)<=3 && Math.abs(s.motion.uiX)<=.45 && Math.abs(s.motion.uiY)<=.3);
     assert.equal(s.transform==='',mode==='calm','calm mode cancels scene and UI shake');
     await page.screenshot({path:`test-results/charge-${render3D ? '3d' : '2d'}-${mode}-max.png`});
     await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});

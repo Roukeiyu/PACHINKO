@@ -29,6 +29,8 @@ jobs:
         run: npm run test:physics
       - name: Check time-flow schedule
         run: node tests/time-flow.mjs
+      - name: Check mini-game rules and camera motion
+        run: npm run test:mini-games:rules && node tests/scene-motion.mjs
       - name: Build the game
         run: npm run build
       - name: Upload website

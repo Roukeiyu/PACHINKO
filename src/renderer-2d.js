@@ -40,6 +40,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     ctx.clearRect(0, 0, W, H); ctx.fillStyle = paintColor(theme.bg, 'surface'); ctx.fillRect(0, 0, W, H);
     ctx.save();
     motion = textureMode ? sceneMotionAt(0, {}, {}) : sceneMotionAt(game.clock, state, fx);
+    // This transform moves the 2D camera view, leaving physical coordinates fixed.
     if (!textureMode && motion.intensity) {
       ctx.translate(W / 2 + motion.x, H / 2 + motion.y);
       ctx.rotate(motion.rotation * Math.PI / 180); ctx.translate(-W / 2, -H / 2);

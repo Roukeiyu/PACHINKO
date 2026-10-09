@@ -1,13 +1,24 @@
 import { overchargeAt } from './charge.js';
 
-export const SCENE_ROTATION_LIMIT = 5;
+export const SCENE_ROTATION_LIMIT = 3;
 export function sceneMotionAt(clock, state, fx) {
   const charge = state.charging ? overchargeAt(state.chargeElapsed) : 0;
   const intensity = state.calm ? 0 : Math.max(charge, Math.max(0, Math.min(1, (fx.shake || 0) / 5)));
   const t = clock / 1000;
+  // The view only rolls once the entire rainbow charge is ready. Pick slow,
+  // seeded random targets and ease between them instead of frame-wise jitter.
+  const fullElapsed = state.charging && !state.calm ? Math.max(0, (state.chargeElapsed || 0) - 5000) : 0;
+  const segment = Math.floor(fullElapsed / 1200), fraction = fullElapsed % 1200 / 1200;
+  const target = index => {
+    if (index < 0) return 0;
+    const value = Math.sin((index + 1 + (state.chargeSeed || 0)) * 12.9898) * 43758.5453;
+    return ((value - Math.floor(value)) * 2 - 1) * SCENE_ROTATION_LIMIT;
+  };
+  const blend = fraction * fraction * (3 - 2 * fraction);
+  const rotation = fullElapsed ? target(segment - 1) + (target(segment) - target(segment - 1)) * blend : 0;
   return {
     intensity, x: Math.sin(t * 47) * intensity * 7, y: Math.cos(t * 41) * intensity * 5,
-    rotation: Math.sin(t * 17) * intensity * SCENE_ROTATION_LIMIT,
+    rotation,
     uiX: Math.sin(t * 37) * intensity * .45, uiY: Math.cos(t * 31) * intensity * .3,
   };
 }

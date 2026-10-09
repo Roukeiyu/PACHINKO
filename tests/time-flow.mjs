@@ -43,6 +43,13 @@ for (const ink of inks) for (const start of [240000,300000,540000,600000]) {
     assert.ok(actual.every((v,i)=>Math.abs(v-(from[i]+(to[i]-from[i])*t))<=1),'text lerps between phase endpoints along the same timeline as the theme');
   }
 }
+for(const start of [240000,300000,540000,600000]) {
+  let previous=parseFloat(createTimePalette(start-1).gameColorStrength);
+  for(let ms=start;ms<=start+20250;ms+=250) {
+    const current=parseFloat(createTimePalette(ms).gameColorStrength);
+    assert.ok(Math.abs(current-previous)<1,'puzzle color lighting must interpolate continuously');previous=current;
+  }
+}
 const dusk=rgb(createTimePalette(270000).color('#fbf3e9','surface')), night=rgb(createTimePalette(330000).color('#fbf3e9','surface'));
 assert.ok(dusk[0]>dusk[1] && dusk[1]>dusk[2], 'dusk shifts the scene warm orange/red');
 assert.ok(night[2]>night[0] && night.every(v=>v<100), 'night produces a dark blue/purple scene');

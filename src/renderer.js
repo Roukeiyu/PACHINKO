@@ -192,9 +192,10 @@ function create3DRenderer(canvas) {
   const starShape = new THREE.Shape();
   for (let i = 0; i < 10; i++) { const a = Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 5 : 11; if (i) starShape.lineTo(Math.cos(a) * r, Math.sin(a) * r); else starShape.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
   starShape.closePath(); const collectible = extrude(starShape, 5, goldSide, .7);
-  // The view is fixed. Automatic scene yaw supplies the bounded 3D rotation.
+  // Keep the table fixed; shake translates the camera parallel to its view.
   const pitch = THREE.MathUtils.degToRad(14);
-  camera.position.set(0, -Math.sin(pitch) * 1400, Math.cos(pitch) * 1400);
+  const cameraBase = new THREE.Vector3(0, -Math.sin(pitch) * 1400, Math.cos(pitch) * 1400);
+  camera.position.copy(cameraBase);
   camera.up.set(0, 1, 0); camera.lookAt(0, 0, 0); camera.updateMatrixWorld();
   const project = (x, y, z = 0) => { const p = world(x, y, z).applyMatrix4(table.matrixWorld).project(camera); return { x: (p.x + 1) / 2, y: (1 - p.y) / 2 }; };
   function resize() { const width = canvas.getBoundingClientRect().width; if (width) webgl.setSize(width, width * H / W, false); }
@@ -244,13 +245,16 @@ function create3DRenderer(canvas) {
     collectible.visible = !!game.star;
     if (game.star) { collectible.position.copy(world(game.star.x, game.star.y, 5)); const pulse = state.calm ? 1 : 1 + Math.sin(game.clock / 250) * .09; collectible.scale.setScalar(pulse); }
     motion = sceneMotionAt(game.clock, state, fx);
-    table.position.set(motion.x, -motion.y, 0);
-    table.rotation.y = THREE.MathUtils.degToRad(motion.rotation);
+    const cameraOffset = new THREE.Vector3(-motion.x, motion.y * Math.cos(pitch), motion.y * Math.sin(pitch));
+    camera.position.copy(cameraBase).add(cameraOffset);
+    camera.up.set(0, 1, 0); camera.lookAt(cameraOffset);
+    camera.rotateZ(-THREE.MathUtils.degToRad(motion.rotation));
+    camera.updateMatrixWorld();
     table.updateMatrixWorld(true); boardInverse.value.copy(table.matrixWorld).invert();
     webgl.render(scene, camera);
   }
   function snapshot() {
-    return { mode: 'webgl', cameraAngle: 0, motion: { ...motion }, pitch: 14, meshes: bodies.size, triangles: webgl.info.render.triangles, contextLost: webgl.getContext().isContextLost(),
+    return { mode: 'webgl', cameraAngle: 0, tableTransform: { position: table.position.toArray(), rotation: table.rotation.toArray().slice(0,3) }, cameraPosition: camera.position.toArray(), motion: { ...motion }, pitch: 14, meshes: bodies.size, triangles: webgl.info.render.triangles, contextLost: webgl.getContext().isContextLost(),
       bodies: [...bodies.values()].map(({ body, mesh, height }) => ({ id: body.id, kind: body.label, x: mesh.position.x + W / 2, y: H / 2 - mesh.position.y, angle: -mesh.rotation.z, radius: body.plugin.radius, height, scale: mesh.scale.x, projected: project(body.position.x, body.position.y, height) })),
       balls: [...balls].map(([id, mesh]) => ({ id, x: mesh.position.x + W / 2, y: H / 2 - mesh.position.y, z: mesh.position.z })),
       samples: [[70,200,.8],[23,280,28.8],[150,155,18.8],[350,367,32.8],[350,465,2.8],[615,482,2]].map(([x,y,z]) => project(x,y,z)), readyBall: project(TABLE.launchX, TABLE.launchY, 12), textures: webgl.info.memory.textures, geometries: webgl.info.memory.geometries, alignmentError: Math.max(0, ...[...bodies.values()].map(({body, mesh}) => Math.hypot(mesh.position.x - (body.position.x - W / 2), mesh.position.y - (H / 2 - body.position.y)))) };
