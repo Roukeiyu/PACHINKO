@@ -1,4 +1,5 @@
 import { TABLE, slotMultipliers } from './physics.js';
+import { rewardProfile } from './reward-effects.js';
 
 export function createRenderer(canvas) {
   const ctx = canvas.getContext('2d');
@@ -54,7 +55,7 @@ export function createRenderer(canvas) {
     for (let i = 0; i < state.slots; i++) {
       const x = TABLE.left + i * sw, glow = fx.slotGlows[i] || 0;
       box(x + 3, TABLE.slotTop, sw - 6, 86, 12, theme.colors[Math.round(i * 6 / (state.slots - 1))]);
-      if (glow) { ctx.save(); ctx.globalAlpha = glow * .75; ctx.shadowBlur = 25; ctx.shadowColor = '#ffdb79'; box(x + 3, TABLE.slotTop, sw - 6, 86, 12, '#fffade'); ctx.restore(); }
+      if (glow) { const p = rewardProfile({ multiplier: multipliers[i] }); ctx.save(); ctx.globalAlpha = glow * .65; ctx.shadowBlur = 8 + p.tier * 5; ctx.shadowColor = p.color; box(x + 3, TABLE.slotTop, sw - 6, 86, 12, p.color); ctx.restore(); }
       text(theme.motifs[i % 4], x + sw / 2, TABLE.slotTop + 23, state.slots === 9 ? 22 : 26, '#627454');
       text(`×${multipliers[i]}`, x + sw / 2, TABLE.slotTop + 54, 17, '#4c6648', 'bold');
       if (multipliers[i] === 10) text('LUCKY', x + sw / 2, TABLE.slotTop + 73, 9, '#aa8243');
@@ -156,8 +157,55 @@ export function createRenderer(canvas) {
       ctx.strokeStyle = purple ? '#f7eaff' : '#fff8dc'; ctx.lineWidth = 1.5; ctx.stroke();
       text(`×${s.multiplier} · ${Math.ceil(remaining / 1000)}s`, 0, 29, 10, purple ? '#8b59b5' : '#b58b42', 'bold'); ctx.restore();
     }
-    for (const ripple of fx.ripples) { ctx.save(); ctx.globalAlpha = ripple.life * .65; circle(ripple.x, ripple.y, 10 + (1 - ripple.life) * (ripple.big ? 85 : 30), null, ripple.color, ripple.big ? 4 : 2); ctx.restore(); }
-    for (const p of fx.particles) { ctx.save(); ctx.globalAlpha = p.life; ctx.translate(p.x, p.y); ctx.rotate(p.rotation); if (p.star) star(0, 0, p.size * 1.6, p.color); else { ctx.fillStyle = p.color; ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * .65); } ctx.restore(); }
+    // Celebration scenery stays behind every live ball.
+    for (const burst of fx.celebrations || []) {
+      const p = burst.profile, fade = Math.max(0, 1 - burst.age / p.duration), calm = state.calm || burst.calm;
+      ctx.save();
+      if (burst.kind === 'clock') {
+        const x = burst.x, y = burst.y, radius = calm ? 75 : 75 + (1 - fade) * 95;
+        ctx.globalAlpha = fade * (calm ? .25 : .65);
+        circle(x, y, radius, null, p.color, 3);
+        if (!calm) {
+          circle(x, y, radius + 22, null, '#c5a0da', 2);
+          for (let i = 0; i < 12; i++) {
+            const angle = -Math.PI / 2 + i * Math.PI / 6;
+            const length = i <= Math.floor(burst.age / (1000 / 12)) ? 32 : 12;
+            ctx.beginPath(); ctx.moveTo(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
+            ctx.lineTo(x + Math.cos(angle) * (radius + length), y + Math.sin(angle) * (radius + length));
+            ctx.lineWidth = 3; ctx.strokeStyle = i % 2 ? '#c5a0da' : p.color; ctx.stroke();
+            star(x + Math.cos(angle) * (radius + length + 8), y + Math.sin(angle) * (radius + length + 8), 6, p.color, angle);
+          }
+          ctx.lineWidth = 4; ctx.strokeStyle = '#e2ae48'; ctx.beginPath(); ctx.roundRect(39, 45, 617, 739, 25); ctx.stroke();
+          for (let i = 0; i < 14; i++) star(i % 2 ? 641 : 54, 90 + Math.floor(i / 2) * 105, 7 + Math.sin(burst.age / 180 + i) * 2, i % 3 ? p.color : '#c5a0da');
+        }
+        ctx.globalAlpha = Math.min(1, fade * 3);
+        box(178, 119, 344, 48, 20, '#fff5dcf0', '#d9b667');
+        text('✦ 百次碰撞 · 十二时钟盛典 ✦', 350, 144, 19, '#a27830', 'bold');
+      } else if (p.tier >= 3 && !calm) {
+        const height = 65 + p.tier * 23;
+        const gradient = ctx.createLinearGradient(0, burst.y - height, 0, burst.y);
+        gradient.addColorStop(0, 'transparent'); gradient.addColorStop(1, p.color);
+        ctx.globalAlpha = fade * .2;
+        ctx.beginPath(); ctx.moveTo(burst.x - 22, burst.y); ctx.lineTo(burst.x - 52, burst.y - height);
+        ctx.lineTo(burst.x + 52, burst.y - height); ctx.lineTo(burst.x + 22, burst.y); ctx.closePath(); ctx.fillStyle = gradient; ctx.fill();
+        ctx.globalAlpha = fade * .8;
+        for (let i = 0; i < p.tier; i++) star(burst.x + (i - (p.tier - 1) / 2) * 24, burst.y - 48 - Math.sin(i + burst.age / 300) * 15, 5, p.color, burst.age / 800);
+      }
+      ctx.restore();
+    }
+    for (const ripple of fx.ripples) { ctx.save(); ctx.globalAlpha = ripple.life * .65; circle(ripple.x, ripple.y, 10 + (1 - ripple.life) * (ripple.radius ?? (ripple.big ? 85 : 30)), null, ripple.color, ripple.width ?? (ripple.big ? 4 : 2)); ctx.restore(); }
+    for (const p of fx.particles) {
+      ctx.save(); ctx.globalAlpha = Math.max(0, p.life) * .85; ctx.translate(p.x, p.y); ctx.rotate(p.rotation);
+      if (p.star || p.shape === 'star') star(0, 0, p.size * 1.6, p.color);
+      else if (p.shape === 'bubble') circle(0, 0, p.size, null, p.color, 1.5);
+      else if (p.shape === 'petal') { ctx.beginPath(); ctx.ellipse(0, 0, p.size * 1.6, p.size * .7, 0, 0, Math.PI * 2); ctx.fillStyle = p.color; ctx.fill(); }
+      else { ctx.fillStyle = p.color; ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * (p.shape === 'ribbon' ? 2.6 : .65)); }
+      ctx.restore();
+    }
+    for (const p of fx.popups) {
+      ctx.save(); ctx.globalAlpha = Math.min(1, p.life * 2); ctx.font = `bold ${p.size ?? (p.big ? 26 : 23)}px "Trebuchet MS", sans-serif`; ctx.textAlign = 'center'; ctx.lineWidth = 6; ctx.strokeStyle = '#fffbee';
+      const x = Math.max(115, Math.min(550, p.x)); ctx.strokeText(p.text, x, p.y); ctx.fillStyle = p.color || (p.big ? '#b67a26' : '#b1667b'); ctx.fillText(p.text, x, p.y); ctx.restore();
+    }
     for (const b of game.balls) {
       if (!state.calm) b.trail.forEach((pos, i) => { ctx.save(); ctx.globalAlpha = i / b.trail.length * .5; circle(pos.x, pos.y, 3 + i / b.trail.length * 7, '#f7b863'); ctx.restore(); });
       ball(b.body.position.x, b.body.position.y);
@@ -165,10 +213,6 @@ export function createRenderer(canvas) {
         circle(b.body.position.x, b.body.position.y, 18, null, '#e8b446b0', 1.5);
         text(`×${b.scoreFactor}`, b.body.position.x, b.body.position.y - 25, 13, '#a87535', 'bold');
       }
-    }
-    for (const p of fx.popups) {
-      ctx.save(); ctx.globalAlpha = Math.min(1, p.life * 2); ctx.font = `bold ${p.big ? 26 : 23}px "Trebuchet MS", sans-serif`; ctx.textAlign = 'center'; ctx.lineWidth = 6; ctx.strokeStyle = '#fffbee';
-      const x = Math.max(115, Math.min(550, p.x)); ctx.strokeText(p.text, x, p.y); ctx.fillStyle = p.big ? '#b67a26' : '#b1667b'; ctx.fillText(p.text, x, p.y); ctx.restore();
     }
     ctx.restore();
   }

@@ -2,6 +2,7 @@ import { createTable, STEP } from './physics.js';
 import { createRenderer } from './renderer.js';
 import { createCanon } from './canon.js';
 import { chargeAt, chargePercent } from './charge.js';
+import { celebrateReward, advanceCelebrations } from './reward-effects.js';
 import './style.css';
 
 const icons = {
@@ -77,13 +78,11 @@ function playCanon(hit) {
 }
 function sound(kind,value=0){
   if(kind==='launch'){tone(330,.14,'sine',0,.4,880);tone(110,.09,'triangle',0,.2);}
-  if(kind==='score'){[523,659,784,value>=5?1319:1047].forEach((n,i)=>tone(n,.25,'sine',i*.065,.3));tone(180,.2,'triangle',0,.22,60);}
-  if(kind==='jackpot'){[523,659,784,1047,1319,1568].forEach((n,i)=>tone(n,.4,'sine',i*.09,.32));}
   if(kind==='theme'){tone(660,.12,'sine');tone(880,.16,'sine',.075);}
   if(kind==='star'){[880,1175,1568].forEach((n,i)=>tone(n,.24,'sine',i*.055,.22));}
 }
 
-const fx = { particles: [], ripples: [], popups: [], slotGlows: Array(state.slots).fill(0), shake: 0 };
+const fx = { celebrations: [], particles: [], ripples: [], popups: [], slotGlows: Array(state.slots).fill(0), shake: 0 };
 const game = createTable({ slots: state.slots, onHit: hit => {
   playCanon(hit);
   if (!state.calm) fx.ripples.push({ ...hit, life: 1, color: themes[state.theme].accent });
@@ -96,7 +95,16 @@ function surprise(event) {
   const names = { clock: '✦ 百次碰撞！十二时钟爆发', random: '✧ 左鼓满 10 次，送一颗弹珠', enlarge: '✿ 右鼓满 10 次，中央放大 5 秒', redirect: '↙ 回流出口，再冒险一次' };
   if (names[event.kind]) toast(names[event.kind]);
   fx.ripples.push({ x: event.x, y: event.y, life: 1, big: event.kind === 'clock' || event.kind === 'enlarge', color: event.kind === 'redirect' ? '#92b68d' : event.multiplier === 5 ? '#b58ae0' : '#e6b44f' });
-  if (event.kind === 'clock' && !state.calm) fx.shake = 3;
+  if (event.kind === 'clock') {
+    const profile = celebrateReward(fx, event, state.calm);
+    rewardSound(profile);
+  }
+  if (event.kind === 'emit' && event.source === 'clock') {
+    // Each of the twelve physical shots gets its own directional flourish.
+    const x = event.x + Math.cos(event.angle) * 76, y = event.y + Math.sin(event.angle) * 76;
+    if (!state.calm) fx.ripples.push({ x, y, life: 1, color: '#e2ae48', radius: 48, width: 3 });
+    tone(587 * 2 ** (event.ordinal / 12), .22, 'sine', 0, .17);
+  }
   if (event.kind === 'star') {
     sound('star');
     fx.popups.push({ x: event.x, y: event.y - 20, text: `✦ 本球 ×${event.scoreFactor}`, life: 1, big: false });
@@ -114,16 +122,22 @@ function award(result) {
   state.score += result.points; state.best = Math.max(state.best, state.score); persist();
   $('#score').textContent = state.score.toLocaleString(); $('#mobile-score').textContent = state.score.toLocaleString(); $('#best').textContent = state.best.toLocaleString();
   $('.score-value').classList.remove('score-bump'); void $('.score-value').offsetWidth; $('.score-value').classList.add('score-bump');
-  const jackpot = result.kind === 'jackpot', big = jackpot || result.multiplier === 10;
+  const jackpot = result.kind === 'jackpot', profile = celebrateReward(fx, result, state.calm);
   if (!jackpot) fx.slotGlows[result.column] = 1;
-  fx.popups.push({ x: result.x, y: result.y - 30, text: jackpot ? `✦ 秘密洞！ +${result.points}` : `+${result.points}${result.scoreFactor > 1 ? ` · 星星 ×${result.scoreFactor}` : ''}`, life: 1, big });
-  fx.ripples.push({ x: result.x, y: result.y, big: true, life: 1, color: '#e6b44f' });
-  if (jackpot) { toast(`✦ 发现秘密洞！收下 ${result.points} 分惊喜`); if (!state.calm) fx.shake = 4; }
-  const count = state.calm ? 8 : jackpot ? 90 : big ? 60 : 30;
-  for (let i = 0; i < count; i++) fx.particles.push({ x: result.x, y: result.y, vx: (Math.random() - .5) * 11, vy: -3 - Math.random() * 10, life: 1, size: 2 + Math.random() * 4, rotation: Math.random() * 6, color: ['#ee8d9d','#f0c26e','#8fae83','#fffef4','#bbabd5'][i % 5], star: i % 4 === 0 });
-  if (fx.particles.length > 300) fx.particles.splice(0, fx.particles.length - 300);
-  sound(jackpot ? 'jackpot' : 'score', result.multiplier || 10);
+  const title = jackpot ? '✦ 秘密洞！ ' : profile.tier >= 3 ? `${profile.name} · ` : '';
+  fx.popups.push({ x: result.x, y: result.y - 45, text: `${title}+${result.points}${result.scoreFactor > 1 ? ` · 星星 ×${result.scoreFactor}` : ''}`,
+    life: 1, big: profile.tier >= 4, color: profile.color, size: 19 + profile.tier * 2 });
+  if (jackpot) toast(`✦ 发现秘密洞！收下 ${result.points} 分惊喜`);
+  rewardSound(profile);
 }
+function rewardSound(profile) {
+  // Richer rewards add more notes and harmony, without escalating volume.
+  const clock = profile.tier === 6;
+  profile.notes.forEach((note, i) => tone(note, clock ? .5 : .18 + profile.tier * .035,
+    profile.tier === 2 ? 'triangle' : 'sine', i * (clock ? .08 : .065), .2));
+  if (profile.tier >= 4) [147, 220, 294].forEach(n => tone(n, clock ? 1.1 : .6, 'sine', 0, .08));
+}
+
 function launch(power = state.auto ? state.power / 100 : 0) {
   if ($('#settings').open || document.hidden) return;
   unlockAudio();
@@ -173,10 +187,11 @@ $('#power').addEventListener('input', event => { state.power = +event.target.val
 
 function updateEffects(dt) {
   const factor = dt / (1000 / 60);
+  advanceCelebrations(fx, dt, state.calm);
   fx.shake = Math.max(0, fx.shake - .18 * factor);
   for (let i = 0; i < fx.slotGlows.length; i++) fx.slotGlows[i] = Math.max(0, fx.slotGlows[i] - .015 * factor);
-  for (let i = fx.ripples.length - 1; i >= 0; i--) { fx.ripples[i].life -= .032 * factor; if (fx.ripples[i].life <= 0) fx.ripples.splice(i, 1); }
-  for (let i = fx.particles.length - 1; i >= 0; i--) { const p = fx.particles[i]; p.x += p.vx * factor; p.y += p.vy * factor; p.vy += .19 * factor; p.vx *= .99 ** factor; p.rotation += .07 * factor; p.life -= .016 * factor; if (p.life <= 0) fx.particles.splice(i, 1); }
+  for (let i = fx.ripples.length - 1; i >= 0; i--) { fx.ripples[i].life -= (fx.ripples[i].decay ?? .032) * factor; if (fx.ripples[i].life <= 0) fx.ripples.splice(i, 1); }
+  for (let i = fx.particles.length - 1; i >= 0; i--) { const p = fx.particles[i]; p.x += p.vx * factor; p.y += p.vy * factor; p.vy += (p.gravity ?? .19) * factor; p.vx *= .99 ** factor; p.rotation += .07 * factor; p.life -= (p.decay ?? .016) * factor; if (p.life <= 0) fx.particles.splice(i, 1); }
   for (let i = fx.popups.length - 1; i >= 0; i--) { fx.popups[i].y -= .6 * factor; fx.popups[i].life -= .012 * factor; if (fx.popups[i].life <= 0) fx.popups.splice(i, 1); }
 }
 function tick(now) {
