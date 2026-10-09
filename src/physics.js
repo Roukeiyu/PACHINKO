@@ -15,9 +15,10 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
   const deflectors = [], pendingDeflections = [];
   let activeStar = null, nextStarAt = 0, nextStarId = 1, lastStarLocation = -1, nextStarMultiplier = 2;
   let clock = 0, nextId = 1;
-  const pendingShots = [];
+  const pendingShots = [], pendingDrops = [];
+  const collector = { x: 100, y: 650, radius: 18, capacity: 20, stored: [], remaining: 0, glow: 0, outlets: [] };
   const rewards = { hits: [0, 0, 0], goals: [10, 10, 50], enlargedUntil: 0, burstUntil: 0, burstStep: -1, gateGlow: 0, ordinaryStars: 0 };
-  const stats = { launches: 0, entered: 0, scored: 0, jackpots: 0, returns: 0, timeouts: 0, redirected: 0, bonusBalls: 0, randomShots: 0, clockBursts: 0, enlargements: 0, impacts: 0, hits: { pin: 0, kicker: 0, bumper: 0, rail: 0, spinner: 0, diamond: 0, wall: 0, deflector: 0 } };
+  const stats = { launches: 0, entered: 0, scored: 0, jackpots: 0, returns: 0, timeouts: 0, redirected: 0, bonusBalls: 0, randomShots: 0, clockBursts: 0, enlargements: 0, absorbed: 0, storageBursts: 0, storageDrops: 0, impacts: 0, hits: { pin: 0, kicker: 0, bumper: 0, rail: 0, spinner: 0, diamond: 0, wall: 0, deflector: 0 } };
   const add = (body, group, extra = {}) => { body.plugin = { glow: 0, ...extra }; group.push(body); Composite.add(engine.world, body); return body; };
   const segment = (x1, y1, x2, y2, thickness, group, label = 'wall', restitution = .65) => {
     const length = Math.hypot(x2 - x1, y2 - y1);
@@ -43,7 +44,7 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
   // clearance around the triangle for its full-circle launches.
   segment(28, 370, 87, 396, 13, walls);
 
-  [[238, 226, 32], [450, 247, 32], [350, 367, 39]].forEach(([x, y, r], i) => {
+  [[238, 236, 32], [462, 236, 32], [350, 367, 39]].forEach(([x, y, r], i) => {
     add(Bodies.circle(x, y, r, { isStatic: true, label: 'bumper', restitution: 1.05, friction: 0 }), bumpers, { index: i, radius: r, baseRadius: r, lastKick: -1000 });
   });
   // Permanent spring studs at the two marked positions on the center axis.
@@ -71,6 +72,14 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
       segment(hole.x + Math.cos(a) * 32, hole.y + Math.sin(a) * 32, hole.x + Math.cos(b) * 32, hole.y + Math.sin(b) * 32, 8, guards, 'guard');
     }
   }
+  // A real upward-facing cup receives balls through a wide mouth in the lower-left gap.
+  for (let i = 0; i < 14; i++) {
+    const a = -Math.PI / 2 + .9 + i * (Math.PI * 2 - 1.8) / 14;
+    const b = -Math.PI / 2 + .9 + (i + 1) * (Math.PI * 2 - 1.8) / 14;
+    const rim = segment(collector.x + Math.cos(a) * 33, collector.y + Math.sin(a) * 33,
+      collector.x + Math.cos(b) * 33, collector.y + Math.sin(b) * 33, 8, guards, 'guard', .25);
+    rim.plugin.storage = true;
+  }
   // Cover the outer seam between the recessed cup and the side wall, so a
   // falling ball cannot wedge into the narrow space behind the cup.
   segment(665, 413, 615, 438, 13, walls);
@@ -96,7 +105,7 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
         && y > r.bounds.min.y - Math.abs(m.axisY * m.amplitude) - 26 && y < r.bounds.max.y + Math.abs(m.axisY * m.amplitude) + 26;
     })) continue;
     if (bumpers.some(b => Math.hypot(x - b.position.x, y - b.position.y) < b.plugin.baseRadius * (b.plugin.index === 2 ? 1.5 : 1) + 26)) continue;
-    if (Math.hypot(x - 351, y - 540) < 94 || Math.hypot(x - 99, y - 466) < 64 || holes.some(h => Math.hypot(x - h.x, y - h.y) < 62)) continue;
+    if (Math.hypot(x - 351, y - 540) < 94 || Math.hypot(x - 99, y - 466) < 64 || holes.some(h => Math.hypot(x - h.x, y - h.y) < 62) || Math.hypot(x - collector.x, y - collector.y) < 62) continue;
     starLocations.push({ x, y });
   }
   function placeStar() {
@@ -117,6 +126,10 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
     dividers.length = 0;
     const sw = (TABLE.right - TABLE.left) / slots;
     for (let i = 1; i < slots; i++) segment(TABLE.left + i * sw, TABLE.slotTop, TABLE.left + i * sw, 894, 7, dividers, 'divider', .4);
+    collector.outlets = Array.from({ length: slots }, (_, column) => ({ column, x: TABLE.left + (column + .5) * sw, y: 74, glow: 0 }));
+    // Stored balls and drops that have not yet emerged survive a layout change.
+    const columns = shuffledColumns(pendingDrops.length);
+    pendingDrops.forEach((drop, i) => { drop.column = columns[i]; });
   }
   setSlots(slots);
   function spawn(x, y, vx, vy, { power = 0, bonus = false, kind = 'launch' } = {}) {
@@ -141,6 +154,42 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
     const ball = spawn(bumper.position.x + Math.cos(angle) * radius, bumper.position.y + Math.sin(angle) * radius, Math.cos(angle) * 12.5, Math.sin(angle) * 12.5, { bonus: true, kind });
     if (kind === 'clock') rewards.burstStep = ordinal;
     onSurprise({ kind: 'emit', source: kind, ordinal, angle, x: bumper.position.x, y: bumper.position.y, ballId: ball.id, at: clock });
+  }
+  function shuffledColumns(count) {
+    const columns = [];
+    while (columns.length < count) {
+      const round = Array.from({ length: slots }, (_, i) => i);
+      for (let i = round.length - 1; i > 0; i--) {
+        const j = Math.floor(random() * (i + 1));
+        [round[i], round[j]] = [round[j], round[i]];
+      }
+      columns.push(...round.slice(0, count - columns.length));
+    }
+    return columns;
+  }
+  function storeBall(ball) {
+    collector.stored.push(ball.scoreFactor); stats.absorbed++; collector.glow = 1;
+    onSurprise({ kind: 'store', x: collector.x, y: collector.y, count: collector.stored.length, capacity: collector.capacity, ballId: ball.id, scoreFactor: ball.scoreFactor });
+    if (collector.stored.length < collector.capacity) return;
+    const factors = collector.stored.splice(0).flatMap(factor => [factor, factor]);
+    const columns = shuffledColumns(factors.length);
+    let due = Math.max(clock + 250, (pendingDrops.at(-1)?.due ?? clock) + 100);
+    factors.forEach((scoreFactor, i) => {
+      pendingDrops.push({ due, column: columns[i], scoreFactor });
+      due += 80 + random() * 60;
+    });
+    collector.remaining = pendingDrops.length; stats.storageBursts++;
+    onSurprise({ kind: 'storage-burst', x: collector.x, y: collector.y, amount: factors.length });
+  }
+  function emitDrop(drop) {
+    const outlet = collector.outlets[drop.column], sw = (TABLE.right - TABLE.left) / slots;
+    const x = outlet.x + (random() * 2 - 1) * Math.min(8, sw / 2 - 18);
+    // Drop beneath the top mouth, clear of the upper spring stud and pin row.
+    // A gentle downward velocity lets gravity and the full board decide the outcome.
+    const ball = spawn(x, outlet.y + 21, (random() - .5) * .7, .6 + random() * .8, { bonus: true, kind: 'storage' });
+    ball.scoreFactor = drop.scoreFactor;
+    outlet.glow = 1; stats.storageDrops++;
+    onSurprise({ kind: 'emit', source: 'storage', angle: Math.PI / 2, x, y: outlet.y, column: drop.column, ballId: ball.id, scoreFactor: ball.scoreFactor, at: clock });
   }
   function resizeCenter(enlarged) {
     const bumper = bumpers[2], radius = bumper.plugin.baseRadius * (enlarged ? 1.5 : 1);
@@ -207,6 +256,10 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
     if (!activeStar && clock + 1e-6 >= nextStarAt) placeStar();
     if (rewards.enlargedUntil && clock + 1e-6 >= rewards.enlargedUntil) { rewards.enlargedUntil = 0; resizeCenter(false); }
     rewards.gateGlow = Math.max(0, rewards.gateGlow - dt / 900);
+    collector.glow = Math.max(0, collector.glow - dt / 600);
+    for (const outlet of collector.outlets) outlet.glow = Math.max(0, outlet.glow - dt / 320);
+    while (pendingDrops.length && pendingDrops[0].due <= clock + 1e-6) emitDrop(pendingDrops.shift());
+    collector.remaining = pendingDrops.length;
     // Use the same simulation clock for countdowns and clock-burst scheduling;
     // opening settings or backgrounding the tab pauses all gameplay together.
     for (let i = 0; i < pendingShots.length;) {
@@ -263,6 +316,13 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
         }
       }
       if (body.speed > 32) Body.setVelocity(body, { x: body.velocity.x * 32 / body.speed, y: body.velocity.y * 32 / body.speed });
+      if (ball.entered) {
+        const from = ball.pickupFrom, dx = x - from.x, dy = y - from.y;
+        const along = Math.max(0, Math.min(1, ((collector.x - from.x) * dx + (collector.y - from.y) * dy) / (dx * dx + dy * dy || 1)));
+        if (Math.hypot(collector.x - from.x - along * dx, collector.y - from.y - along * dy) < collector.radius) {
+          remove(ball, i); storeBall(ball); continue;
+        }
+      }
       const hole = ball.entered && holes.find(h => Math.hypot(x - h.x, y - h.y) < 18);
       if (hole) { hole.glow = 1; stats.jackpots++; stats.scored++; remove(ball, i); onScore({ kind: 'jackpot', basePoints: 500, scoreFactor: ball.scoreFactor, points: 500 * ball.scoreFactor, x: hole.x, y: hole.y, ballId: ball.id }); continue; }
       if (ball.entered && x < 666 && y >= TABLE.scoreLine) {
@@ -280,5 +340,5 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
       if (ball.stuck > 1000) { Body.setVelocity(body, { x: random() > .5 ? .9 : -.9, y: -.5 }); ball.stuck = 0; }
     }
   }
-  return { engine, balls, walls, pins, kickers, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, stats, rewards, launch, step, setSlots, get star() { return activeStar; }, get clock() { return clock; }, get slots() { return slots; } };
+  return { engine, balls, walls, pins, kickers, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, collector, stats, rewards, launch, step, setSlots, get star() { return activeStar; }, get clock() { return clock; }, get slots() { return slots; } };
 }

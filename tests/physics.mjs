@@ -89,15 +89,16 @@ for (const slots of [5, 7, 9]) for (const seedOffset of [0, 100, 200]) {
     assert.ok(ball.body.velocity.y < -20, 'charged shots receive an initial upward spring impulse');
     // Milestones emit new reward balls after launch; allow their own 45-second
     // lifetime too, while keeping the timeout-count and containment checks below.
-    for (let step = 0; step < Math.ceil(90000 / STEP) && game.balls.length; step++) {
+    for (let step = 0; step < Math.ceil(90000 / STEP) && (game.balls.length || game.collector.remaining); step++) {
       game.step();
       for (const b of game.balls) if (b.body.position.x < 30 || b.body.position.x > 734 || b.body.position.y < 36) escaped++;
     }
-    assert.equal(game.balls.length, 0, 'every ball must settle or visibly return');
+    assert.equal(game.balls.length, 0, 'every ball must score, enter storage or visibly return');
+    assert.equal(game.collector.remaining, 0, 'all queued storage drops must emerge and settle');
   }
   assert.equal(escaped, 0, 'fast balls must not tunnel through side or top walls');
   assert.ok(game.stats.entered >= 116, 'shooter lane must reliably lead to the playing field');
-  assert.ok(game.stats.scored >= 100, 'the large majority of launches must resolve into scoring');
+  assert.ok(game.stats.scored + game.stats.absorbed >= 100, 'the large majority of launches must score or enter storage');
   assert.ok(game.stats.timeouts <= 3, 'obstacle layout must not trap balls');
   assert.ok(columns.size >= slots - 1, 'multiple routes must reach almost all slots');
   for (const kind of ['bumper', 'rail', 'spinner', 'diamond', 'pin', 'deflector']) assert.ok(game.stats.hits[kind] > 0, `${kind} participates in physical trajectories`);
@@ -164,7 +165,8 @@ assert.ok(totals.jackpots > 0 && totals.jackpots < 108, 'physical bonus cups sho
 {
   const game = createTable(), ball = game.launch();
   ball.entered = true;
-  Matter.Body.setPosition(ball.body, { x: 260, y: 270 });
+  // Approach below the now-symmetric upper bumper so this probes the rail.
+  Matter.Body.setPosition(ball.body, { x: 250, y: 290 });
   Matter.Body.setVelocity(ball.body, { x: -5, y: 6 });
   for (let step = 0; step < 60 && !game.stats.hits.rail; step++) game.step();
   assert.ok(game.stats.hits.rail > 0, 'upper-left rail blocks a diagonal route toward the triangle');

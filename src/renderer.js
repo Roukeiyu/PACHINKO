@@ -38,10 +38,10 @@ export function createRenderer(canvas) {
     box(689, 128, 47, 739, 21, '#d9e6d299');
     ctx.save(); ctx.strokeStyle = '#afc09a75'; ctx.lineWidth = 2; ctx.setLineDash([3, 10]); ctx.beginPath(); ctx.moveTo(713, 750); ctx.lineTo(713, 154); ctx.stroke(); ctx.restore();
     for (let i = 0; i < 3; i++) { const y = 650 + i * 60 - (t * 45 % 60); ctx.beginPath(); ctx.moveTo(704, y + 8); ctx.lineTo(713, y); ctx.lineTo(722, y + 8); ctx.strokeStyle = '#86a869a0'; ctx.lineWidth = 3; ctx.stroke(); }
-    text('P O N  P O N', 351, 78, 24, '#69815d', 'bold');
-    text('LITTLE PINBALL CLUB', 351, 108, 11, '#9ca184');
+    text('P O N  P O N', 351, 112, 24, '#69815d', 'bold');
+    text('LITTLE PINBALL CLUB', 351, 133, 11, '#9ca184');
     text('↖', 651, 103, 27, '#a0b28d');
-    star(209, 83, 7, '#d7b57a', t * .3); star(495, 83, 7, '#d7b57a', -t * .3);
+    star(209, 112, 7, '#d7b57a', t * .3); star(495, 112, 7, '#d7b57a', -t * .3);
     [[104, 209], [597, 647], [402, 196], [86, 639]].forEach(([x, y], i) => star(x, y + Math.sin(t + i) * 3, 4, '#d4b78475', t * .1));
     // Painted guide rings provide motion cues without competing with the ball.
     for (const bumper of game.bumpers) { const { x, y } = bumper.position; ctx.save(); ctx.setLineDash([3, 9]); circle(x, y, bumper.plugin.radius + 17, null, '#cfbf9a55'); ctx.restore(); }
@@ -70,7 +70,22 @@ export function createRenderer(canvas) {
       text('+500', hole.x, hole.y - 51, 15, '#b39153', 'bold');
       text('秘密洞', hole.x, hole.y + 52, 12, '#9e9375');
     }
-    for (const guard of game.guards) bodyShape(guard, '#d8c69c', '#efe5c8', false);
+    for (const guard of game.guards) bodyShape(guard, guard.plugin.storage ? '#b9a6ce' : '#d8c69c', guard.plugin.storage ? '#f4eafb' : '#efe5c8', false);
+    const storage = game.collector;
+    // The cup, live counter and visible inlet all share the physical coordinates.
+    circle(storage.x, storage.y + 2, 22, '#827590');
+    const cup = ctx.createRadialGradient(storage.x, storage.y, 0, storage.x, storage.y, 22);
+    cup.addColorStop(0, '#405c59'); cup.addColorStop(1, '#8eaaa1');
+    circle(storage.x, storage.y, 21, cup, storage.glow ? '#f3cf7b' : '#eae0f3', 2);
+    text(`${storage.stored.length}/20`, storage.x, storage.y + 3, 11, '#fff9e9', 'bold');
+    text('蓄球罐', storage.x, storage.y - 49, 12, '#8b769f', 'bold');
+    text(storage.remaining ? `落球中 · 余 ${storage.remaining}` : '存 20 · 落 40', storage.x, storage.y + 48, 11, '#8b769f');
+    // Every bottom slot has a corresponding mouth at the top of the board.
+    for (const outlet of storage.outlets) {
+      box(outlet.x - 26, outlet.y - 9, 52, 17, 8, outlet.glow ? '#f6daa0' : '#d8d0e3', '#fff8ef');
+      box(outlet.x - 22, outlet.y - 4, 44, 7, 3, '#526961');
+      if (outlet.glow && !state.calm) { ctx.save(); ctx.globalAlpha = outlet.glow; text('↓', outlet.x, outlet.y + 31, 15, '#aa86bc', 'bold'); ctx.restore(); }
+    }
     for (const platform of game.deflectors) {
       const { x, y } = platform.position, { glow, angle } = platform.plugin;
       ctx.save(); ctx.setLineDash([3, 7]); circle(x, y, 42, null, '#c6b69780', 1.5); ctx.restore();
