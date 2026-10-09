@@ -27,6 +27,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Check pinball physics
         run: npm run test:physics
+      - name: Check time-flow schedule
+        run: node tests/time-flow.mjs
       - name: Build the game
         run: npm run build
       - name: Upload website

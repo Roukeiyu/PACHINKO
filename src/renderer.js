@@ -4,6 +4,8 @@ import { rewardProfile } from './reward-effects.js';
 
 export function createRenderer(canvas) {
   const ctx = canvas.getContext('2d');
+  let activePalette = null, paintingBall = false;
+  const paintColor = (value, role) => paintingBall ? value : activePalette?.color(value, role) ?? value;
   const { width: W, height: H } = TABLE;
   function resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -13,36 +15,38 @@ export function createRenderer(canvas) {
     ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
   }
   const observer = new ResizeObserver(resize); observer.observe(canvas); resize();
-  const circle = (x, y, r, color, stroke, line = 1) => { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); if (color) { ctx.fillStyle = color; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = line; ctx.stroke(); } };
-  const box = (x, y, w, h, radius, color, stroke) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, radius); ctx.fillStyle = color; ctx.fill(); if (stroke) { ctx.lineWidth = 1; ctx.strokeStyle = stroke; ctx.stroke(); } };
-  const text = (value, x, y, size, color, weight = '') => { ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `${weight} ${size}px "Trebuchet MS", "PingFang SC", sans-serif`; ctx.fillStyle = color; ctx.fillText(value, x, y); };
-  function star(x, y, r, color, angle = 0) { ctx.beginPath(); for (let i = 0; i < 8; i++) { const a = angle + i * Math.PI / 4, rr = i % 2 ? r * .35 : r; if (i) ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); else ctx.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } ctx.closePath(); ctx.fillStyle = color; ctx.fill(); }
+  const circle = (x, y, r, color, stroke, line = 1) => { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); if (color) { ctx.fillStyle = paintColor(color, 'object'); ctx.fill(); } if (stroke) { ctx.strokeStyle = paintColor(stroke, 'line'); ctx.lineWidth = line; ctx.stroke(); } };
+  const box = (x, y, w, h, radius, color, stroke) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, radius); ctx.fillStyle = paintColor(color, 'object'); ctx.fill(); if (stroke) { ctx.lineWidth = 1; ctx.strokeStyle = paintColor(stroke, 'line'); ctx.stroke(); } };
+  const text = (value, x, y, size, color, weight = '') => { ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `${weight} ${size}px "Trebuchet MS", "PingFang SC", sans-serif`; ctx.fillStyle = paintColor(color, 'ink'); ctx.save(); if (activePalette && /\p{Extended_Pictographic}/u.test(value)) ctx.filter = activePalette.emojiFilter; ctx.fillText(value, x, y); ctx.restore(); };
+  function star(x, y, r, color, angle = 0) { ctx.beginPath(); for (let i = 0; i < 8; i++) { const a = angle + i * Math.PI / 4, rr = i % 2 ? r * .35 : r; if (i) ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); else ctx.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } ctx.closePath(); ctx.fillStyle = paintColor(color, 'object'); ctx.fill(); }
   function bodyShape(body, color, stroke = '#ffffffb0', shadow = true) {
-    ctx.save(); if (shadow) { ctx.shadowColor = '#45523d35'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 5; }
-    ctx.beginPath(); body.vertices.forEach((v, i) => { if (!i) ctx.moveTo(v.x, v.y); else ctx.lineTo(v.x, v.y); }); ctx.closePath(); ctx.fillStyle = color; ctx.fill(); ctx.shadowOffsetY = 0; ctx.lineWidth = 2; ctx.strokeStyle = stroke; ctx.stroke(); ctx.restore();
+    ctx.save(); if (shadow) { ctx.shadowColor = paintColor('#45523d35', 'glow'); ctx.shadowBlur = 0; ctx.shadowOffsetY = 5; }
+    ctx.beginPath(); body.vertices.forEach((v, i) => { if (!i) ctx.moveTo(v.x, v.y); else ctx.lineTo(v.x, v.y); }); ctx.closePath(); ctx.fillStyle = paintColor(color, 'object'); ctx.fill(); ctx.shadowOffsetY = 0; ctx.lineWidth = 2; ctx.strokeStyle = paintColor(stroke, 'line'); ctx.stroke(); ctx.restore();
   }
   function ball(x, y, opacity = 1) {
-    ctx.save(); ctx.globalAlpha = opacity; ctx.shadowColor = '#ffd862'; ctx.shadowBlur = 25;
+    paintingBall = true;
+    ctx.save(); ctx.globalAlpha = opacity; ctx.shadowColor = paintColor('#ffd862', 'glow'); ctx.shadowBlur = 25;
     circle(x, y, 14, '#a4425d'); ctx.shadowBlur = 0;
-    const g = ctx.createRadialGradient(x - 3, y - 4, 0, x, y, 12); g.addColorStop(0, '#ffffff'); g.addColorStop(.6, '#fffde8'); g.addColorStop(1, '#ffdb76');
-    circle(x, y, 11.5, g); circle(x - 3, y - 4, 3.5, '#fff'); ctx.restore();
+    const g = ctx.createRadialGradient(x - 3, y - 4, 0, x, y, 12); g.addColorStop(0, paintColor('#ffffff')); g.addColorStop(.6, paintColor('#fffde8')); g.addColorStop(1, paintColor('#ffdb76'));
+    circle(x, y, 11.5, g); circle(x - 3, y - 4, 3.5, '#fff'); ctx.restore(); paintingBall = false;
   }
-  function draw(game, theme, state, fx) {
+  function draw(game, theme, state, fx, palette = null) {
+    activePalette = palette;
     const t = state.calm ? 0 : game.clock / 1000;
-    ctx.clearRect(0, 0, W, H); ctx.fillStyle = theme.bg; ctx.fillRect(0, 0, W, H);
+    ctx.clearRect(0, 0, W, H); ctx.fillStyle = paintColor(theme.bg, 'surface'); ctx.fillRect(0, 0, W, H);
     ctx.save();
     if (!state.calm && fx.shake > 0) ctx.translate(Math.sin(t * 81) * fx.shake, Math.cos(t * 65) * fx.shake * .6);
-    ctx.fillStyle = '#b8b08b1d';
+    ctx.fillStyle = paintColor('#b8b08b1d', 'object');
     for (let x = 12; x < W; x += 24) for (let y = 12; y < H; y += 24) circle(x, y, .8, '#b8b08b26');
     // The shooter remains separate, without a flight-mode label or booster.
     box(38, 43, 620, 741, 30, '#ffffff29', '#c3c4a93b');
     box(689, 128, 47, 739, 21, '#d9e6d299');
-    ctx.save(); ctx.strokeStyle = '#afc09a75'; ctx.lineWidth = 2; ctx.setLineDash([3, 10]); ctx.beginPath(); ctx.moveTo(713, 750); ctx.lineTo(713, 154); ctx.stroke(); ctx.restore();
-    for (let i = 0; i < 3; i++) { const y = 650 + i * 60 - (t * 45 % 60); ctx.beginPath(); ctx.moveTo(704, y + 8); ctx.lineTo(713, y); ctx.lineTo(722, y + 8); ctx.strokeStyle = '#86a869a0'; ctx.lineWidth = 3; ctx.stroke(); }
+    ctx.save(); ctx.strokeStyle = paintColor('#afc09a75', 'line'); ctx.lineWidth = 2; ctx.setLineDash([3, 10]); ctx.beginPath(); ctx.moveTo(713, 750); ctx.lineTo(713, 154); ctx.stroke(); ctx.restore();
+    for (let i = 0; i < 3; i++) { const y = 650 + i * 60 - (t * 45 % 60); ctx.beginPath(); ctx.moveTo(704, y + 8); ctx.lineTo(713, y); ctx.lineTo(722, y + 8); ctx.strokeStyle = paintColor('#86a869a0', 'line'); ctx.lineWidth = 3; ctx.stroke(); }
     text('P O N  P O N', 351, 112, 24, '#69815d', 'bold');
     const bonus = game.slotMachine, bonusLabel = slotBonusLabel(bonus, game.clock);
     text(bonusLabel || 'LITTLE PINBALL CLUB', 351, 133, 11, bonus.multiplier === 5 ? '#8b59b5' : bonus.multiplier === 2 ? '#99712d' : '#9ca184', bonusLabel ? 'bold' : '');
-    if (bonusLabel) { ctx.save(); ctx.lineWidth = 2; ctx.strokeStyle = bonus.multiplier === 5 ? '#b494d0' : '#d5b069'; ctx.strokeRect(43, 46, 609, 737); ctx.restore(); }
+    if (bonusLabel) { ctx.save(); ctx.lineWidth = 2; ctx.strokeStyle = paintColor(bonus.multiplier === 5 ? '#b494d0' : '#d5b069', 'line'); ctx.strokeRect(43, 46, 609, 737); ctx.restore(); }
     text('↖', 651, 103, 27, '#a0b28d');
     star(209, 112, 7, '#d7b57a', t * .3); star(495, 112, 7, '#d7b57a', -t * .3);
     [[104, 209], [597, 647], [402, 196], [86, 639]].forEach(([x, y], i) => star(x, y + Math.sin(t + i) * 3, 4, '#d4b78475', t * .1));
@@ -52,13 +56,13 @@ export function createRenderer(canvas) {
     // A diagonal one-way flap intercepts descending balls; the dashed vertical
     // line shows the separate upward path, which is never blocked by the flap.
     ctx.save();ctx.globalAlpha=.8;bodyShape(game.gates[1], game.rewards.gateGlow ? '#f8cc77' : '#d7bf97', '#fff3d6', false);ctx.restore();
-    ctx.save();ctx.setLineDash([5,6]);ctx.strokeStyle='#a7ba8e';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(676,539);ctx.lineTo(676,615);ctx.stroke();ctx.restore();
+    ctx.save();ctx.setLineDash([5,6]);ctx.strokeStyle = paintColor('#a7ba8e', 'line');ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(676,539);ctx.lineTo(676,615);ctx.stroke();ctx.restore();
     text('↙ 回流口', 624, 640, 12, '#9b8965');
     const sw = (TABLE.right - TABLE.left) / state.slots, multipliers = slotMultipliers(state.slots);
     for (let i = 0; i < state.slots; i++) {
       const x = TABLE.left + i * sw, glow = fx.slotGlows[i] || 0;
       box(x + 3, TABLE.slotTop, sw - 6, 86, 12, theme.colors[Math.round(i * 6 / (state.slots - 1))]);
-      if (glow) { const p = rewardProfile({ multiplier: multipliers[i] }); ctx.save(); ctx.globalAlpha = glow * .65; ctx.shadowBlur = 8 + p.tier * 5; ctx.shadowColor = p.color; box(x + 3, TABLE.slotTop, sw - 6, 86, 12, p.color); ctx.restore(); }
+      if (glow) { const p = rewardProfile({ multiplier: multipliers[i] }); ctx.save(); ctx.globalAlpha = glow * .65; ctx.shadowBlur = 8 + p.tier * 5; ctx.shadowColor = paintColor(p.color, 'glow'); box(x + 3, TABLE.slotTop, sw - 6, 86, 12, p.color); ctx.restore(); }
       text(theme.motifs[i % 4], x + sw / 2, TABLE.slotTop + 23, state.slots === 9 ? 22 : 26, '#627454');
       text(`×${multipliers[i] * bonus.multiplier}`, x + sw / 2, TABLE.slotTop + 54, 17, '#4c6648', 'bold');
       if (bonus.multiplier > 1) text(`进洞 ×${bonus.multiplier}`, x + sw / 2, TABLE.slotTop + 73, 9, bonus.multiplier === 5 ? '#8b59b5' : '#99712d');
@@ -68,7 +72,7 @@ export function createRenderer(canvas) {
       const pulse = 1 + Math.sin(t * 2.5) * .07;
       circle(hole.x, hole.y, 23 * pulse + hole.glow * 8, null, hole.glow ? '#efb750' : '#d6bc8170', 2);
       circle(hole.x, hole.y + 2, 19, '#968873');
-      const gradient = ctx.createRadialGradient(hole.x, hole.y, 0, hole.x, hole.y, 19); gradient.addColorStop(0, '#293b39'); gradient.addColorStop(.7, '#536753'); gradient.addColorStop(1, '#b5b697');
+      const gradient = ctx.createRadialGradient(hole.x, hole.y, 0, hole.x, hole.y, 19); gradient.addColorStop(0, paintColor('#293b39')); gradient.addColorStop(.7, paintColor('#536753')); gradient.addColorStop(1, paintColor('#b5b697'));
       circle(hole.x, hole.y, 18, gradient, '#ede0a2', 3);
       star(hole.x, hole.y, 7, '#ecda90', t * .25);
       text(`+${500 * bonus.multiplier}`, hole.x, hole.y - 51, 15, '#b39153', 'bold');
@@ -79,7 +83,7 @@ export function createRenderer(canvas) {
     // The cup, live counter and visible inlet all share the physical coordinates.
     circle(storage.x, storage.y + 2, 22, '#827590');
     const cup = ctx.createRadialGradient(storage.x, storage.y, 0, storage.x, storage.y, 22);
-    cup.addColorStop(0, '#405c59'); cup.addColorStop(1, '#8eaaa1');
+    cup.addColorStop(0, paintColor('#405c59')); cup.addColorStop(1, paintColor('#8eaaa1'));
     circle(storage.x, storage.y, 21, cup, storage.glow ? '#f3cf7b' : '#eae0f3', 2);
     text(`${storage.stored.length}/20`, storage.x, storage.y + 3, 11, '#fff9e9', 'bold');
     text('蓄球罐', storage.x, storage.y - 49, 12, '#8b769f', 'bold');
@@ -97,7 +101,7 @@ export function createRenderer(canvas) {
       ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
       // The arrow follows the physical launch direction, including calm mode.
       ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(13, 0); ctx.moveTo(5, -7); ctx.lineTo(13, 0); ctx.lineTo(5, 7);
-      ctx.strokeStyle = '#fffaf0'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
+      ctx.strokeStyle = paintColor('#fffaf0', 'line'); ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
       if (glow && !state.calm) { ctx.globalAlpha = glow; text('› ›', 47 + (1 - glow) * 15, 0, 18, '#c69951', 'bold'); }
       ctx.restore();
       text('撞击换向', x, y + 54, 12, '#9e9375');
@@ -105,7 +109,7 @@ export function createRenderer(canvas) {
     for (const rail of game.rails) {
       if (rail.plugin.motion) {
         const motion = rail.plugin.motion;
-        ctx.save(); ctx.setLineDash([3, 6]); ctx.strokeStyle = '#c7b4a86b'; ctx.lineWidth = 2;
+        ctx.save(); ctx.setLineDash([3, 6]); ctx.strokeStyle = paintColor('#c7b4a86b', 'line'); ctx.lineWidth = 2;
         const dx = motion.axisX * motion.amplitude, dy = motion.axisY * motion.amplitude;
         ctx.beginPath(); ctx.moveTo(motion.x - dx, motion.y - dy); ctx.lineTo(motion.x + dx, motion.y + dy); ctx.stroke(); ctx.restore();
       }
@@ -135,14 +139,14 @@ export function createRenderer(canvas) {
     for (const bumper of game.bumpers) {
       const { x, y } = bumper.position, r = bumper.plugin.radius, glow = bumper.plugin.glow;
       circle(x, y + 7, r + 6, '#9b8b743b');
-      ctx.save(); if (glow) { ctx.shadowColor = '#f7c065'; ctx.shadowBlur = 30 * glow; }
+      ctx.save(); if (glow) { ctx.shadowColor = paintColor('#f7c065', 'glow'); ctx.shadowBlur = 30 * glow; }
       circle(x, y, r + 6 + glow * 4, glow > .2 ? '#ffd879' : theme.accent, '#fff9ec', 3);
       circle(x, y - 2, r - 3, theme.colors[bumper.plugin.index * 2], '#fffefa', 3);
       ctx.restore();
       text(theme.motifs[bumper.plugin.index], x, y - (bumper.plugin.index === 2 ? 10 : 3) + (state.calm ? 0 : Math.sin(t * 2 + bumper.id)), r * .85, '#6e7f60');
       for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; circle(x + Math.cos(a) * (r + 10), y + Math.sin(a) * (r + 10), 2.2, Math.sin(t * 3 + i) > 0 ? '#ecd5a4' : '#ffffff90'); }
       const index=bumper.plugin.index,goal=game.rewards.goals[index],count=game.rewards.hits[index]%goal;
-      ctx.beginPath();ctx.arc(x,y,r+14,-Math.PI/2,-Math.PI/2+Math.PI*2*(count/goal));ctx.strokeStyle='#c59450';ctx.lineWidth=3;ctx.stroke();
+      ctx.beginPath();ctx.arc(x,y,r+14,-Math.PI/2,-Math.PI/2+Math.PI*2*(count/goal));ctx.strokeStyle = paintColor('#c59450', 'line');ctx.lineWidth=3;ctx.stroke();
       // The center counter sits inside its drum, reserving the gap above the
       // swinging bar for the three reels even while the drum is enlarged.
       if (index === 2) {
@@ -178,7 +182,7 @@ export function createRenderer(canvas) {
     const springTop = 813 + compression, springBottom = 865;
     ctx.beginPath(); ctx.moveTo(713, springTop);
     for (let i = 0; i <= 12; i++) ctx.lineTo(713 + (i % 2 ? 11 : -11), springTop + (springBottom - springTop) * i / 12);
-    ctx.strokeStyle = '#8e9f7b'; ctx.lineWidth = 4; ctx.stroke();
+    ctx.strokeStyle = paintColor('#8e9f7b', 'line'); ctx.lineWidth = 4; ctx.stroke();
     box(695, springTop - 6, 36, 8, 4, '#71896a', '#ecf1d6');
     if (!game.balls.some(b => b.body.position.x > 683 && b.body.position.y > 730)) ball(TABLE.launchX, TABLE.launchY + compression, .88);
     text('PULL', 713, 850 + compression * .3, 9, '#65785c', 'bold');
@@ -188,15 +192,15 @@ export function createRenderer(canvas) {
       const remaining = Math.max(0, s.expiresAt - game.clock);
       ctx.save(); ctx.translate(s.x, s.y); ctx.scale(pulse, pulse);
       ctx.beginPath(); ctx.arc(0, 0, 16, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * remaining / (s.expiresAt - s.born));
-      ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.shadowColor = purple ? '#b98de7' : '#efc264'; ctx.shadowBlur = 12;
+      ctx.strokeStyle = paintColor(color, 'line'); ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.shadowColor = paintColor(purple ? '#b98de7' : '#efc264', 'glow'); ctx.shadowBlur = 12;
       ctx.beginPath();
       for (let i = 0; i < 10; i++) {
         const angle = -Math.PI / 2 + i * Math.PI / 5, radius = i % 2 ? 5 : 11;
         if (i) ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius); else ctx.moveTo(0, -radius);
       }
-      ctx.closePath(); ctx.fillStyle = purple ? '#b58ae0' : '#f5cd70'; ctx.fill(); ctx.shadowBlur = 0;
-      ctx.strokeStyle = purple ? '#f7eaff' : '#fff8dc'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.closePath(); ctx.fillStyle = paintColor(purple ? '#b58ae0' : '#f5cd70', 'glow'); ctx.fill(); ctx.shadowBlur = 0;
+      ctx.strokeStyle = paintColor(purple ? '#f7eaff' : '#fff8dc', 'line'); ctx.lineWidth = 1.5; ctx.stroke();
       text(`×${s.multiplier} · ${Math.ceil(remaining / 1000)}s`, 0, 29, 10, purple ? '#8b59b5' : '#b58b42', 'bold'); ctx.restore();
     }
     // Celebration scenery stays behind every live ball.
@@ -214,10 +218,10 @@ export function createRenderer(canvas) {
             const length = i <= Math.floor(burst.age / (1000 / 12)) ? 32 : 12;
             ctx.beginPath(); ctx.moveTo(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
             ctx.lineTo(x + Math.cos(angle) * (radius + length), y + Math.sin(angle) * (radius + length));
-            ctx.lineWidth = 3; ctx.strokeStyle = i % 2 ? '#c5a0da' : p.color; ctx.stroke();
+            ctx.lineWidth = 3; ctx.strokeStyle = paintColor(i % 2 ? '#c5a0da' : p.color, 'line'); ctx.stroke();
             star(x + Math.cos(angle) * (radius + length + 8), y + Math.sin(angle) * (radius + length + 8), 6, p.color, angle);
           }
-          ctx.lineWidth = 4; ctx.strokeStyle = '#e2ae48'; ctx.beginPath(); ctx.roundRect(39, 45, 617, 739, 25); ctx.stroke();
+          ctx.lineWidth = 4; ctx.strokeStyle = paintColor('#e2ae48', 'line'); ctx.beginPath(); ctx.roundRect(39, 45, 617, 739, 25); ctx.stroke();
           for (let i = 0; i < 14; i++) star(i % 2 ? 641 : 54, 90 + Math.floor(i / 2) * 105, 7 + Math.sin(burst.age / 180 + i) * 2, i % 3 ? p.color : '#c5a0da');
         }
         ctx.globalAlpha = Math.min(1, fade * 3);
@@ -226,10 +230,10 @@ export function createRenderer(canvas) {
       } else if (p.tier >= 3 && !calm) {
         const height = 65 + p.tier * 23;
         const gradient = ctx.createLinearGradient(0, burst.y - height, 0, burst.y);
-        gradient.addColorStop(0, 'transparent'); gradient.addColorStop(1, p.color);
+        gradient.addColorStop(0, paintColor('transparent')); gradient.addColorStop(1, paintColor(p.color));
         ctx.globalAlpha = fade * .2;
         ctx.beginPath(); ctx.moveTo(burst.x - 22, burst.y); ctx.lineTo(burst.x - 52, burst.y - height);
-        ctx.lineTo(burst.x + 52, burst.y - height); ctx.lineTo(burst.x + 22, burst.y); ctx.closePath(); ctx.fillStyle = gradient; ctx.fill();
+        ctx.lineTo(burst.x + 52, burst.y - height); ctx.lineTo(burst.x + 22, burst.y); ctx.closePath(); ctx.fillStyle = paintColor(gradient, 'object'); ctx.fill();
         ctx.globalAlpha = fade * .8;
         for (let i = 0; i < p.tier; i++) star(burst.x + (i - (p.tier - 1) / 2) * 24, burst.y - 48 - Math.sin(i + burst.age / 300) * 15, 5, p.color, burst.age / 800);
       }
@@ -240,13 +244,13 @@ export function createRenderer(canvas) {
       ctx.save(); ctx.globalAlpha = Math.max(0, p.life) * .85; ctx.translate(p.x, p.y); ctx.rotate(p.rotation);
       if (p.star || p.shape === 'star') star(0, 0, p.size * 1.6, p.color);
       else if (p.shape === 'bubble') circle(0, 0, p.size, null, p.color, 1.5);
-      else if (p.shape === 'petal') { ctx.beginPath(); ctx.ellipse(0, 0, p.size * 1.6, p.size * .7, 0, 0, Math.PI * 2); ctx.fillStyle = p.color; ctx.fill(); }
-      else { ctx.fillStyle = p.color; ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * (p.shape === 'ribbon' ? 2.6 : .65)); }
+      else if (p.shape === 'petal') { ctx.beginPath(); ctx.ellipse(0, 0, p.size * 1.6, p.size * .7, 0, 0, Math.PI * 2); ctx.fillStyle = paintColor(p.color, 'object'); ctx.fill(); }
+      else { ctx.fillStyle = paintColor(p.color, 'object'); ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * (p.shape === 'ribbon' ? 2.6 : .65)); }
       ctx.restore();
     }
     for (const p of fx.popups) {
-      ctx.save(); ctx.globalAlpha = Math.min(1, p.life * 2); ctx.font = `bold ${p.size ?? (p.big ? 26 : 23)}px "Trebuchet MS", sans-serif`; ctx.textAlign = 'center'; ctx.lineWidth = 6; ctx.strokeStyle = '#fffbee';
-      const x = Math.max(115, Math.min(550, p.x)); ctx.strokeText(p.text, x, p.y); ctx.fillStyle = p.color || (p.big ? '#b67a26' : '#b1667b'); ctx.fillText(p.text, x, p.y); ctx.restore();
+      ctx.save(); ctx.globalAlpha = Math.min(1, p.life * 2); ctx.font = `bold ${p.size ?? (p.big ? 26 : 23)}px "Trebuchet MS", sans-serif`; ctx.textAlign = 'center'; ctx.lineWidth = 6; ctx.strokeStyle = paintColor('#fffbee', 'line');
+      const x = Math.max(115, Math.min(550, p.x)); ctx.strokeText(p.text, x, p.y); ctx.fillStyle = paintColor(p.color || (p.big ? '#b67a26' : '#b1667b'), 'ink'); ctx.fillText(p.text, x, p.y); ctx.restore();
     }
     for (const b of game.balls) {
       if (!state.calm) b.trail.forEach((pos, i) => { ctx.save(); ctx.globalAlpha = i / b.trail.length * .5; circle(pos.x, pos.y, 3 + i / b.trail.length * 7, '#f7b863'); ctx.restore(); });

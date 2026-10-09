@@ -23,6 +23,8 @@ try {
   const executablePath = process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
   browser = await chromium.launch({ executablePath, headless: true, args: process.platform === 'linux' ? ['--no-sandbox'] : [] });
   const page = await browser.newPage();
+  const epoch = Date.UTC(2026,9,9,12);
+  await page.clock.setFixedTime(epoch);
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('requestfailed', req => errors.push(req.url()));
@@ -39,12 +41,19 @@ try {
   await page.locator('#settings-button').click();
   await page.locator('[data-slots="9"]').click();
   await page.locator('.theme-choice[data-theme="flower"]').click();
+  await page.locator('#time-flow').check();
+  await page.clock.setFixedTime(epoch + 330000);
+  await page.waitForFunction(() => document.querySelector('#time-phase').textContent === '夜间');
+  const night = await page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor.match(/\d+/g).slice(0,3).map(Number));
+  assert.ok(night[2] > night[0] && Math.max(...night) < 100, 'production CSS and canvas mode share the night palette');
   await page.locator('#done-settings').click();
   await page.reload();
   assert.equal(await page.locator('#settings .theme-choice[data-theme="flower"]').getAttribute('aria-pressed'), 'true');
   assert.equal(await page.locator('.theme-card, .theme-pill').count(), 0);
   assert.equal(await page.locator('[data-slots="9"]').getAttribute('aria-pressed'), 'true');
   assert.equal(await page.evaluate(() => typeof window.__ponpon), 'undefined');
+  assert.equal(await page.locator('#time-flow').isChecked(), true);
+  assert.equal(await page.locator('#time-phase').textContent(), '夜间', 'the production build restores the saved cycle phase');
   assert.deepEqual(errors, []);
   console.log('PASS: production assets load under /PACHINKO/, a ball scores, settings persist, and no browser errors occur.');
 } finally {
