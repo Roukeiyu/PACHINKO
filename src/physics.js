@@ -29,7 +29,7 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
   segment(744, 103, 744, 885, 22, walls);
   // Split the inner wall at the marked line. Ascending shots meet the vertical
   // door; returning balls meet the diagonal ramp and roll down-left into play.
-  segment(676, 164, 676, 529, 17, walls);
+  // Above the launch gate, the former flight lane is open to the playing field.
   segment(676, 625, 676, 882, 17, walls);
   const door = segment(676, 529, 676, 625, 17, gates, 'launch-door');
   door.collisionFilter = { category: FILTER.launchDoor, mask: FILTER.ascending, group: 0 };
@@ -38,11 +38,18 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
   segment(677, 882, 744, 882, 20, walls);
   segment(35, 760, 40, 795, 14, walls);
   segment(664, 760, 653, 795, 14, walls);
+  // Close the open left approach with a short inward-facing guard, leaving
+  // clearance around the triangle for its full-circle launches.
+  segment(28, 370, 87, 396, 13, walls);
 
   [[238, 226, 32], [450, 247, 32], [350, 367, 39]].forEach(([x, y, r], i) => {
     add(Bodies.circle(x, y, r, { isStatic: true, label: 'bumper', restitution: 1.05, friction: 0 }), bumpers, { index: i, radius: r, baseRadius: r, lastKick: -1000 });
   });
   [[156, 304, 228, 363], [536, 335, 601, 290], [125, 578, 217, 541], [496, 568, 581, 611]].forEach(args => segment(...args, 16, rails, 'rail', .93));
+  for (const [index, amplitude, period, direction] of [[0, 36, 4600, 1], [3, 34, 5200, -1]]) {
+    const rail = rails[index];
+    rail.plugin.motion = { x: rail.position.x, y: rail.position.y, amplitude, period, direction };
+  }
   [[254, 668], [442, 695]].forEach(([x, y]) => add(Bodies.polygon(x, y, 4, 23, { isStatic: true, label: 'diamond', restitution: .95, friction: 0, angle: Math.PI / 4 }), diamonds));
   const spinner = add(Bodies.rectangle(351, 540, 122, 13, { isStatic: true, label: 'spinner', chamfer: { radius: 6 }, restitution: .85, friction: .01 }), spinners);
   spinner.plugin.radius = 61;
@@ -50,9 +57,6 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
   // from nearby obstacles even when pointing left, allowing full-circle shots.
   const triangle = add(Bodies.fromVertices(99, 466, [[{ x: 34, y: 0 }, { x: -17, y: -23 }, { x: -17, y: 23 }]], { isStatic: true, label: 'deflector', restitution: .8, friction: 0 }), deflectors, { radius: 34, angle: -Math.PI / 3, hits: 0 });
   Body.setAngle(triangle, triangle.plugin.angle);
-  [[158, 162], [331, 161], [537, 164], [154, 239], [335, 273], [562, 235], [238, 426], [452, 423], [175, 463], [519, 469], [270, 495], [438, 497], [304, 612], [378, 631], [152, 687], [557, 701], [96, 741], [207, 756], [333, 743], [475, 759], [603, 746]].forEach(([x, y], i) => {
-    add(Bodies.circle(x, y, 7.5, { isStatic: true, label: 'pin', restitution: .85, friction: 0 }), pins, { index: i });
-  });
   // Recessed cups with narrow, inward-facing mouths. A jackpot is earned by
   // actually reaching the hole, never by an invisible random rejection.
   for (const hole of holes) {
@@ -65,6 +69,39 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
   // Cover the outer seam between the recessed cup and the side wall, so a
   // falling ball cannot wedge into the narrow space behind the cup.
   segment(665, 413, 615, 438, 13, walls);
+  // Best-candidate sampling spreads pins evenly without a visible grid. Keep
+  // clearance for a ball between pins and every obstacle's full motion range.
+  // A separate seeded stream makes layout stable during play and also works
+  // when callers supply a constant random function for reward tests.
+  let layoutSeed = (random() * 0xffffffff) >>> 0;
+  const layoutRandom = () => { layoutSeed = (Math.imul(layoutSeed, 1664525) + 1013904223) >>> 0; return layoutSeed / 2 ** 32; };
+  const clearance = 35;
+  const exclusionPolygons = [...walls, ...rails, ...diamonds].map(body => {
+    const amplitude = body.plugin.motion?.amplitude || 0;
+    return Matter.Vertices.hull(body.vertices.flatMap(v => [{ x: v.x - amplitude, y: v.y }, { x: v.x + amplitude, y: v.y }]));
+  });
+  const distanceToEdge = (p, a, b) => {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy)));
+    return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
+  };
+  const isOpen = p => !exclusionPolygons.some(vertices => Matter.Vertices.contains(vertices, p) || vertices.some((v, i) => distanceToEdge(p, v, vertices[(i + 1) % vertices.length]) < clearance))
+    && !bumpers.some(b => Math.hypot(p.x - b.position.x, p.y - b.position.y) < b.plugin.radius * (b.plugin.index === 2 ? 1.5 : 1) + clearance)
+    && Math.hypot(p.x - triangle.position.x, p.y - triangle.position.y) > 34 + clearance
+    && Math.hypot(p.x - spinner.position.x, p.y - spinner.position.y) > 68 + clearance
+    && !(p.x > 485 && Math.abs(p.y - holes[0].y) < 48)
+    && !holes.some(h => Math.hypot(p.x - h.x, p.y - h.y) < 40 + clearance);
+  for (let i = 0; i < 28; i++) {
+    let best = null, spacing = 58;
+    for (let attempt = 0; attempt < 500; attempt++) {
+      const p = { x: 77 + layoutRandom() * 541, y: 150 + layoutRandom() * 604 };
+      if (!isOpen(p)) continue;
+      const distance = pins.length ? Math.min(...pins.map(pin => Math.hypot(p.x - pin.position.x, p.y - pin.position.y))) : Infinity;
+      if (distance > spacing) { best = p; spacing = distance; }
+    }
+    if (!best) break;
+    add(Bodies.circle(best.x, best.y, 7.5, { isStatic: true, label: 'pin', restitution: .85, friction: 0 }), pins, { index: i });
+  }
   function clearBalls() { for (const ball of balls) Composite.remove(engine.world, ball.body); balls.length = 0; pendingShots.length = 0; rewards.burstUntil = 0; rewards.burstStep = -1; }
   function setSlots(count) {
     if (![5, 7, 9].includes(count)) throw new RangeError('Slots must be 5, 7, or 9');
@@ -178,6 +215,10 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
       if (!ball.boosting && (ball.entered || body.velocity.y > 0)) body.collisionFilter.category = FILTER.playing;
     }
     Body.setAngle(spinner, Math.sin(clock / 1350) * .85, true);
+    for (const rail of rails) {
+      const motion = rail.plugin.motion;
+      if (motion) Body.setPosition(rail, { x: motion.x + Math.sin(clock / motion.period * Math.PI * 2) * motion.amplitude * motion.direction, y: motion.y }, true);
+    }
     Engine.update(engine, dt);
     // Apply the active platform's kick after the solver so the contact response
     // cannot overwrite it. Place the ball just beyond the new tip to avoid
@@ -202,7 +243,7 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
       const ball = balls[i], { body } = ball, { x, y } = body.position;
       ball.trail.push({ x, y }); if (ball.trail.length > 18) ball.trail.shift();
       if (ball.boosting && y <= TABLE.boostEndY) { ball.boosting = false; ball.cutoffY = y; }
-      if (!ball.entered && x < 650 && (y < 175 || y > TABLE.boostEndY)) { ball.entered = true; body.collisionFilter.category = FILTER.playing; stats.entered++; }
+      if (!ball.entered && x < 650) { ball.entered = true; body.collisionFilter.category = FILTER.playing; stats.entered++; }
       if (body.speed > 32) Body.setVelocity(body, { x: body.velocity.x * 32 / body.speed, y: body.velocity.y * 32 / body.speed });
       const hole = ball.entered && holes.find(h => Math.hypot(x - h.x, y - h.y) < 18);
       if (hole) { hole.glow = 1; stats.jackpots++; stats.scored++; remove(ball, i); onScore({ kind: 'jackpot', points: 500, x: hole.x, y: hole.y, ballId: ball.id }); continue; }

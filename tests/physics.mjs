@@ -3,6 +3,51 @@ import Matter from 'matter-js';
 import { createTable, TABLE, STEP } from '../src/physics.js';
 
 function seeded(seed) { return () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 32; }; }
+// Random layouts remain well-spaced and leave room for both travelling rails.
+for (let seed = 0; seed < 16; seed++) {
+  const game = createTable({ random: seeded(seed) });
+  assert.equal(game.pins.length, 28);
+  const positions = game.pins.map(p => ({ ...p.position }));
+  for (let i = 0; i < positions.length; i++) for (let j = i + 1; j < positions.length; j++) {
+    assert.ok(Math.hypot(positions[i].x - positions[j].x, positions[i].y - positions[j].y) >= 58, 'pins leave a passage for balls');
+  }
+  for (let row = 0; row < 7; row++) assert.ok(positions.some(p => Math.floor((p.y - 150) / 87) === row), 'every horizontal band has pins');
+  const probes = positions.map(p => Matter.Bodies.circle(p.x, p.y, 29));
+  const extremes = [0, 3].map(() => ({ min: Infinity, max: -Infinity }));
+  for (let tick = 0; tick < 624; tick++) {
+    game.step();
+    for (const [i, index] of [0, 3].entries()) {
+      const rail = game.rails[index], m = rail.plugin.motion;
+      extremes[i].min = Math.min(extremes[i].min, rail.position.x);
+      extremes[i].max = Math.max(extremes[i].max, rail.position.x);
+      assert.equal(rail.position.y, m.y, 'ping-pong motion is horizontal');
+      assert.ok(Math.abs(rail.position.x - m.x) <= m.amplitude + 1e-6);
+      if (tick % 12 === 0) assert.ok(probes.every(p => !Matter.Collision.collides(p, rail)), 'a moving rail never pinches a ball against a pin');
+    }
+  }
+  assert.ok(extremes.every(e => e.max - e.min > 67), 'both rails reach both ends of their travel');
+  assert.deepEqual(game.pins.map(p => p.position), positions, 'pins remain still during play');
+}
+assert.notDeepEqual(createTable({ random: seeded(1) }).pins.map(p => p.position), createTable({ random: seeded(2) }).pins.map(p => p.position), 'new games have different layouts');
+console.log('PASS: 16 random layouts keep 28 spaced pins, cover every band, and clear both rails throughout their horizontal travel.');
+{
+  const game = createTable({ random: seeded(5) }), ball = game.launch();
+  ball.boosting = false;
+  Matter.Body.setPosition(ball.body, { x: 713, y: 350 });
+  Matter.Body.setVelocity(ball.body, { x: -8, y: 0 });
+  for (let i = 0; i < 15; i++) game.step();
+  assert.ok(ball.body.position.x < 660, 'upper flight area opens into the field');
+  assert.equal(game.stats.hits.wall, 0, 'there is no invisible former divider');
+}
+{
+  const game = createTable({ random: seeded(5) }), ball = game.launch();
+  ball.entered = true; ball.boosting = false;
+  Matter.Body.setPosition(ball.body, { x: 55, y: 335 });
+  Matter.Body.setVelocity(ball.body, { x: 0, y: 8 });
+  for (let i = 0; i < 30 && !game.stats.hits.wall; i++) game.step();
+  assert.ok(game.stats.hits.wall > 0 && ball.body.position.y < 400, 'left guard physically intercepts a descending ball');
+}
+console.log('PASS: left guard blocks descending balls and the removed upper divider allows cross-field travel.');
 const totals = { scored: 0, jackpots: 0, returns: 0, timeouts: 0 };
 for (const slots of [5, 7, 9]) {
   const outcomes = [], columns = new Set();

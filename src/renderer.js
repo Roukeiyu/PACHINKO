@@ -32,12 +32,11 @@ export function createRenderer(canvas) {
     if (!state.calm && fx.shake > 0) ctx.translate(Math.sin(t * 81) * fx.shake, Math.cos(t * 65) * fx.shake * .6);
     ctx.fillStyle = '#b8b08b1d';
     for (let x = 12; x < W; x += 24) for (let y = 12; y < H; y += 24) circle(x, y, .8, '#b8b08b26');
-    // Recessed playing surface and the separate right-hand shooter lane.
+    // The upper right is open play space; only the lower shooter is recessed.
     box(38, 43, 620, 741, 30, '#ffffff29', '#c3c4a93b');
-    box(689, 128, 47, 739, 21, '#d9e6d299');
-    ctx.save(); ctx.strokeStyle = '#afc09a75'; ctx.lineWidth = 2; ctx.setLineDash([3, 10]); ctx.beginPath(); ctx.moveTo(713, 750); ctx.lineTo(713, 154); ctx.stroke(); ctx.restore();
-    for (let i = 0; i < 3; i++) { const y = 639 + i * 75 - (t * 45 % 75); ctx.beginPath(); ctx.moveTo(704, y + 8); ctx.lineTo(713, y); ctx.lineTo(722, y + 8); ctx.strokeStyle = '#86a869a0'; ctx.lineWidth = 3; ctx.stroke(); }
-    ctx.save();ctx.translate(713, 335);ctx.rotate(-Math.PI/2);text('惯 性 飞 行', 0, 0, 12, '#a1ae8f');ctx.restore();
+    box(689, TABLE.boostEndY, 47, 867 - TABLE.boostEndY, 21, '#d9e6d299');
+    ctx.save(); ctx.strokeStyle = '#afc09a75'; ctx.lineWidth = 2; ctx.setLineDash([3, 10]); ctx.beginPath(); ctx.moveTo(713, 750); ctx.lineTo(713, 590); ctx.stroke(); ctx.restore();
+    for (let i = 0; i < 3; i++) { const y = 650 + i * 60 - (t * 45 % 60); ctx.beginPath(); ctx.moveTo(704, y + 8); ctx.lineTo(713, y); ctx.lineTo(722, y + 8); ctx.strokeStyle = '#86a869a0'; ctx.lineWidth = 3; ctx.stroke(); }
     text('P O N  P O N', 351, 78, 24, '#69815d', 'bold');
     text('LITTLE PINBALL CLUB', 351, 108, 11, '#9ca184');
     text('↖', 651, 103, 27, '#a0b28d');
@@ -85,6 +84,11 @@ export function createRenderer(canvas) {
       text('撞击换向', x, y + 54, 12, '#9e9375');
     }
     for (const rail of game.rails) {
+      if (rail.plugin.motion) {
+        const motion = rail.plugin.motion;
+        ctx.save(); ctx.setLineDash([3, 6]); ctx.strokeStyle = '#c7b4a86b'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(motion.x - motion.amplitude, motion.y); ctx.lineTo(motion.x + motion.amplitude, motion.y); ctx.stroke(); ctx.restore();
+      }
       bodyShape(rail, rail.plugin.glow > .3 ? '#ffdea2' : theme.accent, '#fff5df');
       ctx.save(); ctx.translate(rail.position.x, rail.position.y); ctx.rotate(rail.angle); text('›  ›  ›', 0, -1, 13, '#fff8ec', 'bold'); ctx.restore();
     }

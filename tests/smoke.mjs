@@ -11,7 +11,7 @@ page.on('pageerror', error => errors.push(error.message));
 await mkdir('test-results', { recursive: true });
 try {
   await page.goto(process.env.TEST_URL || 'http://127.0.0.1:5173');
-  await page.waitForFunction(() => window.__ponpon?.pins === 21);
+  await page.waitForFunction(() => window.__ponpon?.pins === 28);
   await page.screenshot({ path: 'test-results/desktop.png', fullPage: true });
   await page.locator('#launch').click();
   await page.waitForFunction(() => window.__ponpon.positions.some(p => p.x > 680 && p.y < 650));
