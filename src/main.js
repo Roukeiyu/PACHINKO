@@ -23,7 +23,7 @@ const state = {
   theme: themes[saved.theme] ? saved.theme : 'animal', slots: [5,7,9].includes(saved.slots) ? saved.slots : 7,
   sound: saved.sound !== false, volume: Number.isFinite(saved.volume) ? Math.max(0,Math.min(1,saved.volume)) : .55,
   calm: saved.calm ?? matchMedia('(prefers-reduced-motion: reduce)').matches,
-  score: 0, balls: 0, best: Number.isFinite(saved.best) ? Math.max(0,saved.best) : 0, power: 65, auto: false, charging: false, charge: .65,
+  score: 0, balls: 0, best: Number.isFinite(saved.best) ? Math.max(0,saved.best) : 0, power: 65, auto: false, charging: false, charge: 0,
 };
 const persist = () => { try { localStorage.setItem('ponpon-settings', JSON.stringify({theme:state.theme,slots:state.slots,sound:state.sound,volume:state.volume,calm:state.calm,best:state.best})); } catch {} };
 const mascot = `<svg class="mascot" viewBox="0 0 130 135" fill="none" aria-hidden="true"><ellipse cx="46" cy="32" rx="14" ry="30" transform="rotate(-14 46 32)" fill="#fffaf0" stroke="#d9cdbb" stroke-width="2"/><ellipse cx="84" cy="32" rx="14" ry="30" transform="rotate(14 84 32)" fill="#fffaf0" stroke="#d9cdbb" stroke-width="2"/><ellipse cx="45" cy="29" rx="6" ry="18" transform="rotate(-14 45 29)" fill="#efc4cb"/><ellipse cx="85" cy="29" rx="6" ry="18" transform="rotate(14 85 29)" fill="#efc4cb"/><path d="M19 83C19 53 39 43 65 43S111 53 111 83C111 111 92 127 65 127S19 111 19 83Z" fill="#fffaf0" stroke="#d9cdbb" stroke-width="2"/><ellipse cx="37" cy="91" rx="10" ry="6" fill="#f0bdc6"/><ellipse cx="93" cy="91" rx="10" ry="6" fill="#f0bdc6"/><ellipse cx="48" cy="80" rx="3" ry="4" fill="#435444"/><ellipse cx="82" cy="80" rx="3" ry="4" fill="#435444"/><path d="m62 90 3 3 3-3m-3 3v4m-6-1q3 5 6 1 3 4 6-1" stroke="#705d50" stroke-width="2" stroke-linecap="round"/><path d="M102 110c-9-6-24 3-23 11 13 3 21-1 23-11Z" fill="#a6b88b"/><path d="M79 121c-1-17-9-22-14-19-4 12 5 19 14 19Z" fill="#bfcd9d"/></svg>`;
@@ -114,7 +114,7 @@ function award(result) {
   if (fx.particles.length > 300) fx.particles.splice(0, fx.particles.length - 300);
   sound(jackpot ? 'jackpot' : 'score', result.multiplier || 10);
 }
-function launch(power = state.auto ? state.power / 100 : .65) {
+function launch(power = state.auto ? state.power / 100 : 0) {
   if ($('#settings').open || document.hidden) return;
   unlockAudio();
   const now = performance.now(); if (now - lastDrop < 250) return;
@@ -128,13 +128,14 @@ function setAuto(enabled) {
 }
 function beginCharge(source) {
   if (state.charging || $('#settings').open) return false;
-  unlockAudio(); setAuto(false); state.charging = true; chargeSource = source; chargeStart = performance.now(); state.charge = .65;
+  unlockAudio(); setAuto(false); state.charging = true; chargeSource = source; chargeStart = performance.now(); state.charge = 0;
+  $('#launch').style.setProperty('--charge', '0%'); $('#launch-label').textContent = '蓄力 0% · 松开发射';
   $('#launch').classList.add('charging'); return true;
 }
 function endCharge(fire = true) {
   if (!state.charging) return;
-  const power = Math.min(1, .65 + (performance.now() - chargeStart) / 1500);
-  state.charging = false; chargeSource = null; $('#launch').classList.remove('charging');
+  const power = Math.max(0, Math.min(1, (performance.now() - chargeStart) / 1500));
+  state.charging = false; state.charge = 0; chargeSource = null; $('#launch').classList.remove('charging');
   $('#launch').style.setProperty('--charge', '0%'); $('#launch-label').textContent = '按住蓄力 · 松开发射'; $('#power-value').textContent = `${state.power}%`;
   if (fire) launch(power);
 }
@@ -180,7 +181,7 @@ function tick(now) {
     }
     $('#reward-timer').textContent = game.rewards.enlargedUntil > game.clock ? `放大中 ${(Math.max(0, game.rewards.enlargedUntil - game.clock) / 1000).toFixed(1)}s` : '持续 5 秒';
     if (state.charging) {
-      state.charge = Math.min(1, .65 + (now - chargeStart) / 1500);
+      state.charge = Math.max(0, Math.min(1, (now - chargeStart) / 1500));
       const percent = Math.round(state.charge * 100);
       $('#launch').style.setProperty('--charge', `${percent}%`); $('#launch-label').textContent = `蓄力 ${percent}% · 松开发射`; $('#shot-state').textContent = percent === 100 ? '✦ 蓄力已满，松手！' : '弹簧蓄力中…';
     } else if (now - lastDrop > 1700) $('#shot-state').textContent = game.balls.length ? `${game.balls.length} 颗小快乐在冒险` : '右下角 · 弹珠就位';
