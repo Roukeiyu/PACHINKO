@@ -87,7 +87,9 @@ for (const slots of [5, 7, 9]) for (const seedOffset of [0, 100, 200]) {
     const ball = game.launch(.65 + (shot % 15) * .025);
     assert.ok(ball); assert.ok(ball.body.position.x > 680 && ball.body.position.y > 760, 'must spawn in lower right shooter lane');
     assert.ok(ball.body.velocity.y < -20, 'charged shots receive an initial upward spring impulse');
-    for (let step = 0; step < 5500 && game.balls.length; step++) {
+    // Milestones emit new reward balls after launch; allow their own 45-second
+    // lifetime too, while keeping the timeout-count and containment checks below.
+    for (let step = 0; step < Math.ceil(90000 / STEP) && game.balls.length; step++) {
       game.step();
       for (const b of game.balls) if (b.body.position.x < 30 || b.body.position.x > 734 || b.body.position.y < 36) escaped++;
     }

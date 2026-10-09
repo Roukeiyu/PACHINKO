@@ -92,7 +92,7 @@ let frame = 0, last = 0, accumulator = 0, lastDrop = -1000, lastAuto = 0;
 let chargeStart = 0, chargeSource = null;
 
 function surprise(event) {
-  const names = { clock: '✦ 百次碰撞！十二时钟爆发', random: '✧ 左鼓满 10 次，送一颗弹珠', enlarge: '✿ 右鼓满 10 次，中央放大 5 秒', redirect: '↙ 回流出口，再冒险一次' };
+  const names = { clock: '✦ 50 次碰撞！十二时钟爆发', random: '✧ 左鼓满 10 次，送一颗弹珠', enlarge: '✿ 右鼓满 10 次，中央放大 5 秒', redirect: '↙ 回流出口，再冒险一次' };
   if (names[event.kind]) toast(names[event.kind]);
   fx.ripples.push({ x: event.x, y: event.y, life: 1, big: event.kind === 'clock' || event.kind === 'enlarge', color: event.kind === 'redirect' ? '#92b68d' : event.multiplier === 5 ? '#b58ae0' : '#e6b44f' });
   if (event.kind === 'clock') {

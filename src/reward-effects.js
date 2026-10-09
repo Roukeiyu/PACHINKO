@@ -5,7 +5,7 @@ const profiles = {
   5: { tier: 3, name: '星光喷泉', color: '#a58ad5', shape: 'star', count: 18, waves: 2, radius: 90, duration: 1350, speed: 6, notes: [587, 740, 880, 1175, 1480] },
   10: { tier: 4, name: '金色礼花', color: '#dab05b', shape: 'ribbon', count: 20, waves: 3, radius: 125, duration: 1850, speed: 8, notes: [587, 740, 880, 1175, 1480, 1760, 2349] },
   jackpot: { tier: 5, name: '秘密宝藏', color: '#d4a44c', shape: 'star', count: 20, waves: 4, radius: 150, duration: 2200, speed: 8.5, notes: [587, 740, 880, 1175, 1480, 1760, 2349, 2960] },
-  clock: { tier: 6, name: '百次碰撞 · 十二时钟盛典', color: '#e2ae48', shape: 'star', count: 28, waves: 5, radius: 270, duration: 3000, speed: 10, notes: [294, 440, 587, 740, 880, 1175, 1480, 1760, 2349, 2960, 3520, 4699] },
+  clock: { tier: 6, name: '50 次碰撞 · 十二时钟盛典', color: '#e2ae48', shape: 'star', count: 28, waves: 5, radius: 270, duration: 3000, speed: 10, notes: [294, 440, 587, 740, 880, 1175, 1480, 1760, 2349, 2960, 3520, 4699] },
 };
 for (const p of Object.values(profiles)) { Object.freeze(p.notes); Object.freeze(p); }
 export function rewardProfile(result) {

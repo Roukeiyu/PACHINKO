@@ -180,7 +180,7 @@ export function createRenderer(canvas) {
         }
         ctx.globalAlpha = Math.min(1, fade * 3);
         box(178, 119, 344, 48, 20, '#fff5dcf0', '#d9b667');
-        text('✦ 百次碰撞 · 十二时钟盛典 ✦', 350, 144, 19, '#a27830', 'bold');
+        text('✦ 50 次碰撞 · 十二时钟盛典 ✦', 350, 144, 19, '#a27830', 'bold');
       } else if (p.tier >= 3 && !calm) {
         const height = 65 + p.tier * 23;
         const gradient = ctx.createLinearGradient(0, burst.y - height, 0, burst.y);
