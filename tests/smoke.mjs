@@ -11,21 +11,25 @@ page.on('pageerror', error => errors.push(error.message));
 await mkdir('test-results', { recursive: true });
 try {
   await page.goto(process.env.TEST_URL || 'http://127.0.0.1:5173');
-  await page.waitForFunction(() => window.__ponpon?.pins === 95);
+  await page.waitForFunction(() => window.__ponpon?.pins === 21);
   await page.screenshot({ path: 'test-results/desktop.png', fullPage: true });
   await page.locator('#launch').click();
-  await page.waitForFunction(() => window.__ponpon.positions.some(p => p.y > 170));
+  await page.waitForFunction(() => window.__ponpon.positions.some(p => p.x > 680 && p.y < 650));
+  await page.waitForFunction(() => window.__ponpon.stats.entered > 0);
   assert.equal(await page.locator('#ball-count').textContent(), '1');
   assert.equal(await page.evaluate(() => window.__ponpon.audioState), 'running');
-  await page.waitForFunction(() => window.__ponpon.score > 0 && window.__ponpon.activeBalls === 0, null, { timeout: 30000 });
-  console.log('PASS: real ball travels through pins, lands and awards points; audio is unlocked.');
+  await page.locator('#auto').click();
+  await page.waitForFunction(() => window.__ponpon.score > 0, null, { timeout: 30000 });
+  await page.locator('#auto').click();
+  console.log('PASS: ball launches from lower right, exits the lane, lands and awards points; audio is unlocked.');
   for (const slots of [5, 9, 7]) {
     await page.locator('#settings-button').click();
     await page.locator(`[data-slots="${slots}"]`).click();
     await page.locator('#done-settings').click();
     const before = await page.evaluate(() => window.__ponpon.score);
-    await page.locator('#launch').click();
-    await page.waitForFunction(previous => window.__ponpon.score > previous && window.__ponpon.activeBalls === 0, before, { timeout: 30000 });
+    await page.locator('#auto').click();
+    await page.waitForFunction(previous => window.__ponpon.score > previous, before, { timeout: 30000 });
+    await page.locator('#auto').click();
     assert.equal(await page.evaluate(() => window.__ponpon.slots), slots);
     console.log(`PASS: ${slots} slots receive a physical ball and score.`);
   }
@@ -59,11 +63,13 @@ try {
   assert.equal(await page.locator('#ball-count').textContent(), beforeModal);
   await page.keyboard.press('Escape');
   console.log('PASS: settings and best score persist; dialog prevents keyboard launching.');
+  await page.locator('body').click({position:{x:1,y:1}});
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: 'test-results/mobile.png', fullPage: true });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
-  await page.locator('#launch').click();
+  await page.locator('#auto').click();
   await page.waitForFunction(() => window.__ponpon.score > 0, null, { timeout: 30000 });
+  await page.locator('#auto').click();
   console.log('PASS: mobile layout has no horizontal overflow and gameplay works.');
   assert.deepEqual(errors, []);
   console.log('PASS: no browser runtime errors.');

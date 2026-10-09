@@ -25,6 +25,8 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
+      - name: Check pinball physics
+        run: npm run test:physics
       - name: Build the game
         run: npm run build
       - name: Upload website

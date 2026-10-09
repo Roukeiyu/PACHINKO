@@ -11,3 +11,34 @@ dialog{border:1px solid #dedfce;border-radius:24px;padding:0;width:min(460px,cal
 .theme-emoji{font-size:82px;text-align:center;line-height:1.2}.settings-button svg{flex-shrink:0}
 @media(max-width:740px){.theme-emoji{font-size:56px}.theme-card{grid-row:1}.settings-button span{display:none}.settings-button{gap:0}.theme-description{line-height:1.6;min-height:28px}.mascot-spark.one{left:6px;top:16px}.mascot-spark.two{right:10px;bottom:12px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+
+/* Pinball table: a dedicated shooter lane and a thumb-friendly control deck. */
+.shell{max-width:1120px;padding:0 28px;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+header{height:76px}.intro{padding:20px 0}.intro h1{font-size:27px;margin:6px 0}.intro-sticker{padding:12px 23px}
+.game-layout{grid-template-columns:minmax(0,clamp(360px,calc(84svh - 340px),620px)) 260px;justify-content:center;gap:22px}
+.machine{padding:12px;border-radius:23px}.machine-top{font-size:8px;padding:2px 5px 9px;letter-spacing:1.4px}
+.board-wrap{touch-action:pan-y}.board-wrap canvas{aspect-ratio:760/900;height:auto}
+.mobile-hud{display:flex;align-items:center;justify-content:space-between;gap:9px;font-size:10px;padding:0 4px 11px;color:#6f8061}
+.mobile-hud strong{font-size:19px;font-variant-numeric:tabular-nums;color:#34543d;margin-left:5px}.bonus-label{color:#a17d3d;font-size:9px}.bonus-label b{font-size:12px}
+#shot-state{font-size:9px;letter-spacing:.3px}.plunger-hit{position:absolute;right:.6%;bottom:1.5%;width:11%;min-width:44px;height:20%;border:0;background:transparent;border-radius:12px;touch-action:none;-webkit-touch-callout:none;user-select:none}.plunger-hit:focus-visible{outline-offset:-4px}
+.launch-control{padding:9px 2px 0}.power-row{display:flex;align-items:center;gap:12px;font-size:10px;color:#6d7a60;margin-bottom:5px}
+.power-row input{flex:1;min-width:0;accent-color:#809669;height:26px;cursor:pointer;touch-action:pan-y}.power-row output{min-width:32px;font-variant-numeric:tabular-nums;text-align:right}
+.launch-button{--charge:0%;position:relative;overflow:hidden;background:linear-gradient(90deg,#688654 var(--charge),#385442 var(--charge));padding:13px 9px;letter-spacing:.5px;font-size:13px;gap:8px;min-height:48px;user-select:none;touch-action:none;-webkit-touch-callout:none}
+.launch-button:hover{background:linear-gradient(90deg,#688654 var(--charge),#385442 var(--charge))}.launch-button.charging{box-shadow:0 3px 0 #314b24,0 0 0 3px #adc98a70}.launch-button kbd{font-size:8px}
+.auto-button{padding:0 12px;min-width:88px;min-height:48px;touch-action:manipulation}.machine-foot{font-size:9px;letter-spacing:.2px;margin:11px 0 1px}
+.card{padding:18px}.sidebar{gap:14px}.score-value{font-size:45px;margin:10px 0 4px}.theme-preview{height:105px}.theme-card .mascot{width:91px}.theme-emoji{font-size:68px}.how-card li{font-size:10px}.how-card ol{gap:11px;margin-top:14px}.theme-pill{min-height:36px;padding:7px 12px}.theme-description{line-height:1.6}.bottom-info{margin:20px 0 15px}.footer{padding:15px 0}
+.compact-tools{display:none}dialog{max-height:calc(100dvh - 28px);overflow:auto;overscroll-behavior:contain}.icon-button,.settings-button,.theme-pill,.choice,.done-button{touch-action:manipulation}.setting-row input[type=range]{min-height:36px}.calm .score-bump{animation:none}
+@media(max-width:740px){
+  .shell{padding:0 10px;padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env(safe-area-inset-right));padding-bottom:env(safe-area-inset-bottom,0px)}
+  header{height:61px}.brand{gap:9px}.brand-mark{width:34px;height:34px;border-radius:11px}.brand-mark svg{width:27px;height:27px}.brand-name{font-size:20px}.brand-caption{font-size:7px;letter-spacing:2px}.icon-button,.settings-button{width:44px;height:44px}.header-actions{gap:5px}
+  .intro{padding:12px 3px 13px}.intro h1{font-size:23px;margin:0 0 5px}.intro p{font-size:10px;letter-spacing:.5px}.eyebrow,.intro-sticker{display:none}
+  .game-layout{grid-template-columns:minmax(0,1fr);gap:18px}.machine{padding:9px;border-radius:19px}.machine-top{display:none}.mobile-hud{padding:0 3px 8px}.mobile-hud strong{font-size:19px}.bonus-label{font-size:8px}#shot-state{font-size:8px}
+  .board-wrap{max-width:min(100%,calc(84.44svh - 248px));margin:0 auto;border-radius:13px}.launch-control{padding:6px 2px 0}.power-row{font-size:10px;margin-bottom:4px;gap:12px}.power-row input{height:27px}
+  .launch-button{min-height:48px;font-size:12px;padding:12px 6px;gap:6px}.launch-row{gap:8px}.auto-button{font-size:10px;min-width:91px;justify-content:center;padding:0 10px}.machine-foot{font-size:8px;margin:10px 0 0}.launch-button kbd{display:none}
+  .sidebar{grid-template-columns:1fr;gap:10px}.score-card{display:none}.theme-card{grid-column:auto;grid-row:auto;display:grid;grid-template-columns:auto 1fr;column-gap:12px;align-items:center;padding:12px 14px}.theme-card .card-label{grid-column:1/-1;font-size:10px}.theme-preview{grid-row:2/5;grid-column:1;height:90px;width:78px;margin:0}.theme-card .mascot{width:62px}.theme-emoji{font-size:50px}.theme-name{text-align:left;font-size:12px;margin:8px 0 3px}.theme-description{text-align:left;font-size:9px;min-height:0}.theme-pills{justify-content:flex-start;margin-top:7px;gap:7px}.theme-pill{min-height:40px;min-width:49px;font-size:10px}.mascot-spark.one{left:-2px;top:5px}.mascot-spark.two{right:1px;bottom:3px}
+  .bottom-info{font-size:8px;margin:14px 0 12px;letter-spacing:0;gap:8px}.footer{font-size:7px;letter-spacing:.5px;gap:15px;padding:12px 0}.toast{max-width:calc(100vw - 24px);width:max-content;text-align:center;font-size:11px;bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+  .dialog-inner{padding:21px}.dialog-head h2{font-size:19px}.dialog-sub{margin-bottom:18px}.choices{margin-bottom:19px}.setting-row{margin-bottom:17px}.choice{min-height:46px}.setting-row input[type=checkbox]{width:24px;height:24px}
+}
+@media(max-height:500px) and (orientation:landscape){
+  .shell{max-width:850px}.intro,header,.sidebar,.bottom-info,.footer{display:none}.game-layout{display:block;margin:8px auto;max-width:calc(84svh + 175px)}.machine{display:grid;grid-template-columns:minmax(0,1fr) 205px;gap:8px;padding:8px}.mobile-hud{grid-column:1/-1;padding-bottom:2px}.machine-top{display:none}.board-wrap{grid-column:1;max-width:calc(84svh - 56px);width:100%}.launch-control{grid-column:2;grid-row:2;align-self:center}.launch-row{flex-direction:column;gap:12px}.power-row{flex-wrap:wrap}.power-row input{order:3;flex-basis:100%}.power-row output{margin-left:auto}.machine-foot{line-height:1.8}.auto-button{justify-content:center}.compact-tools{display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px}.compact-tools button{min-height:44px;min-width:44px}.compact-tools .settings-button{font-size:11px;width:auto;gap:7px}.compact-tools .settings-button span{display:inline}
+}

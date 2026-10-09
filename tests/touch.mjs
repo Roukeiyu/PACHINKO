@@ -1,0 +1,70 @@
+import { chromium } from 'playwright';
+import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
+
+const executablePath = process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
+const browser = await chromium.launch({ executablePath, args: process.platform === 'linux' ? ['--no-sandbox'] : [] });
+const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+const errors = []; page.on('pageerror', e => errors.push(e.message));
+await mkdir('test-results', { recursive: true });
+try {
+  await page.goto(process.env.TEST_URL || 'http://127.0.0.1:5173');
+  const session = await page.context().newCDPSession(page);
+  const count = () => page.locator('#ball-count').textContent().then(Number);
+  async function touchStart(selector) {
+    const r = await page.locator(selector).boundingBox();
+    await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: r.x + r.width / 2, y: r.y + r.height / 2 }] });
+  }
+  await touchStart('#launch');
+  await page.waitForTimeout(600);
+  assert.equal(await count(), 0, 'holding must not fire prematurely');
+  assert.ok(await page.evaluate(() => window.__ponpon.charging && window.__ponpon.charge > .95));
+  await page.screenshot({ path: 'test-results/mobile-charging.png', fullPage: true });
+  await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await page.waitForTimeout(400);
+  assert.equal(await count(), 1, 'touch release must fire exactly once, not again on synthesized click');
+  await page.waitForFunction(() => window.__ponpon.stats.entered === 1);
+  console.log('PASS: mobile hold charges without firing; release launches once through the physical lane.');
+
+  await touchStart('#plunger'); await page.waitForTimeout(200);
+  await session.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] });
+  assert.equal(await page.evaluate(() => window.__ponpon.charging), false);
+  assert.equal(await count(), 1, 'an interrupted gesture must cancel, not launch');
+  await page.locator('#plunger').tap(); await page.waitForTimeout(400);
+  assert.equal(await count(), 2, 'the right-hand spring is a working touch target');
+  await page.waitForTimeout(600);
+  await page.locator('#launch').focus();
+  await page.keyboard.down('Space'); await page.waitForTimeout(400);
+  assert.equal(await count(), 2);
+  await page.keyboard.up('Space'); await page.waitForTimeout(400);
+  assert.equal(await count(), 3, 'keyboard release fires exactly once even when launch button has focus');
+  console.log('PASS: canceled gestures, right-hand spring tapping and keyboard charge/release.');
+
+  await page.locator('#settings-button').tap();
+  const before = await page.evaluate(() => window.__ponpon.positions);
+  await page.waitForTimeout(400);
+  assert.deepEqual(await page.evaluate(() => window.__ponpon.positions), before, 'settings must pause physical motion');
+  await page.locator('[data-slots="9"]').tap(); await page.locator('.theme-choice[data-theme="dessert"]').tap();
+  await page.screenshot({ path: 'test-results/mobile-settings.png', fullPage: true });
+  await page.locator('#done-settings').tap();
+  assert.equal(await page.evaluate(() => window.__ponpon.slots), 9);
+  assert.equal(await page.evaluate(() => window.__ponpon.theme), 'dessert');
+  for (const [width, height] of [[320,568], [390,844], [430,932], [844,390]]) {
+    await page.setViewportSize({ width, height }); await page.evaluate(() => scrollTo(0, 0));
+    await page.waitForTimeout(100);
+    const layout = await page.evaluate(() => { const r = document.querySelector('#launch').getBoundingClientRect(); const c = document.querySelector('canvas').getBoundingClientRect(); return { overflow: document.documentElement.scrollWidth > innerWidth, launchBottom: r.bottom, launchHeight: r.height, viewport: innerHeight, ratio: c.width / c.height }; });
+    assert.equal(layout.overflow, false, `${width}×${height}: no horizontal overflow`);
+    assert.ok(layout.launchBottom <= layout.viewport + 1, `${width}×${height}: launch control must be visible without scrolling (${JSON.stringify(layout)})`);
+    assert.ok(layout.launchHeight >= 44, 'touch targets at least 44px high');
+    assert.ok(Math.abs(layout.ratio - 760 / 900) < .002, 'orientation changes preserve physics aspect ratio');
+    await page.screenshot({ path: `test-results/h5-${width}x${height}.png`, fullPage: true });
+  }
+  await page.locator('#compact-settings').tap();
+  assert.equal(await page.locator('#settings').evaluate(el => el.open), true, 'settings remain available in landscape');
+  await page.locator('#close-settings').tap();
+  await page.locator('#compact-sound').tap();
+  assert.equal(await page.locator('#compact-sound').getAttribute('aria-label'), '开启音效');
+  assert.deepEqual(errors, []);
+  console.log('PASS: settings pause; H5 portrait at 320/390/430px and landscape retain visible controls, aspect ratio and no overflow.');
+} finally { await browser.close(); }
