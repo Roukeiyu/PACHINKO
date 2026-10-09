@@ -73,4 +73,4 @@ header{height:76px}.intro{padding:20px 0}.intro h1{font-size:27px;margin:6px 0}.
 
 .time-flow button{transition:transform .18s,box-shadow .18s}.time-cycle-info progress{appearance:none;border:0;border-radius:4px;overflow:hidden;background:var(--flow-object-cbd8bc,#cbd8bc)}.time-cycle-info progress::-webkit-progress-bar{background:var(--flow-object-cbd8bc,#cbd8bc)}.time-cycle-info progress::-webkit-progress-value{background:var(--accent)}.time-cycle-info progress::-moz-progress-bar{background:var(--accent)}
 
-.camera-setting small{display:block;margin:5px 0;font-size:10px;line-height:1.6;color:var(--flow-ink-8e9681,#8e9681)}.camera-setting output{font-variant-numeric:tabular-nums;font-size:11px}.camera-setting input{min-width:100px}.board-wrap canvas{cursor:grab}.board-wrap canvas:active{cursor:grabbing}
+.mode-setting small{display:block;margin:5px 0;font-size:10px;line-height:1.6;color:var(--flow-ink-8e9681,#8e9681)}.board-wrap canvas{cursor:default}

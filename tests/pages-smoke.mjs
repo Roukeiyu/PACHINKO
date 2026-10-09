@@ -30,6 +30,9 @@ try {
   page.on('requestfailed', req => errors.push(req.url()));
   page.on('response', res => { if (res.status() >= 400) errors.push(`${res.status()} ${res.url()}`); });
   await page.goto(`http://127.0.0.1:${server.address().port}${prefix}`);
+  assert.equal(await page.locator('#board').getAttribute('data-renderer'), '2d');
+  assert.equal(await page.locator('#three-d').isChecked(), false);
+  assert.equal(await page.locator('#camera-angle').count(), 0);
   async function toggleAuto() {
     await page.locator('#settings-button').click();
     await page.locator('#auto').click();
@@ -41,6 +44,8 @@ try {
   await page.locator('#settings-button').click();
   await page.locator('[data-slots="9"]').click();
   await page.locator('.theme-choice[data-theme="flower"]').click();
+  await page.locator('#three-d').check();
+  assert.equal(await page.locator('#board').getAttribute('data-renderer'), 'webgl');
   await page.locator('#time-flow').check();
   await page.clock.setFixedTime(epoch + 330000);
   await page.waitForFunction(() => document.querySelector('#time-phase').textContent === '夜间');
@@ -54,8 +59,14 @@ try {
   assert.equal(await page.evaluate(() => typeof window.__ponpon), 'undefined');
   assert.equal(await page.locator('#time-flow').isChecked(), true);
   assert.equal(await page.locator('#time-phase').textContent(), '夜间', 'the production build restores the saved cycle phase');
+  assert.equal(await page.locator('#three-d').isChecked(), true);
+  assert.equal(await page.locator('#board').getAttribute('data-renderer'), 'webgl');
+  await page.locator('#settings-button').click(); await page.locator('#three-d').uncheck();
+  await page.reload();
+  assert.equal(await page.locator('#board').getAttribute('data-renderer'), '2d');
+  assert.equal(await page.locator('#three-d').isChecked(), false);
   assert.deepEqual(errors, []);
-  console.log('PASS: production assets load under /PACHINKO/, a ball scores, settings persist, and no browser errors occur.');
+  console.log('PASS: production assets load under /PACHINKO/, a ball scores, 2D/3D switching and preferences persist, and no browser errors occur.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

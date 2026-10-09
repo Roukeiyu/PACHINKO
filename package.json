@@ -15,7 +15,7 @@
     "test:slots": "node tests/slot-machine.mjs && node tests/slot-machine-browser.mjs",
     "test:time-flow": "node tests/time-flow.mjs && node tests/time-flow-browser.mjs",
     "test:charge": "node tests/charge.mjs && node tests/charge-browser.mjs",
-    "test:3d": "node tests/3d-browser.mjs",
+    "test:3d": "node tests/scene-motion.mjs && node tests/3d-browser.mjs",
     "test:rewards": "node tests/reward-effects.mjs && node tests/reward-browser.mjs"
   },
   "dependencies": {

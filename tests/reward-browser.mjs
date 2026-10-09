@@ -10,9 +10,9 @@ async function setup(fallback = false, viewport = { width: 1440, height: 1180 })
   const page = await browser.newPage({ viewport });
   page.on('pageerror', e => errors.push(e.message));
   await page.clock.install({ time: new Date('2026-10-10T12:00:00Z') });
-  await page.clock.pauseAt(new Date('2026-10-10T12:00:00Z'));
+  await page.clock.pauseAt(new Date('2026-10-10T12:00:01Z'));
   await page.addInitScript(fallback => {
-    localStorage.setItem('ponpon-settings', JSON.stringify({ sound: false, calm: false }));
+    localStorage.setItem('ponpon-settings', JSON.stringify({ sound: false, calm: false, render3D: !fallback }));
     const originalContext = HTMLCanvasElement.prototype.getContext;
     if (fallback) HTMLCanvasElement.prototype.getContext = function(type, ...args) { return type.startsWith('webgl') ? null : originalContext.call(this, type, ...args); };
     window.__rewardLabels = [];

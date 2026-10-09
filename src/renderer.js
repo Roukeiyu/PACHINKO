@@ -4,26 +4,46 @@ import { createRenderer as createCanvasRenderer } from './renderer-2d.js';
 import { TABLE } from './physics.js';
 import { SLOT_DISPLAY } from './slot-machine.js';
 import { chargeEffectsAt } from './charge.js';
+import { sceneMotionAt } from './scene-motion.js';
 
-export const CAMERA_LIMIT = 5;
-export const clampCameraAngle = angle => Math.max(-CAMERA_LIMIT, Math.min(CAMERA_LIMIT, Number(angle) || 0));
 const W = TABLE.width, H = TABLE.height;
 const world = (x, y, z = 0) => new THREE.Vector3(x - W / 2, H / 2 - y, z);
 
 // The simulation remains on the tabletop. Every solid is built from the same
 // Matter body, then follows its position, angle and size without a second world.
-export function createRenderer(canvas) {
-  let webgl;
-  try {
-    const context = canvas.getContext('webgl2', { antialias: true, alpha: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
-    if (!context) throw new Error('WebGL unavailable');
-    webgl = new THREE.WebGLRenderer({ canvas, context, antialias: true, alpha: false, preserveDrawingBuffer: true });
-  } catch {
-    // Keep the game usable on devices without WebGL; never fetch a remote model.
-    canvas.dataset.renderer = '2d';
-    const fallback = createCanvasRenderer(canvas);
-    return { ...fallback, project: (x, y) => ({ x: x / W, y: y / H }), snapshot: () => ({ mode: '2d', cameraAngle: 0 }) };
+// A canvas cannot change from 2D to WebGL once its context is claimed. Replace
+// only that drawing surface, keeping the renderer facade and simulation alive.
+export function createRenderer(initialCanvas) {
+  let canvas = initialCanvas, renderer = createCanvasRenderer(canvas), threeD = false, available = true;
+  canvas.dataset.renderer = '2d';
+  const replaceCanvas = () => {
+    const fresh = canvas.cloneNode(false); canvas.replaceWith(fresh); canvas = fresh;
+  };
+  function setMode(enabled) {
+    const requested = enabled === true && available;
+    if (requested === threeD) return threeD ? 'webgl' : '2d';
+    renderer.dispose(); replaceCanvas();
+    if (requested) {
+      try { renderer = create3DRenderer(canvas); threeD = true; }
+      catch {
+        available = false; threeD = false; replaceCanvas();
+        renderer = createCanvasRenderer(canvas); canvas.dataset.renderer = '2d';
+      }
+    } else {
+      renderer = createCanvasRenderer(canvas); canvas.dataset.renderer = '2d'; threeD = false;
+    }
+    return threeD ? 'webgl' : '2d';
   }
+  return {
+    setMode, draw(...args) { setMode(args[2].render3D); renderer.draw(...args); },
+    project: (...args) => renderer.project(...args), resize: () => renderer.resize(),
+    snapshot: () => ({ ...renderer.snapshot(), threeDAvailable: available }), dispose: () => renderer.dispose(),
+  };
+}
+function create3DRenderer(canvas) {
+  const context = canvas.getContext('webgl2', { antialias: true, alpha: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
+  if (!context) throw new Error('WebGL unavailable');
+  const webgl = new THREE.WebGLRenderer({ canvas, context, antialias: true, alpha: false, preserveDrawingBuffer: true });
   canvas.dataset.renderer = 'webgl';
   webgl.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
   webgl.outputColorSpace = THREE.SRGBColorSpace;
@@ -33,7 +53,7 @@ export function createRenderer(canvas) {
   webgl.shadowMap.type = THREE.PCFSoftShadowMap;
   const scene = new THREE.Scene(), table = new THREE.Group(); scene.add(table);
   const camera = new THREE.OrthographicCamera(-(W + 10) / 2, (W + 10) / 2, (H + 12) / 2, -(H + 12) / 2, .1, 3000);
-  let cameraAngle = 0, currentGame, currentTheme, currentPalette, lastAtlas = -Infinity;
+  let motion = sceneMotionAt(0, {}, {}), currentGame, currentTheme, currentPalette, lastAtlas = -Infinity;
   const keyLight = new THREE.DirectionalLight('#ffffff', 1.35);
   keyLight.position.set(-360, 400, 650); keyLight.castShadow = true;
   keyLight.shadow.mapSize.set(1024, 1024);
@@ -51,14 +71,13 @@ export function createRenderer(canvas) {
   const painter = createCanvasRenderer(atlasCanvas, { textureMode: true });
   const atlas = new THREE.CanvasTexture(atlasCanvas); atlas.colorSpace = THREE.SRGBColorSpace;
   atlas.generateMipmaps = false; atlas.minFilter = THREE.LinearFilter;
-  const boardOffset = { value: table.position };
+  const boardInverse = { value: new THREE.Matrix4() };
   const cap = new THREE.MeshStandardMaterial({ color: '#bcbcbc', map: atlas, roughness: .8, metalness: .02, envMapIntensity: .12 });
   cap.onBeforeCompile = shader => {
-    shader.uniforms.boardOffset = boardOffset;
-    shader.vertexShader = 'uniform vec3 boardOffset;\n' + shader.vertexShader;
+    shader.uniforms.boardInverse = boardInverse;
+    shader.vertexShader = 'uniform mat4 boardInverse;\n' + shader.vertexShader;
     shader.vertexShader = shader.vertexShader.replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
-      vec4 boardPosition = modelMatrix * vec4(transformed, 1.0);
-      boardPosition.xyz -= boardOffset;
+      vec4 boardPosition = boardInverse * modelMatrix * vec4(transformed, 1.0);
       vMapUv = vec2(boardPosition.x / ${W.toFixed(1)} + 0.5, boardPosition.y / ${H.toFixed(1)} + 0.5);`);
   };
   cap.customProgramCacheKey = () => 'ponpon-tabletop-atlas';
@@ -173,13 +192,10 @@ export function createRenderer(canvas) {
   const starShape = new THREE.Shape();
   for (let i = 0; i < 10; i++) { const a = Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 5 : 11; if (i) starShape.lineTo(Math.cos(a) * r, Math.sin(a) * r); else starShape.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
   starShape.closePath(); const collectible = extrude(starShape, 5, goldSide, .7);
-  function setCamera(angle) {
-    cameraAngle = clampCameraAngle(angle);
-    const yaw = THREE.MathUtils.degToRad(cameraAngle), pitch = THREE.MathUtils.degToRad(14);
-    camera.position.set(Math.sin(yaw) * Math.cos(pitch) * 1400, -Math.sin(pitch) * 1400, Math.cos(yaw) * Math.cos(pitch) * 1400);
-    camera.up.set(0, 1, 0); camera.lookAt(0, 0, 0); camera.updateMatrixWorld();
-  }
-  setCamera(0);
+  // The view is fixed. Automatic scene yaw supplies the bounded 3D rotation.
+  const pitch = THREE.MathUtils.degToRad(14);
+  camera.position.set(0, -Math.sin(pitch) * 1400, Math.cos(pitch) * 1400);
+  camera.up.set(0, 1, 0); camera.lookAt(0, 0, 0); camera.updateMatrixWorld();
   const project = (x, y, z = 0) => { const p = world(x, y, z).applyMatrix4(table.matrixWorld).project(camera); return { x: (p.x + 1) / 2, y: (1 - p.y) / 2 }; };
   function resize() { const width = canvas.getBoundingClientRect().width; if (width) webgl.setSize(width, width * H / W, false); }
   const observer = new ResizeObserver(resize); observer.observe(canvas); resize();
@@ -187,7 +203,6 @@ export function createRenderer(canvas) {
   function draw(game, theme, state, fx, palette = null) {
     if (!currentGame) { setup(game); currentGame = game; }
     updateLayout(game);
-    if (cameraAngle !== clampCameraAngle(state.cameraAngle)) setCamera(state.cameraAngle);
     const paletteChanged = currentPalette !== palette || currentTheme !== theme;
     if (paletteChanged) {
       currentPalette = palette; currentTheme = theme;
@@ -228,12 +243,14 @@ export function createRenderer(canvas) {
     if (corona.visible) { paintCharge(state); corona.position.copy(world(TABLE.launchX, TABLE.launchY + compression, 24)); }
     collectible.visible = !!game.star;
     if (game.star) { collectible.position.copy(world(game.star.x, game.star.y, 5)); const pulse = state.calm ? 1 : 1 + Math.sin(game.clock / 250) * .09; collectible.scale.setScalar(pulse); }
-    const shake = state.calm ? 0 : fx.shake;
-    table.position.set(Math.sin(game.clock / 1000 * 81) * shake, Math.cos(game.clock / 1000 * 65) * shake * .6, 0);
+    motion = sceneMotionAt(game.clock, state, fx);
+    table.position.set(motion.x, -motion.y, 0);
+    table.rotation.y = THREE.MathUtils.degToRad(motion.rotation);
+    table.updateMatrixWorld(true); boardInverse.value.copy(table.matrixWorld).invert();
     webgl.render(scene, camera);
   }
   function snapshot() {
-    return { mode: 'webgl', cameraAngle, pitch: 14, meshes: bodies.size, triangles: webgl.info.render.triangles, contextLost: webgl.getContext().isContextLost(),
+    return { mode: 'webgl', cameraAngle: 0, motion: { ...motion }, pitch: 14, meshes: bodies.size, triangles: webgl.info.render.triangles, contextLost: webgl.getContext().isContextLost(),
       bodies: [...bodies.values()].map(({ body, mesh, height }) => ({ id: body.id, kind: body.label, x: mesh.position.x + W / 2, y: H / 2 - mesh.position.y, angle: -mesh.rotation.z, radius: body.plugin.radius, height, scale: mesh.scale.x, projected: project(body.position.x, body.position.y, height) })),
       balls: [...balls].map(([id, mesh]) => ({ id, x: mesh.position.x + W / 2, y: H / 2 - mesh.position.y, z: mesh.position.z })),
       samples: [[70,200,.8],[23,280,28.8],[150,155,18.8],[350,367,32.8],[350,465,2.8],[615,482,2]].map(([x,y,z]) => project(x,y,z)), readyBall: project(TABLE.launchX, TABLE.launchY, 12), textures: webgl.info.memory.textures, geometries: webgl.info.memory.geometries, alignmentError: Math.max(0, ...[...bodies.values()].map(({body, mesh}) => Math.hypot(mesh.position.x - (body.position.x - W / 2), mesh.position.y - (H / 2 - body.position.y)))) };
@@ -241,6 +258,6 @@ export function createRenderer(canvas) {
   return { draw, resize, project, snapshot, dispose() {
     observer.disconnect(); painter.dispose(); atlas.dispose(); chargeTexture.dispose(); environment.dispose(); wells.forEach(w => w.texture.dispose());
     const geometries = new Set(), materials = new Set(); scene.traverse(object => { if (object.geometry) geometries.add(object.geometry); if (object.material) (Array.isArray(object.material) ? object.material : [object.material]).forEach(m => materials.add(m)); });
-    geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); webgl.dispose();
+    geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); webgl.dispose(); webgl.forceContextLoss();
   } };
 }

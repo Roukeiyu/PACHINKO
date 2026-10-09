@@ -1,4 +1,5 @@
 import { chargeEffectsAt } from './charge.js';
+import { sceneMotionAt, project2DMotion } from './scene-motion.js';
 import { TABLE, slotMultipliers } from './physics.js';
 import { SLOT_DISPLAY, SLOT_SYMBOLS, slotBonusLabel } from './slot-machine.js';
 import { rewardProfile, activeRewardScenes, rewardSceneAt, marqueePoint } from './reward-effects.js';
@@ -6,7 +7,7 @@ import { slotIcon, slotColorIndex } from './slot-icons.js';
 
 export function createRenderer(canvas, { textureMode = false } = {}) {
   const ctx = canvas.getContext('2d');
-  let activePalette = null, paintingBall = false;
+  let activePalette = null, paintingBall = false, motion = sceneMotionAt(0, {}, {});
   const paintColor = (value, role) => paintingBall ? value : activePalette?.color(value, role) ?? value;
   const { width: W, height: H } = TABLE;
   function resize() {
@@ -38,7 +39,11 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     const t = state.calm ? 0 : game.clock / 1000;
     ctx.clearRect(0, 0, W, H); ctx.fillStyle = paintColor(theme.bg, 'surface'); ctx.fillRect(0, 0, W, H);
     ctx.save();
-    if (!textureMode && !state.calm && fx.shake > 0) ctx.translate(Math.sin(t * 81) * fx.shake, Math.cos(t * 65) * fx.shake * .6);
+    motion = textureMode ? sceneMotionAt(0, {}, {}) : sceneMotionAt(game.clock, state, fx);
+    if (!textureMode && motion.intensity) {
+      ctx.translate(W / 2 + motion.x, H / 2 + motion.y);
+      ctx.rotate(motion.rotation * Math.PI / 180); ctx.translate(-W / 2, -H / 2);
+    }
     ctx.fillStyle = paintColor('#b8b08b1d', 'object');
     for (let x = 12; x < W; x += 24) for (let y = 12; y < H; y += 24) circle(x, y, .8, '#b8b08b26');
     // The shooter remains separate, without a flight-mode label or booster.
@@ -365,5 +370,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     }
     ctx.restore();
   }
-  return { draw, resize, dispose: () => observer?.disconnect() };
+  return { draw, resize, project: (x, y) => project2DMotion(x, y, motion, W, H),
+    snapshot: () => ({ mode: '2d', motion: { ...motion }, readyBall: project2DMotion(TABLE.launchX, TABLE.launchY, motion, W, H) }),
+    dispose: () => observer?.disconnect() };
 }
