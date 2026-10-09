@@ -16,7 +16,7 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
   const deflectors = [], pendingDeflections = [];
   let activeStar = null, nextStarAt = 0, nextStarId = 1, lastStarLocation = -1, nextStarMultiplier = 2;
   let clock = 0, nextId = 1;
-  const pendingShots = [], pendingDrops = [];
+  const pendingShots = [], pendingDrops = [], pendingLaunches = [];
   const collector = { x: 100, y: 650, radius: 18, capacity: 20, stored: [], remaining: 0, glow: 0, outlets: [] };
   const rewards = { hits: [0, 0, 0], goals: [10, 10, 50], enlargedUntil: 0, burstUntil: 0, burstStep: -1, gateGlow: 0, ordinaryStars: 0 };
   const slotMachine = createSlotMachine({ random: slotRandom, onEvent: event => onSurprise({ ...event, x: SLOT_DISPLAY.x, y: SLOT_DISPLAY.y }) });
@@ -122,7 +122,7 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
     nextStarMultiplier = 2;
   }
   placeStar();
-  function clearBalls() { for (const ball of balls) Composite.remove(engine.world, ball.body); balls.length = 0; pendingShots.length = 0; rewards.burstUntil = 0; rewards.burstStep = -1; }
+  function clearBalls() { for (const ball of balls) Composite.remove(engine.world, ball.body); balls.length = 0; pendingShots.length = 0; pendingLaunches.length = 0; rewards.burstUntil = 0; rewards.burstStep = -1; }
   function setSlots(count) {
     if (![5, 7, 9].includes(count)) throw new RangeError('Slots must be 5, 7, or 9');
     slots = count; clearBalls();
@@ -144,14 +144,30 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
     if (bonus) stats.bonusBalls++;
     return ball;
   }
+  const laneOccupied = () => balls.some(ball => !ball.entered && ball.body.position.x > 688 && ball.body.position.y > 675);
   function launch(power = .65) {
-    if (balls.length >= 24 || balls.some(ball => !ball.entered && ball.body.position.x > 688 && ball.body.position.y > 675)) return null;
+    if (balls.length >= 24 || pendingLaunches.length || laneOccupied()) return null;
+    return launchBall(power);
+  }
+  function launchBall(power, kind = 'launch') {
     power = Math.max(0, Math.min(1, power));
     // One spring impulse proportional to the held charge. No minimum velocity,
     // continuing booster, or speed maintenance: weak shots fall back naturally.
-    const ball = spawn(TABLE.launchX + (random() - .5) * 1.5, TABLE.launchY, -.05 * power, -32 * power, { power });
+    const ball = spawn(TABLE.launchX + (random() - .5) * 1.5, TABLE.launchY, -.05 * power, -32 * power, { power, kind });
     stats.launches++;
     return ball;
+  }
+  function emitCharged(ordinal) {
+    const ball = launchBall(1, 'charged');
+    onSurprise({ kind: 'emit', source: 'charged', ordinal, angle: -Math.PI / 2, x: TABLE.launchX, y: TABLE.launchY, ballId: ball.id, at: clock });
+    return ball;
+  }
+  function launchBurst() {
+    // Reserve the entire burst before firing. At 90ms spacing each preceding
+    // full-power ball clears the spring before the next real impulse is applied.
+    if (balls.length + 5 > 24 || pendingLaunches.length || laneOccupied()) return null;
+    for (let i = 1; i < 5; i++) pendingLaunches.push({ due: clock + i * 90, ordinal: i });
+    return emitCharged(0);
   }
   function emitFrom(bumper, angle, kind, ordinal = 0) {
     const radius = bumper.plugin.radius + 26;
@@ -274,6 +290,7 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
     for (const outlet of collector.outlets) outlet.glow = Math.max(0, outlet.glow - dt / 320);
     while (pendingDrops.length && pendingDrops[0].due <= clock + 1e-6) emitDrop(pendingDrops.shift());
     collector.remaining = pendingDrops.length;
+    while (pendingLaunches.length && pendingLaunches[0].due <= clock + 1e-6) emitCharged(pendingLaunches.shift().ordinal);
     // Use the same simulation clock for countdowns and clock-burst scheduling;
     // opening settings or backgrounding the tab pauses all gameplay together.
     for (let i = 0; i < pendingShots.length;) {
@@ -354,5 +371,5 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
       if (ball.stuck > 1000) { Body.setVelocity(body, { x: random() > .5 ? .9 : -.9, y: -.5 }); ball.stuck = 0; }
     }
   }
-  return { engine, balls, walls, pins, kickers, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, collector, slotMachine: slotMachine.state, stats, rewards, launch, step, setSlots, get star() { return activeStar; }, get clock() { return clock; }, get slots() { return slots; } };
+  return { engine, balls, walls, pins, kickers, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, collector, slotMachine: slotMachine.state, stats, rewards, launch, launchBurst, get pendingLaunches() { return pendingLaunches.length; }, step, setSlots, get star() { return activeStar; }, get clock() { return clock; }, get slots() { return slots; } };
 }

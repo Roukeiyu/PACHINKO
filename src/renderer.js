@@ -1,3 +1,4 @@
+import { chargeEffectsAt } from './charge.js';
 import { TABLE, slotMultipliers } from './physics.js';
 import { SLOT_DISPLAY, SLOT_SYMBOLS, slotBonusLabel } from './slot-machine.js';
 import { rewardProfile } from './reward-effects.js';
@@ -184,7 +185,38 @@ export function createRenderer(canvas) {
     for (let i = 0; i <= 12; i++) ctx.lineTo(713 + (i % 2 ? 11 : -11), springTop + (springBottom - springTop) * i / 12);
     ctx.strokeStyle = paintColor('#8e9f7b', 'line'); ctx.lineWidth = 4; ctx.stroke();
     box(695, springTop - 6, 36, 8, 4, '#71896a', '#ecf1d6');
-    if (!game.balls.some(b => b.body.position.x > 683 && b.body.position.y > 730)) ball(TABLE.launchX, TABLE.launchY + compression, .88);
+    if (!game.balls.some(b => b.body.position.x > 683 && b.body.position.y > 730)) {
+      if (state.charging) {
+        const glow = chargeEffectsAt(state.chargeElapsed), x = TABLE.launchX, y = TABLE.launchY + compression;
+        ctx.save();
+        // These are charge cues: retain their gold/rainbow hues in every time-of-day palette.
+        if (glow.goldRadius > 0) {
+          ctx.globalAlpha = glow.goldAlpha * .55;
+          ctx.strokeStyle = '#edc674'; ctx.lineWidth = 1.7;
+          ctx.shadowColor = '#f8d78a'; ctx.shadowBlur = state.calm ? 0 : 8;
+          ctx.beginPath(); ctx.arc(x, y, state.calm ? 16 : glow.goldRadius, 0, Math.PI * 2); ctx.stroke();
+        }
+        if (glow.coronaRadius) {
+          const radius = state.calm ? 25 : glow.coronaRadius;
+          ctx.globalAlpha = state.calm ? .22 : glow.coronaAlpha;
+          ctx.shadowBlur = 0;
+          const hues = ['#ffbbba', '#ffe8ad', '#c7efbf', '#aae8e8', '#bdcaff', '#e9b7f1'];
+          for (let i = 0; i < 24; i++) {
+            const angle = i * Math.PI / 12 + (state.calm ? 0 : state.chargeElapsed / 9000);
+            const outer = radius * (i % 2 ? .78 : 1), width = .18;
+            const gradient = ctx.createRadialGradient(x, y, 5, x, y, outer);
+            gradient.addColorStop(0, '#fffdf5'); gradient.addColorStop(.25, hues[i % hues.length]); gradient.addColorStop(1, hues[i % hues.length] + '00');
+            ctx.fillStyle = gradient; ctx.beginPath(); ctx.moveTo(x, y);
+            ctx.arc(x, y, outer, angle - width, angle + width); ctx.closePath(); ctx.fill();
+          }
+          const center = ctx.createRadialGradient(x, y, 0, x, y, radius * .6);
+          center.addColorStop(0, '#ffffff'); center.addColorStop(.32, '#fff8d7aa'); center.addColorStop(1, '#fff8d700');
+          ctx.fillStyle = center; ctx.beginPath(); ctx.arc(x, y, radius * .6, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+      }
+      ball(TABLE.launchX, TABLE.launchY + compression, .88);
+    }
     text('PULL', 713, 850 + compression * .3, 9, '#65785c', 'bold');
     if (game.star) {
       const s = game.star, pulse = state.calm ? 1 : 1 + Math.sin(t * 4) * .09;
