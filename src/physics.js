@@ -13,7 +13,6 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
   const balls = [], walls = [], pins = [], bumpers = [], rails = [], diamonds = [], spinners = [], guards = [], dividers = [], gates = [];
   const holes = [{ x: 615, y: 482, facing: Math.PI, glow: 0 }];
   const deflectors = [], pendingDeflections = [];
-  const deflectionAngles = [-Math.PI / 3, 0, Math.PI / 3];
   let clock = 0, nextId = 1;
   const pendingShots = [];
   const rewards = { hits: [0, 0, 0], goals: [10, 10, 100], enlargedUntil: 0, burstUntil: 0, burstStep: -1, gateGlow: 0 };
@@ -43,14 +42,14 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
   [[238, 226, 32], [450, 247, 32], [350, 367, 39]].forEach(([x, y, r], i) => {
     add(Bodies.circle(x, y, r, { isStatic: true, label: 'bumper', restitution: 1.05, friction: 0 }), bumpers, { index: i, radius: r, baseRadius: r, lastKick: -1000 });
   });
-  [[101, 304, 173, 363], [536, 335, 601, 290], [125, 578, 217, 541], [496, 568, 581, 611]].forEach(args => segment(...args, 16, rails, 'rail', .93));
+  [[156, 304, 228, 363], [536, 335, 601, 290], [125, 578, 217, 541], [496, 568, 581, 611]].forEach(args => segment(...args, 16, rails, 'rail', .93));
   [[254, 668], [442, 695]].forEach(([x, y]) => add(Bodies.polygon(x, y, 4, 23, { isStatic: true, label: 'diamond', restitution: .95, friction: 0, angle: Math.PI / 4 }), diamonds));
   const spinner = add(Bodies.rectangle(351, 540, 122, 13, { isStatic: true, label: 'spinner', chamfer: { radius: 6 }, restitution: .85, friction: .01 }), spinners);
   spinner.plugin.radius = 61;
-  // The triangle's tip and arrow share the actual outgoing direction. All
-  // three directions aim into the table, never into the nearby left wall.
-  const triangle = add(Bodies.fromVertices(99, 466, [[{ x: 34, y: 0 }, { x: -17, y: -23 }, { x: -17, y: 23 }]], { isStatic: true, label: 'deflector', restitution: .8, friction: 0 }), deflectors, { radius: 34, direction: 0, angle: deflectionAngles[0], hits: 0 });
-  Body.setAngle(triangle, deflectionAngles[0]);
+  // Tip and arrow share the outgoing direction. The launch tip has clearance
+  // from nearby obstacles even when pointing left, allowing full-circle shots.
+  const triangle = add(Bodies.fromVertices(99, 466, [[{ x: 34, y: 0 }, { x: -17, y: -23 }, { x: -17, y: 23 }]], { isStatic: true, label: 'deflector', restitution: .8, friction: 0 }), deflectors, { radius: 34, angle: -Math.PI / 3, hits: 0 });
+  Body.setAngle(triangle, triangle.plugin.angle);
   [[158, 162], [331, 161], [537, 164], [154, 239], [335, 273], [562, 235], [238, 426], [452, 423], [175, 463], [519, 469], [270, 495], [438, 497], [304, 612], [378, 631], [152, 687], [557, 701], [96, 741], [207, 756], [333, 743], [475, 759], [603, 746]].forEach(([x, y], i) => {
     add(Bodies.circle(x, y, 7.5, { isStatic: true, label: 'pin', restitution: .85, friction: 0 }), pins, { index: i });
   });
@@ -185,8 +184,11 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
     // overlapping a rotated face and counting one contact multiple times.
     for (const { ball, obstacle } of pendingDeflections.splice(0)) {
       const p = obstacle.plugin;
-      p.direction = (p.direction + 1) % deflectionAngles.length;
-      p.angle = deflectionAngles[p.direction]; p.hits++;
+      // Continuous random headings around the full circle; exclude the nearest
+      // 25 degrees on either side so every hit visibly changes direction.
+      const minTurn = 25 * Math.PI / 180;
+      p.angle = (p.angle + minTurn + random() * (Math.PI * 2 - minTurn * 2)) % (Math.PI * 2);
+      p.hits++;
       Body.setAngle(obstacle, p.angle);
       const dx = Math.cos(p.angle), dy = Math.sin(p.angle);
       Body.setPosition(ball.body, { x: obstacle.position.x + dx * (p.radius + 14), y: obstacle.position.y + dy * (p.radius + 14) });

@@ -51,25 +51,43 @@ assert.ok(totals.jackpots > 0 && totals.jackpots < 36, 'physical bonus cups shou
 // Real contacts must rotate the triangle once and launch the same ball along
 // the displayed direction, without awarding the removed left-hole jackpot.
 {
-  const scores = [], events = [], game = createTable({ onScore: s => scores.push(s), onSurprise: e => events.push(e) });
+  const scores = [], events = [], game = createTable({ random: seeded(1234), onScore: s => scores.push(s), onSurprise: e => events.push(e) });
   const platform = game.deflectors[0];
-  const angles = [0, Math.PI / 3, -Math.PI / 3];
-  for (let hit = 0; hit < 6; hit++) {
+  const headings = new Set(), quadrants = new Set();
+  for (let hit = 0; hit < 32; hit++) {
+    const previous = platform.plugin.angle;
     const ball = game.launch(); ball.entered = true; ball.boosting = false;
     Matter.Body.setPosition(ball.body, { x: platform.position.x, y: platform.position.y - 60 });
     Matter.Body.setVelocity(ball.body, { x: 0, y: 8 });
     for (let step = 0; step < 30 && platform.plugin.hits === hit; step++) game.step();
     assert.equal(platform.plugin.hits, hit + 1, 'one contact advances once');
-    assert.equal(platform.plugin.angle, angles[hit % 3]);
-    assert.ok(Math.abs(Math.atan2(ball.body.velocity.y, ball.body.velocity.x) - angles[hit % 3]) < .001, 'outgoing velocity follows the arrow');
+    const angle = platform.plugin.angle;
+    const difference = Math.abs(Math.atan2(Math.sin(angle - previous), Math.cos(angle - previous)));
+    assert.ok(difference >= 25 * Math.PI / 180 - 1e-6, 'each hit visibly changes direction');
+    headings.add(Math.round(angle * 180 / Math.PI));
+    quadrants.add(Math.floor(angle / (Math.PI / 2)));
+    assert.ok(Math.abs(ball.body.velocity.x - Math.cos(angle) * 12.5) < .001 && Math.abs(ball.body.velocity.y - Math.sin(angle) * 12.5) < .001, 'outgoing velocity follows the arrow');
     assert.ok(game.balls.includes(ball), 'the platform returns the original ball');
     assert.ok(!Matter.Collision.collides(ball.body, platform), 'rotating the platform must not trap the ball');
     game.step(); assert.equal(platform.plugin.hits, hit + 1, 'separation does not produce a duplicate contact');
     Matter.Composite.remove(game.engine.world, ball.body); game.balls.splice(game.balls.indexOf(ball), 1);
   }
-  assert.equal(events.filter(e => e.kind === 'deflect').length, 6);
+  assert.ok(headings.size >= 24, 'continuous angles must not fall back to a small set of presets');
+  assert.equal(quadrants.size, 4, 'random headings cover the full circle');
+  assert.equal(events.filter(e => e.kind === 'deflect').length, 32);
   assert.equal(scores.length, 0, 'left platform does not award hole points');
-  console.log('PASS: six physical triangle contacts cycle through three outgoing directions without duplicate hits or capture.');
+  console.log(`PASS: 32 triangle contacts produce ${headings.size} distinct headings across all quadrants without duplicate hits or capture.`);
+}
+// The shifted upper-left rail intercepts a diagonal approach to the triangle.
+{
+  const game = createTable(), ball = game.launch();
+  ball.entered = true; ball.boosting = false;
+  Matter.Body.setPosition(ball.body, { x: 260, y: 270 });
+  Matter.Body.setVelocity(ball.body, { x: -5, y: 6 });
+  for (let step = 0; step < 60 && !game.stats.hits.rail; step++) game.step();
+  assert.ok(game.stats.hits.rail > 0, 'upper-left rail blocks a diagonal route toward the triangle');
+  assert.equal(game.stats.hits.deflector, 0, 'the rail intercepts before the triangle');
+  console.log('PASS: shifted upper-left rail intercepts the approach to the triangle.');
 }
 const scores = [], game = createTable({ onScore: score => scores.push(score) });
 const ball = game.launch();
