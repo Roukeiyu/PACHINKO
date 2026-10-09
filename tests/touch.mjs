@@ -9,7 +9,11 @@ const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMo
 const errors = []; page.on('pageerror', e => errors.push(e.message));
 await mkdir('test-results', { recursive: true });
 try {
-  await page.goto(process.env.TEST_URL || 'http://127.0.0.1:5173');
+  // Native touch events still drive the real controls; hold time is deterministic
+  // even when a software WebGL frame or browser command takes several seconds.
+  const epoch = Date.UTC(2026,9,9,12);
+  await page.clock.install({time:epoch}); await page.clock.pauseAt(epoch);
+  await page.goto(process.env.TEST_URL || 'http://127.0.0.1:5173'); await page.clock.fastForward(50);
   const session = await page.context().newCDPSession(page);
   const count = () => page.locator('#ball-count').textContent().then(Number);
   async function touchStart(selector) {
@@ -29,43 +33,47 @@ try {
   assert.ok(protections, 'all interface labels, logos and canvas block selection, drag and callouts');
   console.log('PASS: long presses do not select text; selection, dragging and context-menu events are canceled across the game.');
   await touchStart('#launch');
-  assert.ok(await page.evaluate(() => window.__ponpon.charging && window.__ponpon.charge < .1), 'each press starts at zero');
-  await page.waitForTimeout(600);
+  assert.ok(await page.evaluate(() => window.__ponpon.charging && window.__ponpon.charge === 0), 'each press starts at zero');
+  await page.clock.fastForward(600);
   assert.equal(await count(), 0, 'holding must not fire prematurely');
   assert.ok(await page.evaluate(() => window.__ponpon.charging && window.__ponpon.charge > .83 && window.__ponpon.charge < .95), '600ms reaches about 87% on the two-second exponential curve');
-  await page.screenshot({ path: 'test-results/mobile-charging.png', fullPage: true });
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  await page.waitForTimeout(400);
+  await page.clock.runFor(400);
   assert.equal(await count(), 1, 'touch release must fire exactly once, not again on synthesized click');
   assert.equal(await page.evaluate(() => window.__ponpon.charge), 0, 'release clears the charge');
   assert.ok(await page.evaluate(() => window.__ponpon.positions.some(p => p.power > .83 && p.power < .97)), 'the shot uses the same exponential curve as the display');
   assert.equal(await page.evaluate(() => getSelection().toString()), '');
-  await page.waitForFunction(() => window.__ponpon.stats.entered === 1);
+  await page.clock.runFor(1500);
+  assert.equal(await page.evaluate(() => window.__ponpon.stats.entered), 1);
   assert.ok(await page.evaluate(() => window.__ponpon.canonNotes > 0 && window.__ponpon.canonNotes === window.__ponpon.stats.impacts));
+  // Capture after release: software WebGL screenshots can take several seconds
+  // and would otherwise turn this short hold into the five-second burst gesture.
+  await page.screenshot({ path: 'test-results/mobile-launched.png', fullPage: true });
   console.log('PASS: mobile hold charges without firing; release launches once through the physical lane.');
 
   await touchStart('#plunger');
-  assert.ok(await page.evaluate(() => window.__ponpon.charge < .1), 'the spring also starts a fresh charge from zero');
-  await page.waitForTimeout(200);
+  assert.ok(await page.evaluate(() => window.__ponpon.charge === 0), 'the spring also starts a fresh charge from zero');
+  await page.clock.fastForward(200);
   await session.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] });
   assert.equal(await page.evaluate(() => window.__ponpon.charging), false);
   assert.equal(await page.evaluate(() => window.__ponpon.charge), 0, 'canceling clears the charge');
   assert.equal(await count(), 1, 'an interrupted gesture must cancel, not launch');
-  await page.locator('#plunger').tap(); await page.waitForTimeout(400);
+  await touchStart('#plunger'); await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); await page.clock.runFor(400);
   assert.equal(await count(), 2, 'the right-hand spring is a working touch target');
-  await page.waitForTimeout(600);
+  await page.clock.runFor(600);
   await page.locator('#launch').focus();
   await page.keyboard.down('Space');
-  assert.ok(await page.evaluate(() => window.__ponpon.charge < .1), 'keyboard charging starts from zero');
-  await page.waitForTimeout(2050);
+  assert.ok(await page.evaluate(() => window.__ponpon.charge === 0), 'keyboard charging starts from zero');
+  await page.clock.fastForward(2050);
   assert.equal(await page.evaluate(() => window.__ponpon.charge), 1, 'holding through 99.9% snaps to full charge');
   assert.match(await page.locator('#launch-label').textContent(), /100%/);
   assert.equal(await count(), 2);
-  await page.keyboard.up('Space'); await page.waitForTimeout(400);
+  await page.keyboard.up('Space'); await page.clock.runFor(400);
   assert.equal(await count(), 3, 'keyboard release fires exactly once even when launch button has focus');
   assert.ok(await page.evaluate(() => window.__ponpon.positions.some(p => p.power === 1)), 'a full-charge release actually uses 100% power');
   console.log('PASS: canceled gestures, right-hand spring tapping and keyboard charge/release.');
 
+  await page.clock.resume();
   await page.locator('#settings-button').tap();
   const before = await page.evaluate(() => window.__ponpon.positions);
   const starBefore = await page.evaluate(() => window.__ponpon.star);

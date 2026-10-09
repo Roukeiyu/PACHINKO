@@ -1,298 +1,246 @@
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { createRenderer as createCanvasRenderer } from './renderer-2d.js';
+import { TABLE } from './physics.js';
+import { SLOT_DISPLAY } from './slot-machine.js';
 import { chargeEffectsAt } from './charge.js';
-import { TABLE, slotMultipliers } from './physics.js';
-import { SLOT_DISPLAY, SLOT_SYMBOLS, slotBonusLabel } from './slot-machine.js';
-import { rewardProfile } from './reward-effects.js';
 
+export const CAMERA_LIMIT = 5;
+export const clampCameraAngle = angle => Math.max(-CAMERA_LIMIT, Math.min(CAMERA_LIMIT, Number(angle) || 0));
+const W = TABLE.width, H = TABLE.height;
+const world = (x, y, z = 0) => new THREE.Vector3(x - W / 2, H / 2 - y, z);
+
+// The simulation remains on the tabletop. Every solid is built from the same
+// Matter body, then follows its position, angle and size without a second world.
 export function createRenderer(canvas) {
-  const ctx = canvas.getContext('2d');
-  let activePalette = null, paintingBall = false;
-  const paintColor = (value, role) => paintingBall ? value : activePalette?.color(value, role) ?? value;
-  const { width: W, height: H } = TABLE;
-  function resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const width = canvas.getBoundingClientRect().width;
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(width * dpr * H / W);
-    ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+  let webgl;
+  try {
+    const context = canvas.getContext('webgl2', { antialias: true, alpha: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
+    if (!context) throw new Error('WebGL unavailable');
+    webgl = new THREE.WebGLRenderer({ canvas, context, antialias: true, alpha: false, preserveDrawingBuffer: true });
+  } catch {
+    // Keep the game usable on devices without WebGL; never fetch a remote model.
+    canvas.dataset.renderer = '2d';
+    const fallback = createCanvasRenderer(canvas);
+    return { ...fallback, project: (x, y) => ({ x: x / W, y: y / H }), snapshot: () => ({ mode: '2d', cameraAngle: 0 }) };
   }
+  canvas.dataset.renderer = 'webgl';
+  webgl.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
+  webgl.outputColorSpace = THREE.SRGBColorSpace;
+  webgl.toneMapping = THREE.NeutralToneMapping;
+  webgl.toneMappingExposure = 1;
+  webgl.shadowMap.enabled = true;
+  webgl.shadowMap.type = THREE.PCFSoftShadowMap;
+  const scene = new THREE.Scene(), table = new THREE.Group(); scene.add(table);
+  const camera = new THREE.OrthographicCamera(-(W + 10) / 2, (W + 10) / 2, (H + 12) / 2, -(H + 12) / 2, .1, 3000);
+  let cameraAngle = 0, currentGame, currentTheme, currentPalette, lastAtlas = -Infinity;
+  const keyLight = new THREE.DirectionalLight('#ffffff', 1.35);
+  keyLight.position.set(-360, 400, 650); keyLight.castShadow = true;
+  keyLight.shadow.mapSize.set(1024, 1024);
+  Object.assign(keyLight.shadow.camera, { left: -500, right: 500, top: 570, bottom: -570, near: 20, far: 1500 });
+  keyLight.shadow.bias = -.00015; keyLight.shadow.normalBias = 1.5; keyLight.shadow.radius = 3;
+  scene.add(keyLight, new THREE.HemisphereLight('#ffffff', '#9c91a7', .7));
+  const fill = new THREE.DirectionalLight('#d6e8ff', .3); fill.position.set(350, -250, 450); scene.add(fill);
+  const pmrem = new THREE.PMREMGenerator(webgl), room = new RoomEnvironment();
+  const environment = pmrem.fromScene(room, .04); scene.environment = environment.texture; room.dispose(); pmrem.dispose();
+
+  // Existing lettering, theme art and every reward animation form a live decal
+  // atlas. Model top faces sample it in tabletop coordinates, including moving
+  // rails and growing drums. The solids and balls are actual lit geometry.
+  const atlasCanvas = document.createElement('canvas');
+  const painter = createCanvasRenderer(atlasCanvas, { textureMode: true });
+  const atlas = new THREE.CanvasTexture(atlasCanvas); atlas.colorSpace = THREE.SRGBColorSpace;
+  atlas.generateMipmaps = false; atlas.minFilter = THREE.LinearFilter;
+  const boardOffset = { value: table.position };
+  const cap = new THREE.MeshStandardMaterial({ color: '#bcbcbc', map: atlas, roughness: .8, metalness: .02, envMapIntensity: .12 });
+  cap.onBeforeCompile = shader => {
+    shader.uniforms.boardOffset = boardOffset;
+    shader.vertexShader = 'uniform vec3 boardOffset;\n' + shader.vertexShader;
+    shader.vertexShader = shader.vertexShader.replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
+      vec4 boardPosition = modelMatrix * vec4(transformed, 1.0);
+      boardPosition.xyz -= boardOffset;
+      vMapUv = vec2(boardPosition.x / ${W.toFixed(1)} + 0.5, boardPosition.y / ${H.toFixed(1)} + 0.5);`);
+  };
+  cap.customProgramCacheKey = () => 'ponpon-tabletop-atlas';
+  const colored = [], bodies = new Map(), balls = new Map(), layoutModels = [];
+  function material(color, role = 'object', extra = {}) {
+    const value = new THREE.MeshStandardMaterial({ color, roughness: .48, metalness: .12, envMapIntensity: .3, ...extra });
+    colored.push({ value, color, role }); return value;
+  }
+  const wallSide = material('#829d78'), railSide = material('#c7798e'), pinSide = material('#8ca37c');
+  const drumSide = material('#c7798e'), goldSide = material('#b49a65'), purpleSide = material('#9981b2');
+  const spinnerSide = material('#779d83'), floorSide = material('#b6bea5'), darkSide = material('#405c59', 'object', { side: THREE.DoubleSide });
+  function roundedShape(width, height, radius) {
+    const x = -width / 2, y = -height / 2, s = new THREE.Shape();
+    s.moveTo(x + radius, y); s.lineTo(x + width - radius, y); s.quadraticCurveTo(x + width, y, x + width, y + radius);
+    s.lineTo(x + width, y + height - radius); s.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    s.lineTo(x + radius, y + height); s.quadraticCurveTo(x, y + height, x, y + height - radius);
+    s.lineTo(x, y + radius); s.quadraticCurveTo(x, y, x + radius, y); return s;
+  }
+  function extrude(shape, height, side, bevel = 1) {
+    const geometry = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: bevel > 0, bevelSize: bevel, bevelThickness: bevel, bevelSegments: 2, curveSegments: 20, steps: 1 });
+    const mesh = new THREE.Mesh(geometry, [cap, side]); mesh.castShadow = true; mesh.receiveShadow = true; table.add(mesh); return mesh;
+  }
+  function box(x, y, width, height, depth, side, z = 0, radius = 4) {
+    const mesh = extrude(roundedShape(width, height, radius), depth, side, .8); mesh.position.copy(world(x, y, z)); return mesh;
+  }
+  function disc(x, y, radius, depth, side, z = 0) {
+    const shape = new THREE.Shape(); shape.absarc(0, 0, radius, 0, Math.PI * 2, false);
+    const mesh = extrude(shape, depth, side, 1.1); mesh.position.copy(world(x, y, z)); return mesh;
+  }
+  const slab = box(W / 2, H / 2, W - 6, H - 6, 16, floorSide, -16, 22); slab.castShadow = false;
+  function bodyModel(body, side, height, radius) {
+    let mesh;
+    if (radius) mesh = disc(body.position.x, body.position.y, radius, height, side);
+    else {
+      const shape = new THREE.Shape(), c = Math.cos(body.angle), s = Math.sin(body.angle);
+      body.vertices.forEach((vertex, i) => {
+        const dx = vertex.x - body.position.x, dy = vertex.y - body.position.y;
+        const x = dx * c + dy * s, y = dx * s - dy * c;
+        if (i) shape.lineTo(x, y); else shape.moveTo(x, y);
+      }); shape.closePath(); mesh = extrude(shape, height, side, .8);
+    }
+    mesh.userData.bodyId = body.id; mesh.userData.baseRadius = body.plugin.baseRadius;
+    bodies.set(body.id, { body, mesh, height }); return mesh;
+  }
+  const wells = [];
+  function makeWell(x, y, storage) {
+    const profile = [[0, 2], [7, 2.2], [13, 3.5], [18, 6], [21, 9]].map(([r, z]) => new THREE.Vector2(r, z));
+    const mesh = new THREE.Mesh(new THREE.LatheGeometry(profile, 40), darkSide);
+    mesh.rotation.x = Math.PI / 2; mesh.position.copy(world(x, y)); mesh.receiveShadow = true; table.add(mesh);
+    const label = document.createElement('canvas'); label.width = 128; label.height = 64;
+    const texture = new THREE.CanvasTexture(label); texture.colorSpace = THREE.SRGBColorSpace;
+    const text = new THREE.Mesh(new THREE.PlaneGeometry(34, 17), new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: false }));
+    text.position.copy(world(x, y, 9.5)); table.add(text); wells.push({ storage, label, texture, text, last: '' });
+  }
+  function setup(game) {
+    for (const b of game.walls) bodyModel(b, wallSide, 28);
+    for (const b of game.pins) bodyModel(b, pinSide, 18, b.plugin.radius || 7.5);
+    for (const b of game.bumpers) bodyModel(b, drumSide, 32, b.plugin.baseRadius + 6);
+    for (const b of game.kickers) bodyModel(b, drumSide, 16, 13);
+    for (const b of game.rails) bodyModel(b, railSide, 20);
+    for (const b of game.diamonds) bodyModel(b, purpleSide, 13);
+    for (const b of game.spinners) bodyModel(b, spinnerSide, 12);
+    for (const b of game.deflectors) bodyModel(b, railSide, 15);
+    for (const b of game.guards) { const mesh = bodyModel(b, b.plugin.storage ? purpleSide : goldSide, 10); mesh.castShadow = mesh.receiveShadow = false; }
+    // The ascending door is invisible, just as its original one-way guide was.
+    bodyModel(game.gates[1], goldSide, 7);
+    for (const h of game.holes) makeWell(h.x, h.y, false);
+    makeWell(game.collector.x, game.collector.y, true);
+    // Recess the painted reel assembly so moving balls can cross its display.
+    box(SLOT_DISPLAY.x, SLOT_DISPLAY.y, SLOT_DISPLAY.width, SLOT_DISPLAY.height, 3, goldSide, -1, 8);
+    for (const spinner of game.spinners) disc(spinner.position.x, spinner.position.y, 15, 5, goldSide, 12);
+  }
+  let slotCount = 0;
+  function updateLayout(game) {
+    if (slotCount === game.slots) return;
+    for (const mesh of layoutModels.splice(0)) { table.remove(mesh); mesh.geometry.dispose(); }
+    for (const [id, entry] of bodies) if (entry.body.label === 'divider') { table.remove(entry.mesh); entry.mesh.geometry.dispose(); bodies.delete(id); }
+    slotCount = game.slots; const width = (TABLE.right - TABLE.left) / slotCount;
+    for (let i = 0; i < slotCount; i++) layoutModels.push(box(TABLE.left + (i + .5) * width, TABLE.slotTop + 43, width - 6, 84, 3, goldSide, -.5, 10));
+    for (const outlet of game.collector.outlets) layoutModels.push(box(outlet.x, outlet.y, 52, 17, 7, purpleSide, 0, 6));
+    for (const b of game.dividers) bodyModel(b, goldSide, 9);
+  }
+  const sphere = new THREE.SphereGeometry(11, 24, 16);
+  const ballMaterial = new THREE.MeshStandardMaterial({ color: '#ffedb0', metalness: .6, roughness: .2, envMapIntensity: 1.4 });
+  const readyBall = new THREE.Mesh(sphere, ballMaterial); readyBall.castShadow = true; table.add(readyBall);
+  const springPoints = Array.from({ length: 193 }, (_, i) => { const t = i / 192, a = t * Math.PI * 12; return new THREE.Vector3(Math.cos(a) * 9, t * 52, 9 + Math.sin(a) * 5); });
+  const spring = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(springPoints), 192, 1.7, 6, false), material('#a4ac93', 'object', { metalness: .7, roughness: .3 }));
+  spring.position.copy(world(TABLE.launchX, 865)); spring.castShadow = true; table.add(spring);
+  const springPlate = box(TABLE.launchX, 811, 36, 8, 5, wallSide, 5, 3);
+  const chargeCanvas = document.createElement('canvas'); chargeCanvas.width = chargeCanvas.height = 160;
+  const chargeCtx = chargeCanvas.getContext('2d'), chargeTexture = new THREE.CanvasTexture(chargeCanvas); chargeTexture.colorSpace = THREE.SRGBColorSpace;
+  const corona = new THREE.Mesh(new THREE.PlaneGeometry(160, 160), new THREE.MeshBasicMaterial({ map: chargeTexture, transparent: true, depthWrite: false, toneMapped: false }));
+  corona.renderOrder = 2; table.add(corona);
+  function paintCharge(state) {
+    const ctx = chargeCtx, glow = chargeEffectsAt(state.chargeElapsed); ctx.clearRect(0, 0, 160, 160);
+    if (glow.goldRadius) {
+      ctx.globalAlpha = glow.goldAlpha * .6; ctx.strokeStyle = '#edc674'; ctx.lineWidth = 1.7; ctx.shadowColor = '#f8d78a'; ctx.shadowBlur = state.calm ? 0 : 8;
+      ctx.beginPath(); ctx.arc(80, 80, state.calm ? 16 : glow.goldRadius, 0, Math.PI * 2); ctx.stroke();
+    }
+    if (glow.coronaRadius) {
+      const radius = state.calm ? 25 : glow.coronaRadius, hues = ['#ffbbba', '#ffe8ad', '#c7efbf', '#aae8e8', '#bdcaff', '#e9b7f1'];
+      ctx.shadowBlur = 0; ctx.globalAlpha = state.calm ? .22 : glow.coronaAlpha;
+      for (let i = 0; i < 24; i++) {
+        const angle = i * Math.PI / 12 + (state.calm ? 0 : state.chargeElapsed / 9000), outer = radius * (i % 2 ? .78 : 1);
+        const gradient = ctx.createRadialGradient(80, 80, 5, 80, 80, outer);
+        gradient.addColorStop(0, '#fffdf5'); gradient.addColorStop(.25, hues[i % 6]); gradient.addColorStop(1, hues[i % 6] + '00');
+        ctx.fillStyle = gradient; ctx.beginPath(); ctx.moveTo(80, 80); ctx.arc(80, 80, outer, angle - .18, angle + .18); ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0; chargeTexture.needsUpdate = true;
+  }
+  const starShape = new THREE.Shape();
+  for (let i = 0; i < 10; i++) { const a = Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 5 : 11; if (i) starShape.lineTo(Math.cos(a) * r, Math.sin(a) * r); else starShape.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
+  starShape.closePath(); const collectible = extrude(starShape, 5, goldSide, .7);
+  function setCamera(angle) {
+    cameraAngle = clampCameraAngle(angle);
+    const yaw = THREE.MathUtils.degToRad(cameraAngle), pitch = THREE.MathUtils.degToRad(14);
+    camera.position.set(Math.sin(yaw) * Math.cos(pitch) * 1400, -Math.sin(pitch) * 1400, Math.cos(yaw) * Math.cos(pitch) * 1400);
+    camera.up.set(0, 1, 0); camera.lookAt(0, 0, 0); camera.updateMatrixWorld();
+  }
+  setCamera(0);
+  const project = (x, y, z = 0) => { const p = world(x, y, z).applyMatrix4(table.matrixWorld).project(camera); return { x: (p.x + 1) / 2, y: (1 - p.y) / 2 }; };
+  function resize() { const width = canvas.getBoundingClientRect().width; if (width) webgl.setSize(width, width * H / W, false); }
   const observer = new ResizeObserver(resize); observer.observe(canvas); resize();
-  const circle = (x, y, r, color, stroke, line = 1) => { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); if (color) { ctx.fillStyle = paintColor(color, 'object'); ctx.fill(); } if (stroke) { ctx.strokeStyle = paintColor(stroke, 'line'); ctx.lineWidth = line; ctx.stroke(); } };
-  const box = (x, y, w, h, radius, color, stroke) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, radius); ctx.fillStyle = paintColor(color, 'object'); ctx.fill(); if (stroke) { ctx.lineWidth = 1; ctx.strokeStyle = paintColor(stroke, 'line'); ctx.stroke(); } };
-  const text = (value, x, y, size, color, weight = '') => { ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `${weight} ${size}px "Trebuchet MS", "PingFang SC", sans-serif`; ctx.fillStyle = paintColor(color, 'ink'); ctx.save(); if (activePalette && /\p{Extended_Pictographic}/u.test(value)) ctx.filter = activePalette.emojiFilter; ctx.fillText(value, x, y); ctx.restore(); };
-  function star(x, y, r, color, angle = 0) { ctx.beginPath(); for (let i = 0; i < 8; i++) { const a = angle + i * Math.PI / 4, rr = i % 2 ? r * .35 : r; if (i) ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); else ctx.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } ctx.closePath(); ctx.fillStyle = paintColor(color, 'object'); ctx.fill(); }
-  function bodyShape(body, color, stroke = '#ffffffb0', shadow = true) {
-    ctx.save(); if (shadow) { ctx.shadowColor = paintColor('#45523d35', 'glow'); ctx.shadowBlur = 0; ctx.shadowOffsetY = 5; }
-    ctx.beginPath(); body.vertices.forEach((v, i) => { if (!i) ctx.moveTo(v.x, v.y); else ctx.lineTo(v.x, v.y); }); ctx.closePath(); ctx.fillStyle = paintColor(color, 'object'); ctx.fill(); ctx.shadowOffsetY = 0; ctx.lineWidth = 2; ctx.strokeStyle = paintColor(stroke, 'line'); ctx.stroke(); ctx.restore();
-  }
-  function ball(x, y, opacity = 1) {
-    paintingBall = true;
-    ctx.save(); ctx.globalAlpha = opacity; ctx.shadowColor = paintColor('#ffd862', 'glow'); ctx.shadowBlur = 25;
-    circle(x, y, 14, '#a4425d'); ctx.shadowBlur = 0;
-    const g = ctx.createRadialGradient(x - 3, y - 4, 0, x, y, 12); g.addColorStop(0, paintColor('#ffffff')); g.addColorStop(.6, paintColor('#fffde8')); g.addColorStop(1, paintColor('#ffdb76'));
-    circle(x, y, 11.5, g); circle(x - 3, y - 4, 3.5, '#fff'); ctx.restore(); paintingBall = false;
-  }
+  let paintedState = '';
   function draw(game, theme, state, fx, palette = null) {
-    activePalette = palette;
-    const t = state.calm ? 0 : game.clock / 1000;
-    ctx.clearRect(0, 0, W, H); ctx.fillStyle = paintColor(theme.bg, 'surface'); ctx.fillRect(0, 0, W, H);
-    ctx.save();
-    if (!state.calm && fx.shake > 0) ctx.translate(Math.sin(t * 81) * fx.shake, Math.cos(t * 65) * fx.shake * .6);
-    ctx.fillStyle = paintColor('#b8b08b1d', 'object');
-    for (let x = 12; x < W; x += 24) for (let y = 12; y < H; y += 24) circle(x, y, .8, '#b8b08b26');
-    // The shooter remains separate, without a flight-mode label or booster.
-    box(38, 43, 620, 741, 30, '#ffffff29', '#c3c4a93b');
-    box(689, 128, 47, 739, 21, '#d9e6d299');
-    ctx.save(); ctx.strokeStyle = paintColor('#afc09a75', 'line'); ctx.lineWidth = 2; ctx.setLineDash([3, 10]); ctx.beginPath(); ctx.moveTo(713, 750); ctx.lineTo(713, 154); ctx.stroke(); ctx.restore();
-    for (let i = 0; i < 3; i++) { const y = 650 + i * 60 - (t * 45 % 60); ctx.beginPath(); ctx.moveTo(704, y + 8); ctx.lineTo(713, y); ctx.lineTo(722, y + 8); ctx.strokeStyle = paintColor('#86a869a0', 'line'); ctx.lineWidth = 3; ctx.stroke(); }
-    text('P O N  P O N', 351, 112, 24, '#69815d', 'bold');
-    const bonus = game.slotMachine, bonusLabel = slotBonusLabel(bonus, game.clock);
-    text(bonusLabel || 'LITTLE PINBALL CLUB', 351, 133, 11, bonus.multiplier === 5 ? '#8b59b5' : bonus.multiplier === 2 ? '#99712d' : '#9ca184', bonusLabel ? 'bold' : '');
-    if (bonusLabel) { ctx.save(); ctx.lineWidth = 2; ctx.strokeStyle = paintColor(bonus.multiplier === 5 ? '#b494d0' : '#d5b069', 'line'); ctx.strokeRect(43, 46, 609, 737); ctx.restore(); }
-    text('↖', 651, 103, 27, '#a0b28d');
-    star(209, 112, 7, '#d7b57a', t * .3); star(495, 112, 7, '#d7b57a', -t * .3);
-    [[104, 209], [597, 647], [402, 196], [86, 639]].forEach(([x, y], i) => star(x, y + Math.sin(t + i) * 3, 4, '#d4b78475', t * .1));
-    // Painted guide rings provide motion cues without competing with the ball.
-    for (const bumper of game.bumpers) { const { x, y } = bumper.position; ctx.save(); ctx.setLineDash([3, 9]); circle(x, y, bumper.plugin.radius + 17, null, '#cfbf9a55'); ctx.restore(); }
-    for (const wall of game.walls) bodyShape(wall, '#aebf99', '#dce6ce');
-    // A diagonal one-way flap intercepts descending balls; the dashed vertical
-    // line shows the separate upward path, which is never blocked by the flap.
-    ctx.save();ctx.globalAlpha=.8;bodyShape(game.gates[1], game.rewards.gateGlow ? '#f8cc77' : '#d7bf97', '#fff3d6', false);ctx.restore();
-    ctx.save();ctx.setLineDash([5,6]);ctx.strokeStyle = paintColor('#a7ba8e', 'line');ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(676,539);ctx.lineTo(676,615);ctx.stroke();ctx.restore();
-    text('↙ 回流口', 624, 640, 12, '#9b8965');
-    const sw = (TABLE.right - TABLE.left) / state.slots, multipliers = slotMultipliers(state.slots);
-    for (let i = 0; i < state.slots; i++) {
-      const x = TABLE.left + i * sw, glow = fx.slotGlows[i] || 0;
-      box(x + 3, TABLE.slotTop, sw - 6, 86, 12, theme.colors[Math.round(i * 6 / (state.slots - 1))]);
-      if (glow) { const p = rewardProfile({ multiplier: multipliers[i] }); ctx.save(); ctx.globalAlpha = glow * .65; ctx.shadowBlur = 8 + p.tier * 5; ctx.shadowColor = paintColor(p.color, 'glow'); box(x + 3, TABLE.slotTop, sw - 6, 86, 12, p.color); ctx.restore(); }
-      text(theme.motifs[i % 4], x + sw / 2, TABLE.slotTop + 23, state.slots === 9 ? 22 : 26, '#627454');
-      text(`×${multipliers[i] * bonus.multiplier}`, x + sw / 2, TABLE.slotTop + 54, 17, '#4c6648', 'bold');
-      if (bonus.multiplier > 1) text(`进洞 ×${bonus.multiplier}`, x + sw / 2, TABLE.slotTop + 73, 9, bonus.multiplier === 5 ? '#8b59b5' : '#99712d');
-      else if (multipliers[i] === 10) text('LUCKY', x + sw / 2, TABLE.slotTop + 73, 9, '#aa8243');
+    if (!currentGame) { setup(game); currentGame = game; }
+    updateLayout(game);
+    if (cameraAngle !== clampCameraAngle(state.cameraAngle)) setCamera(state.cameraAngle);
+    const paletteChanged = currentPalette !== palette || currentTheme !== theme;
+    if (paletteChanged) {
+      currentPalette = palette; currentTheme = theme;
+      colored.forEach(({ value, color, role }) => value.color.set(palette?.color(color, role) ?? color));
+      [railSide, drumSide].forEach(m => m.color.set(palette?.color(theme.accent) ?? theme.accent));
+      pinSide.color.set(palette?.color(theme.pin) ?? theme.pin);
+      scene.background = new THREE.Color(palette?.color(theme.bg, 'surface') ?? theme.bg);
     }
-    for (const hole of game.holes) {
-      const pulse = 1 + Math.sin(t * 2.5) * .07;
-      circle(hole.x, hole.y, 23 * pulse + hole.glow * 8, null, hole.glow ? '#efb750' : '#d6bc8170', 2);
-      circle(hole.x, hole.y + 2, 19, '#968873');
-      const gradient = ctx.createRadialGradient(hole.x, hole.y, 0, hole.x, hole.y, 19); gradient.addColorStop(0, paintColor('#293b39')); gradient.addColorStop(.7, paintColor('#536753')); gradient.addColorStop(1, paintColor('#b5b697'));
-      circle(hole.x, hole.y, 18, gradient, '#ede0a2', 3);
-      star(hole.x, hole.y, 7, '#ecda90', t * .25);
-      text(`+${500 * bonus.multiplier}`, hole.x, hole.y - 51, 15, '#b39153', 'bold');
-      text('秘密洞', hole.x, hole.y + 52, 12, '#9e9375');
+    const now = performance.now(), paintState = `${state.slots}:${state.charging}:${state.theme}:${state.calm}`;
+    if (paletteChanged || now - lastAtlas >= 1000 / 30 || paintState !== paintedState) {
+      painter.draw(game, theme, state, fx, palette); atlas.needsUpdate = true; lastAtlas = now; paintedState = paintState;
     }
-    for (const guard of game.guards) bodyShape(guard, guard.plugin.storage ? '#b9a6ce' : '#d8c69c', guard.plugin.storage ? '#f4eafb' : '#efe5c8', false);
-    const storage = game.collector;
-    // The cup, live counter and visible inlet all share the physical coordinates.
-    circle(storage.x, storage.y + 2, 22, '#827590');
-    const cup = ctx.createRadialGradient(storage.x, storage.y, 0, storage.x, storage.y, 22);
-    cup.addColorStop(0, paintColor('#405c59')); cup.addColorStop(1, paintColor('#8eaaa1'));
-    circle(storage.x, storage.y, 21, cup, storage.glow ? '#f3cf7b' : '#eae0f3', 2);
-    text(`${storage.stored.length}/20`, storage.x, storage.y + 3, 11, '#fff9e9', 'bold');
-    text('蓄球罐', storage.x, storage.y - 49, 12, '#8b769f', 'bold');
-    text(storage.remaining ? `落球中 · 余 ${storage.remaining}` : '存 20 · 落 40', storage.x, storage.y + 48, 11, '#8b769f');
-    // Every bottom slot has a corresponding mouth at the top of the board.
-    for (const outlet of storage.outlets) {
-      box(outlet.x - 26, outlet.y - 9, 52, 17, 8, outlet.glow ? '#f6daa0' : '#d8d0e3', '#fff8ef');
-      box(outlet.x - 22, outlet.y - 4, 44, 7, 3, '#526961');
-      if (outlet.glow && !state.calm) { ctx.save(); ctx.globalAlpha = outlet.glow; text('↓', outlet.x, outlet.y + 31, 15, '#aa86bc', 'bold'); ctx.restore(); }
+    for (const { body, mesh } of bodies.values()) {
+      mesh.position.copy(world(body.position.x, body.position.y)); mesh.rotation.z = -body.angle;
+      if (mesh.userData.baseRadius) { const scale = (body.plugin.radius + 6) / (mesh.userData.baseRadius + 6); mesh.scale.set(scale, scale, 1); }
     }
-    for (const platform of game.deflectors) {
-      const { x, y } = platform.position, { glow, angle } = platform.plugin;
-      ctx.save(); ctx.setLineDash([3, 7]); circle(x, y, 42, null, '#c6b69780', 1.5); ctx.restore();
-      bodyShape(platform, glow > .2 ? '#f8d283' : theme.accent, '#fff9eb');
-      ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
-      // The arrow follows the physical launch direction, including calm mode.
-      ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(13, 0); ctx.moveTo(5, -7); ctx.lineTo(13, 0); ctx.lineTo(5, 7);
-      ctx.strokeStyle = paintColor('#fffaf0', 'line'); ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
-      if (glow && !state.calm) { ctx.globalAlpha = glow; text('› ›', 47 + (1 - glow) * 15, 0, 18, '#c69951', 'bold'); }
-      ctx.restore();
-      text('撞击换向', x, y + 54, 12, '#9e9375');
-    }
-    for (const rail of game.rails) {
-      if (rail.plugin.motion) {
-        const motion = rail.plugin.motion;
-        ctx.save(); ctx.setLineDash([3, 6]); ctx.strokeStyle = paintColor('#c7b4a86b', 'line'); ctx.lineWidth = 2;
-        const dx = motion.axisX * motion.amplitude, dy = motion.axisY * motion.amplitude;
-        ctx.beginPath(); ctx.moveTo(motion.x - dx, motion.y - dy); ctx.lineTo(motion.x + dx, motion.y + dy); ctx.stroke(); ctx.restore();
-      }
-      bodyShape(rail, rail.plugin.glow > .3 ? '#ffdea2' : theme.accent, '#fff5df');
-      ctx.save(); ctx.translate(rail.position.x, rail.position.y); ctx.rotate(rail.angle); text('›  ›  ›', 0, -1, 13, '#fff8ec', 'bold'); ctx.restore();
-    }
-    for (const diamond of game.diamonds) { bodyShape(diamond, diamond.plugin.glow > .3 ? '#fff1c0' : '#bdafcc', '#f6eaf9'); star(diamond.position.x, diamond.position.y, 9, '#fff9e9'); }
-    for (const spinner of game.spinners) {
-      ctx.save(); ctx.setLineDash([4, 9]); circle(spinner.position.x, spinner.position.y, 72, null, '#b2c79c5c'); ctx.restore();
-      bodyShape(spinner, spinner.plugin.glow > .25 ? '#f4cf83' : '#9fbba0', '#e9f3d9');
-      circle(spinner.position.x, spinner.position.y + 3, 16, '#607b61'); circle(spinner.position.x, spinner.position.y, 14, '#f7ebc3', '#d1be8c', 2);
-      text('✿', spinner.position.x, spinner.position.y, 19, '#bb9470');
-    }
-    for (const pin of game.pins) {
-      const { x, y } = pin.position;
-      circle(x, y + 3, 8.5, '#65794c2b');
-      circle(x, y, pin.plugin.glow > 0 ? 8.5 : 7.5, pin.plugin.glow > .3 ? '#ffe2a1' : theme.pin, '#f4f8e1', 1.5);
-      circle(x - 2, y - 2, 2.2, '#ffffffa0');
-    }
-    for (const kicker of game.kickers) {
-      const { x, y } = kicker.position, glow = kicker.plugin.glow;
-      circle(x, y + 3, 15, '#65794c35');
-      circle(x, y, 13, glow > .3 ? '#ffe2a1' : theme.accent, '#fff8e8', 2);
-      circle(x, y, 8, null, '#fff8e8', 1);
-      text('✦', x, y, 13, '#fff8e8', 'bold');
-    }
-    for (const bumper of game.bumpers) {
-      const { x, y } = bumper.position, r = bumper.plugin.radius, glow = bumper.plugin.glow;
-      circle(x, y + 7, r + 6, '#9b8b743b');
-      ctx.save(); if (glow) { ctx.shadowColor = paintColor('#f7c065', 'glow'); ctx.shadowBlur = 30 * glow; }
-      circle(x, y, r + 6 + glow * 4, glow > .2 ? '#ffd879' : theme.accent, '#fff9ec', 3);
-      circle(x, y - 2, r - 3, theme.colors[bumper.plugin.index * 2], '#fffefa', 3);
-      ctx.restore();
-      text(theme.motifs[bumper.plugin.index], x, y - (bumper.plugin.index === 2 ? 10 : 3) + (state.calm ? 0 : Math.sin(t * 2 + bumper.id)), r * .85, '#6e7f60');
-      for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; circle(x + Math.cos(a) * (r + 10), y + Math.sin(a) * (r + 10), 2.2, Math.sin(t * 3 + i) > 0 ? '#ecd5a4' : '#ffffff90'); }
-      const index=bumper.plugin.index,goal=game.rewards.goals[index],count=game.rewards.hits[index]%goal;
-      ctx.beginPath();ctx.arc(x,y,r+14,-Math.PI/2,-Math.PI/2+Math.PI*2*(count/goal));ctx.strokeStyle = paintColor('#c59450', 'line');ctx.lineWidth=3;ctx.stroke();
-      // The center counter sits inside its drum, reserving the gap above the
-      // swinging bar for the three reels even while the drum is enlarged.
-      if (index === 2) {
-        const enlarged = game.rewards.enlargedUntil > game.clock;
-        box(x-28,y+10,56,17,8,'#fff9e9ee','#ddd3b6');text(`${count} / ${goal}`,x,y+19,10,'#997747','bold');
-        if (enlarged) text(`变大 ${((game.rewards.enlargedUntil-game.clock)/1000).toFixed(1)}s`,x,y+39,10,'#b38643','bold');
-      } else { box(x-39,y+r+21,78,22,11,'#fff9e9dd','#ddd3b6');text(`${count} / ${goal}`,x,y+r+32,12,'#997747','bold'); }
-      if(index===2&&game.rewards.burstUntil>game.clock){
-        for(let i=0;i<12;i++){const angle=-Math.PI/2+i*Math.PI/6;circle(x+Math.cos(angle)*(r+27),y+Math.sin(angle)*(r+27),i===game.rewards.burstStep?5:3,i<=game.rewards.burstStep?'#dbaa45':'#e3d8b8');}
+    for (const well of wells) {
+      const value = well.storage ? `${game.collector.stored.length}/20` : '★';
+      if (well.last !== value) {
+        const ctx = well.label.getContext('2d'); ctx.clearRect(0, 0, 128, 64); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = well.storage ? 'bold 38px sans-serif' : '52px sans-serif'; ctx.fillStyle = well.storage ? '#fff9e9' : '#f5d97e';
+        ctx.fillText(value, 64, 34); well.texture.needsUpdate = true; well.last = value;
       }
     }
-    // Painted display: balls remain free to pass in front of it.
-    const cabinet = SLOT_DISPLAY, left = cabinet.x - cabinet.width / 2, top = cabinet.y - cabinet.height / 2;
-    box(left, top + 2, cabinet.width, cabinet.height, 9, '#887a6830');
-    box(left, top, cabinet.width, cabinet.height, 9, '#e8d7b7', bonus.multiplier === 5 ? '#a78ac9' : '#c8ae7e');
-    text(bonusLabel || 'L U C K Y  P O N', cabinet.x, top + 6, 8, bonus.multiplier === 5 ? '#7856a3' : '#856842', 'bold');
-    for (let reel = 0; reel < 3; reel++) {
-      const x = cabinet.x + (reel - 1) * 46, moving = bonus.spinning && !bonus.stopped[reel];
-      box(x - 21, top + 12, 42, 21, 4, '#fffaf0', moving ? '#b59ac8' : '#d0bd98');
-      ctx.save(); ctx.beginPath(); ctx.rect(x - 20, top + 13, 40, 19); ctx.clip();
-      if (moving && !state.calm) {
-        const phase = (game.clock - bonus.startedAt) / (70 + reel * 15), index = Math.floor(phase) % SLOT_SYMBOLS.length, offset = (phase % 1) * 21;
-        text(SLOT_SYMBOLS[index], x, top + 22 + offset, 20, '#52664c');
-        text(SLOT_SYMBOLS[(index + 1) % SLOT_SYMBOLS.length], x, top + 1 + offset, 20, '#52664c');
-      } else text(moving ? '·' : SLOT_SYMBOLS[bonus.reels[reel]], x, top + 22, 20, '#52664c');
-      ctx.restore();
+    const activeIds = new Set(game.balls.map(b => b.id));
+    for (const [id, mesh] of balls) if (!activeIds.has(id)) { table.remove(mesh); balls.delete(id); }
+    for (const ball of game.balls) {
+      let mesh = balls.get(ball.id);
+      if (!mesh) { mesh = new THREE.Mesh(sphere, ballMaterial); mesh.castShadow = true; table.add(mesh); balls.set(ball.id, mesh); }
+      mesh.position.copy(world(ball.body.position.x, ball.body.position.y, 12));
+      mesh.rotation.set(ball.body.position.y / 11, ball.body.position.x / 11, ball.body.angle);
     }
-    const reelStatus = bonus.spinning ? `转动中${bonus.queued ? ` · 排队 ${bonus.queued}` : ''}` : `${bonus.progress}/100 · 进洞蓄好运${bonus.queued ? ` · 排队 ${bonus.queued}` : ''}`;
-    text(reelStatus, cabinet.x, top + 37, 8, '#856842');
-    // The spring compresses while held. A ready ball remains visually separate
-    // from any live ball travelling along the lane.
     const compression = state.charging ? state.charge * 22 : 0;
-    const springTop = 813 + compression, springBottom = 865;
-    ctx.beginPath(); ctx.moveTo(713, springTop);
-    for (let i = 0; i <= 12; i++) ctx.lineTo(713 + (i % 2 ? 11 : -11), springTop + (springBottom - springTop) * i / 12);
-    ctx.strokeStyle = paintColor('#8e9f7b', 'line'); ctx.lineWidth = 4; ctx.stroke();
-    box(695, springTop - 6, 36, 8, 4, '#71896a', '#ecf1d6');
-    if (!game.balls.some(b => b.body.position.x > 683 && b.body.position.y > 730)) {
-      if (state.charging) {
-        const glow = chargeEffectsAt(state.chargeElapsed), x = TABLE.launchX, y = TABLE.launchY + compression;
-        ctx.save();
-        // These are charge cues: retain their gold/rainbow hues in every time-of-day palette.
-        if (glow.goldRadius > 0) {
-          ctx.globalAlpha = glow.goldAlpha * .55;
-          ctx.strokeStyle = '#edc674'; ctx.lineWidth = 1.7;
-          ctx.shadowColor = '#f8d78a'; ctx.shadowBlur = state.calm ? 0 : 8;
-          ctx.beginPath(); ctx.arc(x, y, state.calm ? 16 : glow.goldRadius, 0, Math.PI * 2); ctx.stroke();
-        }
-        if (glow.coronaRadius) {
-          const radius = state.calm ? 25 : glow.coronaRadius;
-          ctx.globalAlpha = state.calm ? .22 : glow.coronaAlpha;
-          ctx.shadowBlur = 0;
-          const hues = ['#ffbbba', '#ffe8ad', '#c7efbf', '#aae8e8', '#bdcaff', '#e9b7f1'];
-          for (let i = 0; i < 24; i++) {
-            const angle = i * Math.PI / 12 + (state.calm ? 0 : state.chargeElapsed / 9000);
-            const outer = radius * (i % 2 ? .78 : 1), width = .18;
-            const gradient = ctx.createRadialGradient(x, y, 5, x, y, outer);
-            gradient.addColorStop(0, '#fffdf5'); gradient.addColorStop(.25, hues[i % hues.length]); gradient.addColorStop(1, hues[i % hues.length] + '00');
-            ctx.fillStyle = gradient; ctx.beginPath(); ctx.moveTo(x, y);
-            ctx.arc(x, y, outer, angle - width, angle + width); ctx.closePath(); ctx.fill();
-          }
-          const center = ctx.createRadialGradient(x, y, 0, x, y, radius * .6);
-          center.addColorStop(0, '#ffffff'); center.addColorStop(.32, '#fff8d7aa'); center.addColorStop(1, '#fff8d700');
-          ctx.fillStyle = center; ctx.beginPath(); ctx.arc(x, y, radius * .6, 0, Math.PI * 2); ctx.fill();
-        }
-        ctx.restore();
-      }
-      ball(TABLE.launchX, TABLE.launchY + compression, .88);
-    }
-    text('PULL', 713, 850 + compression * .3, 9, '#65785c', 'bold');
-    if (game.star) {
-      const s = game.star, pulse = state.calm ? 1 : 1 + Math.sin(t * 4) * .09;
-      const purple = s.multiplier === 5, color = purple ? '#a477d4' : '#d8ae58';
-      const remaining = Math.max(0, s.expiresAt - game.clock);
-      ctx.save(); ctx.translate(s.x, s.y); ctx.scale(pulse, pulse);
-      ctx.beginPath(); ctx.arc(0, 0, 16, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * remaining / (s.expiresAt - s.born));
-      ctx.strokeStyle = paintColor(color, 'line'); ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.shadowColor = paintColor(purple ? '#b98de7' : '#efc264', 'glow'); ctx.shadowBlur = 12;
-      ctx.beginPath();
-      for (let i = 0; i < 10; i++) {
-        const angle = -Math.PI / 2 + i * Math.PI / 5, radius = i % 2 ? 5 : 11;
-        if (i) ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius); else ctx.moveTo(0, -radius);
-      }
-      ctx.closePath(); ctx.fillStyle = paintColor(purple ? '#b58ae0' : '#f5cd70', 'glow'); ctx.fill(); ctx.shadowBlur = 0;
-      ctx.strokeStyle = paintColor(purple ? '#f7eaff' : '#fff8dc', 'line'); ctx.lineWidth = 1.5; ctx.stroke();
-      text(`×${s.multiplier} · ${Math.ceil(remaining / 1000)}s`, 0, 29, 10, purple ? '#8b59b5' : '#b58b42', 'bold'); ctx.restore();
-    }
-    // Celebration scenery stays behind every live ball.
-    for (const burst of fx.celebrations || []) {
-      const p = burst.profile, fade = Math.max(0, 1 - burst.age / p.duration), calm = state.calm || burst.calm;
-      ctx.save();
-      if (burst.kind === 'clock') {
-        const x = burst.x, y = burst.y, radius = calm ? 75 : 75 + (1 - fade) * 95;
-        ctx.globalAlpha = fade * (calm ? .25 : .65);
-        circle(x, y, radius, null, p.color, 3);
-        if (!calm) {
-          circle(x, y, radius + 22, null, '#c5a0da', 2);
-          for (let i = 0; i < 12; i++) {
-            const angle = -Math.PI / 2 + i * Math.PI / 6;
-            const length = i <= Math.floor(burst.age / (1000 / 12)) ? 32 : 12;
-            ctx.beginPath(); ctx.moveTo(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
-            ctx.lineTo(x + Math.cos(angle) * (radius + length), y + Math.sin(angle) * (radius + length));
-            ctx.lineWidth = 3; ctx.strokeStyle = paintColor(i % 2 ? '#c5a0da' : p.color, 'line'); ctx.stroke();
-            star(x + Math.cos(angle) * (radius + length + 8), y + Math.sin(angle) * (radius + length + 8), 6, p.color, angle);
-          }
-          ctx.lineWidth = 4; ctx.strokeStyle = paintColor('#e2ae48', 'line'); ctx.beginPath(); ctx.roundRect(39, 45, 617, 739, 25); ctx.stroke();
-          for (let i = 0; i < 14; i++) star(i % 2 ? 641 : 54, 90 + Math.floor(i / 2) * 105, 7 + Math.sin(burst.age / 180 + i) * 2, i % 3 ? p.color : '#c5a0da');
-        }
-        ctx.globalAlpha = Math.min(1, fade * 3);
-        box(178, 119, 344, 48, 20, '#fff5dcf0', '#d9b667');
-        text('✦ 50 次碰撞 · 十二时钟盛典 ✦', 350, 144, 19, '#a27830', 'bold');
-      } else if (p.tier >= 3 && !calm) {
-        const height = 65 + p.tier * 23;
-        const gradient = ctx.createLinearGradient(0, burst.y - height, 0, burst.y);
-        gradient.addColorStop(0, paintColor('transparent')); gradient.addColorStop(1, paintColor(p.color));
-        ctx.globalAlpha = fade * .2;
-        ctx.beginPath(); ctx.moveTo(burst.x - 22, burst.y); ctx.lineTo(burst.x - 52, burst.y - height);
-        ctx.lineTo(burst.x + 52, burst.y - height); ctx.lineTo(burst.x + 22, burst.y); ctx.closePath(); ctx.fillStyle = paintColor(gradient, 'object'); ctx.fill();
-        ctx.globalAlpha = fade * .8;
-        for (let i = 0; i < p.tier; i++) star(burst.x + (i - (p.tier - 1) / 2) * 24, burst.y - 48 - Math.sin(i + burst.age / 300) * 15, 5, p.color, burst.age / 800);
-      }
-      ctx.restore();
-    }
-    for (const ripple of fx.ripples) { ctx.save(); ctx.globalAlpha = ripple.life * .65; circle(ripple.x, ripple.y, 10 + (1 - ripple.life) * (ripple.radius ?? (ripple.big ? 85 : 30)), null, ripple.color, ripple.width ?? (ripple.big ? 4 : 2)); ctx.restore(); }
-    for (const p of fx.particles) {
-      ctx.save(); ctx.globalAlpha = Math.max(0, p.life) * .85; ctx.translate(p.x, p.y); ctx.rotate(p.rotation);
-      if (p.star || p.shape === 'star') star(0, 0, p.size * 1.6, p.color);
-      else if (p.shape === 'bubble') circle(0, 0, p.size, null, p.color, 1.5);
-      else if (p.shape === 'petal') { ctx.beginPath(); ctx.ellipse(0, 0, p.size * 1.6, p.size * .7, 0, 0, Math.PI * 2); ctx.fillStyle = paintColor(p.color, 'object'); ctx.fill(); }
-      else { ctx.fillStyle = paintColor(p.color, 'object'); ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * (p.shape === 'ribbon' ? 2.6 : .65)); }
-      ctx.restore();
-    }
-    for (const p of fx.popups) {
-      ctx.save(); ctx.globalAlpha = Math.min(1, p.life * 2); ctx.font = `bold ${p.size ?? (p.big ? 26 : 23)}px "Trebuchet MS", sans-serif`; ctx.textAlign = 'center'; ctx.lineWidth = 6; ctx.strokeStyle = paintColor('#fffbee', 'line');
-      const x = Math.max(115, Math.min(550, p.x)); ctx.strokeText(p.text, x, p.y); ctx.fillStyle = paintColor(p.color || (p.big ? '#b67a26' : '#b1667b'), 'ink'); ctx.fillText(p.text, x, p.y); ctx.restore();
-    }
-    for (const b of game.balls) {
-      if (!state.calm) b.trail.forEach((pos, i) => { ctx.save(); ctx.globalAlpha = i / b.trail.length * .5; circle(pos.x, pos.y, 3 + i / b.trail.length * 7, '#f7b863'); ctx.restore(); });
-      ball(b.body.position.x, b.body.position.y);
-      if (b.scoreFactor > 1) {
-        circle(b.body.position.x, b.body.position.y, 18, null, '#e8b446b0', 1.5);
-        text(`×${b.scoreFactor}`, b.body.position.x, b.body.position.y - 25, 13, '#a87535', 'bold');
-      }
-    }
-    ctx.restore();
+    readyBall.position.copy(world(TABLE.launchX, TABLE.launchY + compression, 12));
+    readyBall.visible = !game.balls.some(b => b.body.position.x > 683 && b.body.position.y > 730);
+    spring.scale.y = (52 - compression) / 52; springPlate.position.copy(world(TABLE.launchX, 811 + compression, 5));
+    corona.visible = state.charging && readyBall.visible;
+    if (corona.visible) { paintCharge(state); corona.position.copy(world(TABLE.launchX, TABLE.launchY + compression, 24)); }
+    collectible.visible = !!game.star;
+    if (game.star) { collectible.position.copy(world(game.star.x, game.star.y, 5)); const pulse = state.calm ? 1 : 1 + Math.sin(game.clock / 250) * .09; collectible.scale.setScalar(pulse); }
+    const shake = state.calm ? 0 : fx.shake;
+    table.position.set(Math.sin(game.clock / 1000 * 81) * shake, Math.cos(game.clock / 1000 * 65) * shake * .6, 0);
+    webgl.render(scene, camera);
   }
-  return { draw, resize };
+  function snapshot() {
+    return { mode: 'webgl', cameraAngle, pitch: 14, meshes: bodies.size, triangles: webgl.info.render.triangles, contextLost: webgl.getContext().isContextLost(),
+      bodies: [...bodies.values()].map(({ body, mesh, height }) => ({ id: body.id, kind: body.label, x: mesh.position.x + W / 2, y: H / 2 - mesh.position.y, angle: -mesh.rotation.z, radius: body.plugin.radius, height, scale: mesh.scale.x, projected: project(body.position.x, body.position.y, height) })),
+      balls: [...balls].map(([id, mesh]) => ({ id, x: mesh.position.x + W / 2, y: H / 2 - mesh.position.y, z: mesh.position.z })),
+      samples: [[70,200,.8],[23,280,28.8],[150,155,18.8],[350,367,32.8],[350,465,2.8],[615,482,2]].map(([x,y,z]) => project(x,y,z)), readyBall: project(TABLE.launchX, TABLE.launchY, 12), textures: webgl.info.memory.textures, geometries: webgl.info.memory.geometries, alignmentError: Math.max(0, ...[...bodies.values()].map(({body, mesh}) => Math.hypot(mesh.position.x - (body.position.x - W / 2), mesh.position.y - (H / 2 - body.position.y)))) };
+  }
+  return { draw, resize, project, snapshot, dispose() {
+    observer.disconnect(); painter.dispose(); atlas.dispose(); chargeTexture.dispose(); environment.dispose(); wells.forEach(w => w.texture.dispose());
+    const geometries = new Set(), materials = new Set(); scene.traverse(object => { if (object.geometry) geometries.add(object.geometry); if (object.material) (Array.isArray(object.material) ? object.material : [object.material]).forEach(m => materials.add(m)); });
+    geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); webgl.dispose();
+  } };
 }

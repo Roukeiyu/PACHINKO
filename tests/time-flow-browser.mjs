@@ -56,8 +56,9 @@ try {
   await page.locator('#calm').check();
   await page.evaluate(() => {document.querySelector('#settings').close();document.querySelector('#settings').show();document.querySelector('#settings').style.visibility='hidden';});
   const samples = () => page.evaluate(() => {
-    const c=document.querySelector('#board'),ctx=c.getContext('2d');
-    return [[70,200],[23,280],[150,155],[350,367],[350,465],[615,482]].slice(0,6).map(([x,y])=>[...ctx.getImageData(Math.round(x*c.width/760),Math.round(y*c.height/900),1,1).data]);
+    const c=document.querySelector('#board'),copy=document.createElement('canvas');copy.width=c.width;copy.height=c.height;const ctx=copy.getContext('2d');ctx.drawImage(c,0,0);
+    const points=window.__ponpon.rendering.samples ?? [[70,200],[23,280],[150,155],[350,367],[350,465],[615,482]].map(([x,y])=>({x:x/760,y:y/900}));
+    return points.map(({x,y})=>[...ctx.getImageData(Math.round(x*c.width),Math.round(y*c.height),1,1).data]);
   });
   const canvasDay=await samples();
   await page.clock.setFixedTime(epoch+930000);
