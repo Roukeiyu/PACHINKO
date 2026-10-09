@@ -26,7 +26,7 @@ const game = createTable({ starRandom: () => .5, onScore: s => scores.push(s), o
 const initial = game.star;
 assert.ok(initial && initial.x < 650 && initial.y < 797);
 for (let i = 0; i < 2400; i++) game.step();
-assert.equal(game.star, initial, 'an uncollected star persists without timed replacement');
+assert.equal(game.star, initial, 'an uncollected star stays in place before its deadline');
 game.setSlots(9);
 assert.equal(game.star, initial, 'changing slots cannot replace an uncollected star');
 
@@ -50,7 +50,67 @@ assert.equal(ordinary.scoreFactor, 1, 'new balls do not inherit another ball’s
 scoreSlot(game, ordinary);
 assert.equal(scores[1].points, scores[1].basePoints);
 assert.equal(events.filter(e => e.kind === 'star').length, 2);
-console.log('PASS: one persistent star, pickup-only respawn, per-ball stacking, and multiplied slot scoring.');
+console.log('PASS: one star at a time, delayed pickup respawn, per-ball stacking, and multiplied slot scoring.');
+
+// Deadlines use simulation time and expire on the exact 30 s / 10 s boundary.
+function advanceTo(game, deadline) {
+  while (game.clock + STEP < deadline - 1e-6) game.step();
+}
+function waitForStar(game) {
+  for (let i = 0; i < 61 && !game.star; i++) game.step();
+  assert.ok(game.star);
+}
+const timedScores = [], timedEvents = [];
+const timed = createTable({ starRandom: () => .3, onScore: s => timedScores.push(s), onSurprise: e => timedEvents.push(e) });
+const expired = timed.star;
+assert.equal(expired.expiresAt - expired.born, 30000);
+advanceTo(timed, expired.expiresAt);
+assert.equal(timed.star, expired);
+timed.step();
+assert.notEqual(timed.star.id, expired.id);
+assert.ok(timed.star.x !== expired.x || timed.star.y !== expired.y);
+assert.equal(timed.star.multiplier, 2);
+assert.equal(timed.rewards.ordinaryStars, 0, 'expiration does not count as a pickup');
+assert.equal(timedEvents.length, 0, 'expiration grants no pickup reward');
+
+function collectTenOrdinary() {
+  for (let n = 1; n <= 10; n++) {
+    waitForStar(timed);
+    assert.equal(timed.star.multiplier, 2);
+    const ball = timed.launch();
+    collect(timed, ball);
+    scoreSlot(timed, ball);
+  }
+  waitForStar(timed);
+  assert.equal(timed.star.multiplier, 5, 'each ten ordinary pickups unlocks one purple star across balls');
+}
+collectTenOrdinary();
+assert.equal(timed.rewards.ordinaryStars, 10);
+const purple = timed.star;
+assert.equal(purple.expiresAt - purple.born, 10000);
+advanceTo(timed, purple.expiresAt);
+assert.equal(timed.star, purple);
+timed.step();
+assert.equal(timed.star.multiplier, 2, 'an expired purple star returns to ordinary stars');
+assert.ok(timed.star.x !== purple.x || timed.star.y !== purple.y);
+assert.equal(timed.rewards.ordinaryStars, 10);
+
+collectTenOrdinary();
+const purpleBall = timed.launch();
+collect(timed, purpleBall);
+assert.equal(purpleBall.scoreFactor, 5);
+assert.equal(timedEvents.at(-1).multiplier, 5);
+assert.equal(timed.rewards.ordinaryStars, 20, 'purple pickups do not count toward the next milestone');
+// Move clear of the next spawn, then verify that ordinary and purple boosts stack.
+put(purpleBall, 350, 100);
+waitForStar(timed);
+assert.equal(timed.star.multiplier, 2, 'a collected purple star returns to ordinary stars');
+collect(timed, purpleBall);
+assert.equal(purpleBall.scoreFactor, 10);
+scoreSlot(timed, purpleBall);
+assert.equal(timedScores.at(-1).points, timedScores.at(-1).basePoints * 10);
+assert.equal(timed.rewards.ordinaryStars, 21);
+console.log('PASS: exact star deadlines, repeating ten-pickup milestones, purple timeout/pickup recovery, and ×5 scoring.');
 
 // Two balls can reach one collectible together; only one receives the reward.
 const multi = createTable({ starRandom: () => .4 });

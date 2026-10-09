@@ -13,10 +13,10 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
   const balls = [], walls = [], pins = [], bumpers = [], rails = [], diamonds = [], spinners = [], guards = [], dividers = [], gates = [];
   const holes = [{ x: 615, y: 482, facing: Math.PI, glow: 0 }];
   const deflectors = [], pendingDeflections = [];
-  let activeStar = null, nextStarAt = 0, nextStarId = 1, lastStarLocation = -1;
+  let activeStar = null, nextStarAt = 0, nextStarId = 1, lastStarLocation = -1, nextStarMultiplier = 2;
   let clock = 0, nextId = 1;
   const pendingShots = [];
-  const rewards = { hits: [0, 0, 0], goals: [10, 10, 100], enlargedUntil: 0, burstUntil: 0, burstStep: -1, gateGlow: 0 };
+  const rewards = { hits: [0, 0, 0], goals: [10, 10, 100], enlargedUntil: 0, burstUntil: 0, burstStep: -1, gateGlow: 0, ordinaryStars: 0 };
   const stats = { launches: 0, entered: 0, scored: 0, jackpots: 0, returns: 0, timeouts: 0, redirected: 0, bonusBalls: 0, randomShots: 0, clockBursts: 0, enlargements: 0, impacts: 0, hits: { pin: 0, bumper: 0, rail: 0, spinner: 0, diamond: 0, wall: 0, deflector: 0 } };
   const add = (body, group, extra = {}) => { body.plugin = { glow: 0, ...extra }; group.push(body); Composite.add(engine.world, body); return body; };
   const segment = (x1, y1, x2, y2, thickness, group, label = 'wall', restitution = .65) => {
@@ -100,7 +100,9 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
     if (!candidates.length) return;
     const p = candidates[Math.min(candidates.length - 1, Math.floor(starRandom() * candidates.length))];
     lastStarLocation = p.index;
-    activeStar = Object.freeze({ id: nextStarId++, x: p.x, y: p.y, radius: 11, born: clock });
+    const multiplier = nextStarMultiplier, lifetime = multiplier === 5 ? 10000 : 30000;
+    activeStar = Object.freeze({ id: nextStarId++, x: p.x, y: p.y, radius: 11, born: clock, multiplier, expiresAt: clock + lifetime });
+    nextStarMultiplier = 2;
   }
   placeStar();
   function clearBalls() { for (const ball of balls) Composite.remove(engine.world, ball.body); balls.length = 0; pendingShots.length = 0; rewards.burstUntil = 0; rewards.burstStep = -1; }
@@ -194,7 +196,11 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
   function remove(ball, index) { Composite.remove(engine.world, ball.body); balls.splice(index, 1); }
   function step(dt = STEP) {
     clock += dt;
-    if (!activeStar && clock >= nextStarAt) placeStar();
+    if (activeStar && clock + 1e-6 >= activeStar.expiresAt) {
+      activeStar = null;
+      nextStarAt = clock;
+    }
+    if (!activeStar && clock + 1e-6 >= nextStarAt) placeStar();
     if (rewards.enlargedUntil && clock + 1e-6 >= rewards.enlargedUntil) { rewards.enlargedUntil = 0; resizeCenter(false); }
     rewards.gateGlow = Math.max(0, rewards.gateGlow - dt / 900);
     // Use the same simulation clock for countdowns and clock-burst scheduling;
@@ -247,8 +253,9 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
         const along = Math.max(0, Math.min(1, ((activeStar.x - from.x) * dx + (activeStar.y - from.y) * dy) / (dx * dx + dy * dy || 1)));
         if (Math.hypot(activeStar.x - from.x - along * dx, activeStar.y - from.y - along * dy) <= activeStar.radius + 11) {
           const collected = activeStar;
-          activeStar = null; nextStarAt = clock + 500; ball.scoreFactor *= 2;
-          onSurprise({ kind: 'star', x: collected.x, y: collected.y, ballId: ball.id, scoreFactor: ball.scoreFactor });
+          activeStar = null; nextStarAt = clock + 500; ball.scoreFactor *= collected.multiplier;
+          if (collected.multiplier === 2 && ++rewards.ordinaryStars % 10 === 0) nextStarMultiplier = 5;
+          onSurprise({ kind: 'star', x: collected.x, y: collected.y, ballId: ball.id, multiplier: collected.multiplier, scoreFactor: ball.scoreFactor });
         }
       }
       if (body.speed > 32) Body.setVelocity(body, { x: body.velocity.x * 32 / body.speed, y: body.velocity.y * 32 / body.speed });

@@ -79,7 +79,12 @@ for (const slots of [5, 7, 9]) for (const seedOffset of [0, 100, 200]) {
   assert.ok(game.stats.timeouts <= 3, 'obstacle layout must not trap balls');
   assert.ok(columns.size >= slots - 1, 'multiple routes must reach almost all slots');
   for (const kind of ['bumper', 'rail', 'spinner', 'diamond', 'pin', 'deflector']) assert.ok(game.stats.hits[kind] > 0, `${kind} participates in physical trajectories`);
-  assert.ok(outcomes.every(r => Number.isInteger(Math.log2(r.scoreFactor)) && r.points === r.basePoints * r.scoreFactor && (r.kind === 'jackpot' ? r.basePoints === 500 : [2, 3, 5, 10].includes(r.multiplier) && r.basePoints === r.multiplier * 10)));
+  assert.ok(outcomes.every(r => {
+    let factor = r.scoreFactor;
+    if (!Number.isInteger(factor) || factor < 1) return false;
+    for (const prime of [2, 5]) while (factor % prime === 0) factor /= prime;
+    return factor === 1 && r.points === r.basePoints * r.scoreFactor && (r.kind === 'jackpot' ? r.basePoints === 500 : [2, 3, 5, 10].includes(r.multiplier) && r.basePoints === r.multiplier * 10);
+  }));
   for (const k of Object.keys(totals)) totals[k] += game.stats[k];
   console.log(`PASS: ${slots} slots, sequence ${seedOffset}, ${JSON.stringify(game.stats)}, ${columns.size} distinct scoring slots.`);
 }

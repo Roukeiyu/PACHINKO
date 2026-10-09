@@ -134,16 +134,20 @@ export function createRenderer(canvas) {
     text('PULL', 713, 850 + compression * .3, 9, '#65785c', 'bold');
     if (game.star) {
       const s = game.star, pulse = state.calm ? 1 : 1 + Math.sin(t * 4) * .09;
+      const purple = s.multiplier === 5, color = purple ? '#a477d4' : '#d8ae58';
+      const remaining = Math.max(0, s.expiresAt - game.clock);
       ctx.save(); ctx.translate(s.x, s.y); ctx.scale(pulse, pulse);
-      ctx.shadowColor = '#efc264'; ctx.shadowBlur = 12;
+      ctx.beginPath(); ctx.arc(0, 0, 16, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * remaining / (s.expiresAt - s.born));
+      ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.shadowColor = purple ? '#b98de7' : '#efc264'; ctx.shadowBlur = 12;
       ctx.beginPath();
       for (let i = 0; i < 10; i++) {
         const angle = -Math.PI / 2 + i * Math.PI / 5, radius = i % 2 ? 5 : 11;
         if (i) ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius); else ctx.moveTo(0, -radius);
       }
-      ctx.closePath(); ctx.fillStyle = '#f5cd70'; ctx.fill(); ctx.shadowBlur = 0;
-      ctx.strokeStyle = '#fff8dc'; ctx.lineWidth = 1.5; ctx.stroke();
-      text('×2', 0, 23, 11, '#b58b42', 'bold'); ctx.restore();
+      ctx.closePath(); ctx.fillStyle = purple ? '#b58ae0' : '#f5cd70'; ctx.fill(); ctx.shadowBlur = 0;
+      ctx.strokeStyle = purple ? '#f7eaff' : '#fff8dc'; ctx.lineWidth = 1.5; ctx.stroke();
+      text(`×${s.multiplier} · ${Math.ceil(remaining / 1000)}s`, 0, 29, 10, purple ? '#8b59b5' : '#b58b42', 'bold'); ctx.restore();
     }
     for (const ripple of fx.ripples) { ctx.save(); ctx.globalAlpha = ripple.life * .65; circle(ripple.x, ripple.y, 10 + (1 - ripple.life) * (ripple.big ? 85 : 30), null, ripple.color, ripple.big ? 4 : 2); ctx.restore(); }
     for (const p of fx.particles) { ctx.save(); ctx.globalAlpha = p.life; ctx.translate(p.x, p.y); ctx.rotate(p.rotation); if (p.star) star(0, 0, p.size * 1.6, p.color); else { ctx.fillStyle = p.color; ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * .65); } ctx.restore(); }
