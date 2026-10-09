@@ -16,7 +16,7 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
   let activeStar = null, nextStarAt = 0, nextStarId = 1, lastStarLocation = -1, nextStarMultiplier = 2;
   let clock = 0, nextId = 1;
   const pendingShots = [];
-  const rewards = { hits: [0, 0, 0], goals: [10, 10, 100], enlargedUntil: 0, burstUntil: 0, burstStep: -1, gateGlow: 0, ordinaryStars: 0 };
+  const rewards = { hits: [0, 0, 0], goals: [10, 10, 50], enlargedUntil: 0, burstUntil: 0, burstStep: -1, gateGlow: 0, ordinaryStars: 0 };
   const stats = { launches: 0, entered: 0, scored: 0, jackpots: 0, returns: 0, timeouts: 0, redirected: 0, bonusBalls: 0, randomShots: 0, clockBursts: 0, enlargements: 0, impacts: 0, hits: { pin: 0, kicker: 0, bumper: 0, rail: 0, spinner: 0, diamond: 0, wall: 0, deflector: 0 } };
   const add = (body, group, extra = {}) => { body.plugin = { glow: 0, ...extra }; group.push(body); Composite.add(engine.world, body); return body; };
   const segment = (x1, y1, x2, y2, thickness, group, label = 'wall', restitution = .65) => {
