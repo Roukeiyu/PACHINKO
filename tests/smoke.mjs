@@ -13,7 +13,8 @@ try {
   await page.goto(process.env.TEST_URL || 'http://127.0.0.1:5173');
   await page.waitForFunction(() => window.__ponpon?.pins === 28);
   await page.screenshot({ path: 'test-results/desktop.png', fullPage: true });
-  await page.locator('#launch').click();
+  await page.locator('#launch').hover();
+  await page.mouse.down(); await page.waitForTimeout(1100); await page.mouse.up();
   await page.waitForFunction(() => window.__ponpon.positions.some(p => p.x > 680 && p.y < 650));
   await page.waitForFunction(() => window.__ponpon.stats.entered > 0);
   assert.equal(await page.locator('#ball-count').textContent(), '1');
@@ -22,6 +23,21 @@ try {
   await page.waitForFunction(() => window.__ponpon.score > 0, null, { timeout: 30000 });
   await page.locator('#auto').click();
   console.log('PASS: ball launches from lower right, exits the lane, lands and awards points; audio is unlocked.');
+  await page.locator('#auto').click();
+  await page.locator('#power').focus(); await page.keyboard.press('Home');
+  assert.equal(await page.locator('#power-value').textContent(), '1%');
+  let weakShots = 0;
+  const returnsBefore = await page.evaluate(() => window.__ponpon.stats.returns);
+  for (let i = 0; i < 45; i++) {
+    const weak = await page.evaluate(() => window.__ponpon.positions.filter(p => p.power === .01));
+    weakShots += weak.length;
+    assert.ok(weak.every(p => p.y > 784 && !p.entered), '1% in the actual UI cannot fly up the lane');
+    await page.waitForTimeout(60);
+  }
+  assert.ok(weakShots > 0, 'automatic mode really launched at 1%');
+  assert.ok(await page.evaluate(before => window.__ponpon.stats.returns > before, returnsBefore), 'weak automatic shots return');
+  await page.keyboard.press('End'); await page.locator('#auto').click();
+  console.log('PASS: the 1% automatic slider produces only a tiny hop and natural return.');
   for (const slots of [5, 9, 7]) {
     await page.locator('#settings-button').click();
     await page.locator(`[data-slots="${slots}"]`).click();

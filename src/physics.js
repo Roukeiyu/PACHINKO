@@ -1,7 +1,7 @@
 import Matter from 'matter-js';
 
 const { Engine, Bodies, Body, Composite, Events } = Matter;
-export const TABLE = Object.freeze({ width: 760, height: 900, left: 39, right: 655, slotTop: 797, scoreLine: 865, launchX: 713, launchY: 787, boostEndY: 570 });
+export const TABLE = Object.freeze({ width: 760, height: 900, left: 39, right: 655, slotTop: 797, scoreLine: 865, launchX: 713, launchY: 787 });
 export const STEP = 1000 / 120;
 const FILTER = { world: 1, ascending: 2, playing: 4, returnRamp: 8, launchDoor: 16 };
 export const slotMultipliers = count => count === 5 ? [2, 3, 10, 3, 2] : count === 9 ? [2, 2, 3, 5, 10, 5, 3, 2, 2] : [2, 3, 5, 10, 5, 3, 2];
@@ -29,7 +29,7 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
   segment(744, 103, 744, 885, 22, walls);
   // Split the inner wall at the marked line. Ascending shots meet the vertical
   // door; returning balls meet the diagonal ramp and roll down-left into play.
-  // Above the launch gate, the former flight lane is open to the playing field.
+  segment(676, 164, 676, 529, 17, walls);
   segment(676, 625, 676, 882, 17, walls);
   const door = segment(676, 529, 676, 625, 17, gates, 'launch-door');
   door.collisionFilter = { category: FILTER.launchDoor, mask: FILTER.ascending, group: 0 };
@@ -115,7 +115,7 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
   function spawn(x, y, vx, vy, { power = 0, bonus = false, kind = 'launch' } = {}) {
     const body = Bodies.circle(x, y, 11, { label: 'ball', density: .009, restitution: .65, friction: .001, frictionAir: .001, collisionFilter: { category: bonus ? FILTER.playing : FILTER.ascending, mask: 0xffffffff, group: 0 } });
     Body.setVelocity(body, { x: vx, y: vy });
-    const ball = { id: nextId++, body, power, entered: bonus, bonus, kind, boosting: !bonus, cutoffY: null, redirected: false, trail: [], born: clock, stuck: 0, lastKick: -1000, lastBumperHits: [-1000, -1000, -1000], collisions: 0 };
+    const ball = { id: nextId++, body, power, entered: bonus, bonus, kind, redirected: false, trail: [], born: clock, stuck: 0, lastKick: -1000, lastBumperHits: [-1000, -1000, -1000], collisions: 0 };
     Composite.add(engine.world, body); balls.push(ball);
     if (bonus) stats.bonusBalls++;
     return ball;
@@ -123,8 +123,9 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
   function launch(power = .65) {
     if (balls.length >= 24 || balls.some(ball => !ball.entered && ball.body.position.x > 688 && ball.body.position.y > 675)) return null;
     power = Math.max(0, Math.min(1, power));
-    // Start with a spring impulse, then add force only in the lower launch lane.
-    const ball = spawn(TABLE.launchX + (random() - .5) * 1.5, TABLE.launchY, -.05, -(12 + power * 3), { power });
+    // One spring impulse proportional to the held charge. No minimum velocity,
+    // continuing booster, or speed maintenance: weak shots fall back naturally.
+    const ball = spawn(TABLE.launchX + (random() - .5) * 1.5, TABLE.launchY, -.05 * power, -32 * power, { power });
     stats.launches++;
     return ball;
   }
@@ -203,16 +204,7 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
     }
     for (const ball of balls) {
       const { body } = ball;
-      if (ball.boosting) {
-        if (body.position.y <= TABLE.boostEndY || body.position.x < 689) { ball.boosting = false; ball.cutoffY = body.position.y; }
-        else {
-          // Do not apply a final force step that would extend beyond the line.
-          const travel = Math.max(.01, -body.velocity.y * dt / (1000 / 60));
-          const fraction = Math.min(1, (body.position.y - TABLE.boostEndY) / travel);
-          Body.applyForce(body, body.position, { x: 0, y: -body.mass * (.0035 + ball.power * .0015) * fraction });
-        }
-      }
-      if (!ball.boosting && (ball.entered || body.velocity.y > 0)) body.collisionFilter.category = FILTER.playing;
+      if (ball.entered || body.velocity.y > 0) body.collisionFilter.category = FILTER.playing;
     }
     Body.setAngle(spinner, Math.sin(clock / 1350) * .85, true);
     for (const rail of rails) {
@@ -234,7 +226,6 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
       const dx = Math.cos(p.angle), dy = Math.sin(p.angle);
       Body.setPosition(ball.body, { x: obstacle.position.x + dx * (p.radius + 14), y: obstacle.position.y + dy * (p.radius + 14) });
       Body.setVelocity(ball.body, { x: dx * 12.5, y: dy * 12.5 });
-      ball.boosting = false;
       onSurprise({ kind: 'deflect', x: obstacle.position.x, y: obstacle.position.y, angle: p.angle });
     }
     for (const body of [...pins, ...bumpers, ...rails, ...diamonds, ...spinners, ...deflectors]) body.plugin.glow = Math.max(0, body.plugin.glow - dt / 320);
@@ -242,7 +233,6 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
     for (let i = balls.length - 1; i >= 0; i--) {
       const ball = balls[i], { body } = ball, { x, y } = body.position;
       ball.trail.push({ x, y }); if (ball.trail.length > 18) ball.trail.shift();
-      if (ball.boosting && y <= TABLE.boostEndY) { ball.boosting = false; ball.cutoffY = y; }
       if (!ball.entered && x < 650) { ball.entered = true; body.collisionFilter.category = FILTER.playing; stats.entered++; }
       if (body.speed > 32) Body.setVelocity(body, { x: body.velocity.x * 32 / body.speed, y: body.velocity.y * 32 / body.speed });
       const hole = ball.entered && holes.find(h => Math.hypot(x - h.x, y - h.y) < 18);

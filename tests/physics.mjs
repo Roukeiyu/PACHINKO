@@ -32,31 +32,30 @@ assert.notDeepEqual(createTable({ random: seeded(1) }).pins.map(p => p.position)
 console.log('PASS: 16 random layouts keep 28 spaced pins, cover every band, and clear both rails throughout their horizontal travel.');
 {
   const game = createTable({ random: seeded(5) }), ball = game.launch();
-  ball.boosting = false;
   Matter.Body.setPosition(ball.body, { x: 713, y: 350 });
   Matter.Body.setVelocity(ball.body, { x: -8, y: 0 });
   for (let i = 0; i < 15; i++) game.step();
-  assert.ok(ball.body.position.x < 660, 'upper flight area opens into the field');
-  assert.equal(game.stats.hits.wall, 0, 'there is no invisible former divider');
+  assert.ok(ball.body.position.x > 690, 'upper shooter wall keeps the shot inside the lane');
+  assert.ok(game.stats.hits.wall > 0, 'restored divider physically blocks the ball');
 }
 {
   const game = createTable({ random: seeded(5) }), ball = game.launch();
-  ball.entered = true; ball.boosting = false;
+  ball.entered = true;
   Matter.Body.setPosition(ball.body, { x: 55, y: 335 });
   Matter.Body.setVelocity(ball.body, { x: 0, y: 8 });
   for (let i = 0; i < 30 && !game.stats.hits.wall; i++) game.step();
   assert.ok(game.stats.hits.wall > 0 && ball.body.position.y < 400, 'left guard physically intercepts a descending ball');
 }
-console.log('PASS: left guard blocks descending balls and the removed upper divider allows cross-field travel.');
+console.log('PASS: left guard blocks descending balls and the restored upper divider contains the shooter lane.');
 const totals = { scored: 0, jackpots: 0, returns: 0, timeouts: 0 };
 for (const slots of [5, 7, 9]) {
   const outcomes = [], columns = new Set();
   const game = createTable({ slots, random: seeded(42 + slots), onScore: result => { outcomes.push(result); if (result.kind === 'slot') columns.add(result.column); } });
   let escaped = 0;
   for (let shot = 0; shot < 120; shot++) {
-    const ball = game.launch(.2 + (shot % 17) / 20);
+    const ball = game.launch(.65 + (shot % 15) * .025);
     assert.ok(ball); assert.ok(ball.body.position.x > 680 && ball.body.position.y > 760, 'must spawn in lower right shooter lane');
-    assert.ok(ball.body.velocity.y < -12 && ball.boosting, 'spring starts upward, with the lower-lane booster engaged');
+    assert.ok(ball.body.velocity.y < -20, 'charged shots receive an initial upward spring impulse');
     for (let step = 0; step < 5500 && game.balls.length; step++) {
       game.step();
       for (const b of game.balls) if (b.body.position.x < 30 || b.body.position.x > 734 || b.body.position.y < 36) escaped++;
@@ -101,7 +100,7 @@ assert.ok(totals.jackpots > 0 && totals.jackpots < 36, 'physical bonus cups shou
   const headings = new Set(), quadrants = new Set();
   for (let hit = 0; hit < 32; hit++) {
     const previous = platform.plugin.angle;
-    const ball = game.launch(); ball.entered = true; ball.boosting = false;
+    const ball = game.launch(); ball.entered = true;
     Matter.Body.setPosition(ball.body, { x: platform.position.x, y: platform.position.y - 60 });
     Matter.Body.setVelocity(ball.body, { x: 0, y: 8 });
     for (let step = 0; step < 30 && platform.plugin.hits === hit; step++) game.step();
@@ -126,7 +125,7 @@ assert.ok(totals.jackpots > 0 && totals.jackpots < 36, 'physical bonus cups shou
 // The shifted upper-left rail intercepts a diagonal approach to the triangle.
 {
   const game = createTable(), ball = game.launch();
-  ball.entered = true; ball.boosting = false;
+  ball.entered = true;
   Matter.Body.setPosition(ball.body, { x: 260, y: 270 });
   Matter.Body.setVelocity(ball.body, { x: -5, y: 6 });
   for (let step = 0; step < 60 && !game.stats.hits.rail; step++) game.step();

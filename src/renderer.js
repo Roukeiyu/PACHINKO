@@ -32,10 +32,10 @@ export function createRenderer(canvas) {
     if (!state.calm && fx.shake > 0) ctx.translate(Math.sin(t * 81) * fx.shake, Math.cos(t * 65) * fx.shake * .6);
     ctx.fillStyle = '#b8b08b1d';
     for (let x = 12; x < W; x += 24) for (let y = 12; y < H; y += 24) circle(x, y, .8, '#b8b08b26');
-    // The upper right is open play space; only the lower shooter is recessed.
+    // The shooter remains separate, without a flight-mode label or booster.
     box(38, 43, 620, 741, 30, '#ffffff29', '#c3c4a93b');
-    box(689, TABLE.boostEndY, 47, 867 - TABLE.boostEndY, 21, '#d9e6d299');
-    ctx.save(); ctx.strokeStyle = '#afc09a75'; ctx.lineWidth = 2; ctx.setLineDash([3, 10]); ctx.beginPath(); ctx.moveTo(713, 750); ctx.lineTo(713, 590); ctx.stroke(); ctx.restore();
+    box(689, 128, 47, 739, 21, '#d9e6d299');
+    ctx.save(); ctx.strokeStyle = '#afc09a75'; ctx.lineWidth = 2; ctx.setLineDash([3, 10]); ctx.beginPath(); ctx.moveTo(713, 750); ctx.lineTo(713, 154); ctx.stroke(); ctx.restore();
     for (let i = 0; i < 3; i++) { const y = 650 + i * 60 - (t * 45 % 60); ctx.beginPath(); ctx.moveTo(704, y + 8); ctx.lineTo(713, y); ctx.lineTo(722, y + 8); ctx.strokeStyle = '#86a869a0'; ctx.lineWidth = 3; ctx.stroke(); }
     text('P O N  P O N', 351, 78, 24, '#69815d', 'bold');
     text('LITTLE PINBALL CLUB', 351, 108, 11, '#9ca184');
@@ -49,7 +49,6 @@ export function createRenderer(canvas) {
     // line shows the separate upward path, which is never blocked by the flap.
     ctx.save();ctx.globalAlpha=.8;bodyShape(game.gates[1], game.rewards.gateGlow ? '#f8cc77' : '#d7bf97', '#fff3d6', false);ctx.restore();
     ctx.save();ctx.setLineDash([5,6]);ctx.strokeStyle='#a7ba8e';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(676,539);ctx.lineTo(676,615);ctx.stroke();ctx.restore();
-    ctx.save();ctx.setLineDash([4,4]);ctx.strokeStyle='#da8d97';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(691,TABLE.boostEndY);ctx.lineTo(735,TABLE.boostEndY);ctx.stroke();ctx.restore();
     text('↙ 回流口', 624, 640, 12, '#9b8965');
     const sw = (TABLE.right - TABLE.left) / state.slots, multipliers = slotMultipliers(state.slots);
     for (let i = 0; i < state.slots; i++) {
