@@ -1,4 +1,5 @@
-:root{font-family: "Trebuchet MS", "PingFang SC", "Microsoft YaHei", sans-serif;color:#344d42;background:#f8f7f0;font-synthesis:none;--pink:#ee8d9d;--mint:#dce9d6;--ink:#344d42;--accent:#f1a1ad}
+/* Keep DOM controls and the pastel canvas in the same palette, including browser auto-dark mode. */
+:root{color-scheme:only light;font-family: "Trebuchet MS", "PingFang SC", "Microsoft YaHei", sans-serif;color:#344d42;background:#f8f7f0;font-synthesis:none;--pink:#ee8d9d;--mint:#dce9d6;--ink:#344d42;--accent:#f1a1ad}
 *{box-sizing:border-box}body{margin:0}button,input{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.5}button,a,input{-webkit-tap-highlight-color:transparent}button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #c2753b;outline-offset:5px}button{color:inherit}button svg{pointer-events:none}svg{vertical-align:middle}button{transition:transform .18s,background .18s,box-shadow .18s}button:active{transform:translateY(2px)}
 #app,#app *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-user-drag:none}
 #app [hidden]{display:none!important}
@@ -22,7 +23,7 @@ header{height:76px}.intro{padding:20px 0}.intro h1{font-size:27px;margin:6px 0}.
 .board-wrap{touch-action:pan-y}.board-wrap canvas{aspect-ratio:760/900;height:auto}
 .mobile-hud{display:flex;align-items:center;justify-content:space-between;gap:9px;font-size:10px;padding:0 4px 11px;color:#6f8061}
 .mobile-hud strong{font-size:19px;font-variant-numeric:tabular-nums;color:#34543d;margin-left:5px}.bonus-label{color:#a17d3d;font-size:9px}.bonus-label b{font-size:12px}
-#shot-state{font-size:9px;letter-spacing:.3px}.plunger-hit{position:absolute;right:.6%;bottom:1.5%;width:11%;min-width:44px;height:20%;border:0;background:transparent;border-radius:12px;touch-action:none;-webkit-touch-callout:none;user-select:none}.plunger-hit:focus-visible{outline-offset:-4px}
+#shot-state{font-size:9px;letter-spacing:.3px}.plunger-hit{appearance:none;-webkit-appearance:none;forced-color-adjust:none;position:absolute;right:.6%;bottom:1.5%;width:11%;min-width:44px;height:20%;border:0;background:transparent;border-radius:12px;touch-action:none;-webkit-touch-callout:none;user-select:none}.plunger-hit:focus-visible{outline-offset:-4px}
 .launch-control{padding:9px 2px 0}.power-row{display:flex;align-items:center;gap:12px;font-size:10px;color:#6d7a60;margin-bottom:5px}
 .power-row input{flex:1;min-width:0;accent-color:#809669;height:26px;cursor:pointer;touch-action:pan-y}.power-row output{min-width:32px;font-variant-numeric:tabular-nums;text-align:right}
 .launch-button{--charge:0%;position:relative;overflow:hidden;background:linear-gradient(90deg,#688654 var(--charge),#385442 var(--charge));padding:13px 9px;letter-spacing:.5px;font-size:13px;gap:8px;min-height:48px;user-select:none;touch-action:none;-webkit-touch-callout:none}
