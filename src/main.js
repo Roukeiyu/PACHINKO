@@ -92,10 +92,10 @@ let chargeStart = 0, chargeSource = null;
 
 function surprise(event) {
   const names = { clock: '✦ 百次碰撞！十二时钟爆发', random: '✧ 左鼓满 10 次，送一颗弹珠', enlarge: '✿ 右鼓满 10 次，中央放大 5 秒', redirect: '↙ 回流出口，再冒险一次' };
-  if (event.kind !== 'emit') toast(names[event.kind]);
+  if (names[event.kind]) toast(names[event.kind]);
   fx.ripples.push({ x: event.x, y: event.y, life: 1, big: event.kind === 'clock' || event.kind === 'enlarge', color: event.kind === 'redirect' ? '#92b68d' : '#e6b44f' });
   if (event.kind === 'clock' && !state.calm) fx.shake = 3;
-  if (event.kind === 'emit' && !state.calm) {
+  if ((event.kind === 'emit' || event.kind === 'deflect') && !state.calm) {
     for (let i = 0; i < 5; i++) fx.particles.push({ x: event.x, y: event.y, vx: Math.cos(event.angle) * (3 + i), vy: Math.sin(event.angle) * (3 + i), life: .8, size: 3, rotation: event.angle, color: '#edbf68', star: true });
   }
 }

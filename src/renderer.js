@@ -72,6 +72,18 @@ export function createRenderer(canvas) {
       text('秘密洞', hole.x, hole.y + 52, 12, '#9e9375');
     }
     for (const guard of game.guards) bodyShape(guard, '#d8c69c', '#efe5c8', false);
+    for (const platform of game.deflectors) {
+      const { x, y } = platform.position, { glow, angle } = platform.plugin;
+      ctx.save(); ctx.setLineDash([3, 7]); circle(x, y, 42, null, '#c6b69780', 1.5); ctx.restore();
+      bodyShape(platform, glow > .2 ? '#f8d283' : theme.accent, '#fff9eb');
+      ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
+      // The arrow follows the physical launch direction, including calm mode.
+      ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(13, 0); ctx.moveTo(5, -7); ctx.lineTo(13, 0); ctx.lineTo(5, 7);
+      ctx.strokeStyle = '#fffaf0'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
+      if (glow && !state.calm) { ctx.globalAlpha = glow; text('› ›', 47 + (1 - glow) * 15, 0, 18, '#c69951', 'bold'); }
+      ctx.restore();
+      text('撞击换向', x, y + 54, 12, '#9e9375');
+    }
     for (const rail of game.rails) {
       bodyShape(rail, rail.plugin.glow > .3 ? '#ffdea2' : theme.accent, '#fff5df');
       ctx.save(); ctx.translate(rail.position.x, rail.position.y); ctx.rotate(rail.angle); text('›  ›  ›', 0, -1, 13, '#fff8ec', 'bold'); ctx.restore();

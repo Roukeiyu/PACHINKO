@@ -11,11 +11,13 @@ export const slotMultipliers = count => count === 5 ? [2, 3, 10, 3, 2] : count =
 export function createTable({ slots = 7, random = Math.random, onHit = () => {}, onScore = () => {}, onReturn = () => {}, onSurprise = () => {} } = {}) {
   const engine = Engine.create({ gravity: { x: 0, y: 1.05 }, positionIterations: 8, velocityIterations: 8 });
   const balls = [], walls = [], pins = [], bumpers = [], rails = [], diamonds = [], spinners = [], guards = [], dividers = [], gates = [];
-  const holes = [{ x: 78, y: 466, facing: 0, glow: 0 }, { x: 615, y: 482, facing: Math.PI, glow: 0 }];
+  const holes = [{ x: 615, y: 482, facing: Math.PI, glow: 0 }];
+  const deflectors = [], pendingDeflections = [];
+  const deflectionAngles = [-Math.PI / 3, 0, Math.PI / 3];
   let clock = 0, nextId = 1;
   const pendingShots = [];
   const rewards = { hits: [0, 0, 0], goals: [10, 10, 100], enlargedUntil: 0, burstUntil: 0, burstStep: -1, gateGlow: 0 };
-  const stats = { launches: 0, entered: 0, scored: 0, jackpots: 0, returns: 0, timeouts: 0, redirected: 0, bonusBalls: 0, randomShots: 0, clockBursts: 0, enlargements: 0, impacts: 0, hits: { pin: 0, bumper: 0, rail: 0, spinner: 0, diamond: 0, wall: 0 } };
+  const stats = { launches: 0, entered: 0, scored: 0, jackpots: 0, returns: 0, timeouts: 0, redirected: 0, bonusBalls: 0, randomShots: 0, clockBursts: 0, enlargements: 0, impacts: 0, hits: { pin: 0, bumper: 0, rail: 0, spinner: 0, diamond: 0, wall: 0, deflector: 0 } };
   const add = (body, group, extra = {}) => { body.plugin = { glow: 0, ...extra }; group.push(body); Composite.add(engine.world, body); return body; };
   const segment = (x1, y1, x2, y2, thickness, group, label = 'wall', restitution = .65) => {
     const length = Math.hypot(x2 - x1, y2 - y1);
@@ -45,6 +47,10 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
   [[254, 668], [442, 695]].forEach(([x, y]) => add(Bodies.polygon(x, y, 4, 23, { isStatic: true, label: 'diamond', restitution: .95, friction: 0, angle: Math.PI / 4 }), diamonds));
   const spinner = add(Bodies.rectangle(351, 540, 122, 13, { isStatic: true, label: 'spinner', chamfer: { radius: 6 }, restitution: .85, friction: .01 }), spinners);
   spinner.plugin.radius = 61;
+  // The triangle's tip and arrow share the actual outgoing direction. All
+  // three directions aim into the table, never into the nearby left wall.
+  const triangle = add(Bodies.fromVertices(99, 466, [[{ x: 34, y: 0 }, { x: -17, y: -23 }, { x: -17, y: 23 }]], { isStatic: true, label: 'deflector', restitution: .8, friction: 0 }), deflectors, { radius: 34, direction: 0, angle: deflectionAngles[0], hits: 0 });
+  Body.setAngle(triangle, deflectionAngles[0]);
   [[158, 162], [331, 161], [537, 164], [154, 239], [335, 273], [562, 235], [238, 426], [452, 423], [175, 463], [519, 469], [270, 495], [438, 497], [304, 612], [378, 631], [152, 687], [557, 701], [96, 741], [207, 756], [333, 743], [475, 759], [603, 746]].forEach(([x, y], i) => {
     add(Bodies.circle(x, y, 7.5, { isStatic: true, label: 'pin', restitution: .85, friction: 0 }), pins, { index: i });
   });
@@ -57,9 +63,8 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
       segment(hole.x + Math.cos(a) * 32, hole.y + Math.sin(a) * 32, hole.x + Math.cos(b) * 32, hole.y + Math.sin(b) * 32, 8, guards, 'guard');
     }
   }
-  // Cover the outer seam between each recessed cup and the side wall, so a
+  // Cover the outer seam between the recessed cup and the side wall, so a
   // falling ball cannot wedge into the narrow space behind the cup.
-  segment(28, 397, 78, 422, 13, walls);
   segment(665, 413, 615, 438, 13, walls);
   function clearBalls() { for (const ball of balls) Composite.remove(engine.world, ball.body); balls.length = 0; pendingShots.length = 0; rewards.burstUntil = 0; rewards.burstStep = -1; }
   function setSlots(count) {
@@ -125,6 +130,7 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
       if (obstacle.label === 'ball') continue;
       const ball = balls.find(b => b.body === body);
       if (!ball) continue;
+      if (obstacle.label === 'deflector') pendingDeflections.push({ ball, obstacle });
       ball.collisions++;
       stats.impacts++;
       if (obstacle.label in stats.hits) stats.hits[obstacle.label]++;
@@ -174,7 +180,21 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
     }
     Body.setAngle(spinner, Math.sin(clock / 1350) * .85, true);
     Engine.update(engine, dt);
-    for (const body of [...pins, ...bumpers, ...rails, ...diamonds, ...spinners]) body.plugin.glow = Math.max(0, body.plugin.glow - dt / 320);
+    // Apply the active platform's kick after the solver so the contact response
+    // cannot overwrite it. Place the ball just beyond the new tip to avoid
+    // overlapping a rotated face and counting one contact multiple times.
+    for (const { ball, obstacle } of pendingDeflections.splice(0)) {
+      const p = obstacle.plugin;
+      p.direction = (p.direction + 1) % deflectionAngles.length;
+      p.angle = deflectionAngles[p.direction]; p.hits++;
+      Body.setAngle(obstacle, p.angle);
+      const dx = Math.cos(p.angle), dy = Math.sin(p.angle);
+      Body.setPosition(ball.body, { x: obstacle.position.x + dx * (p.radius + 14), y: obstacle.position.y + dy * (p.radius + 14) });
+      Body.setVelocity(ball.body, { x: dx * 12.5, y: dy * 12.5 });
+      ball.boosting = false;
+      onSurprise({ kind: 'deflect', x: obstacle.position.x, y: obstacle.position.y, angle: p.angle });
+    }
+    for (const body of [...pins, ...bumpers, ...rails, ...diamonds, ...spinners, ...deflectors]) body.plugin.glow = Math.max(0, body.plugin.glow - dt / 320);
     for (const hole of holes) hole.glow = Math.max(0, hole.glow - dt / 1500);
     for (let i = balls.length - 1; i >= 0; i--) {
       const ball = balls[i], { body } = ball, { x, y } = body.position;
@@ -199,5 +219,5 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
       if (ball.stuck > 1000) { Body.setVelocity(body, { x: random() > .5 ? .9 : -.9, y: -.5 }); ball.stuck = 0; }
     }
   }
-  return { engine, balls, walls, pins, bumpers, rails, diamonds, spinners, guards, dividers, gates, holes, stats, rewards, launch, step, setSlots, get clock() { return clock; }, get slots() { return slots; } };
+  return { engine, balls, walls, pins, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, stats, rewards, launch, step, setSlots, get clock() { return clock; }, get slots() { return slots; } };
 }
