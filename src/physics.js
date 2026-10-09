@@ -8,11 +8,12 @@ export const slotMultipliers = count => count === 5 ? [2, 3, 10, 3, 2] : count =
 
 // Physics is independent of rendering, so trajectory and scoring can be tested at
 // the same fixed time step used on desktop and mobile (including fast launches).
-export function createTable({ slots = 7, random = Math.random, onHit = () => {}, onScore = () => {}, onReturn = () => {}, onSurprise = () => {} } = {}) {
+export function createTable({ slots = 7, random = Math.random, starRandom = Math.random, onHit = () => {}, onScore = () => {}, onReturn = () => {}, onSurprise = () => {} } = {}) {
   const engine = Engine.create({ gravity: { x: 0, y: 1.05 }, positionIterations: 8, velocityIterations: 8 });
   const balls = [], walls = [], pins = [], bumpers = [], rails = [], diamonds = [], spinners = [], guards = [], dividers = [], gates = [];
   const holes = [{ x: 615, y: 482, facing: Math.PI, glow: 0 }];
   const deflectors = [], pendingDeflections = [];
+  let activeStar = null, nextStarAt = 0, nextStarId = 1, lastStarLocation = -1;
   let clock = 0, nextId = 1;
   const pendingShots = [];
   const rewards = { hits: [0, 0, 0], goals: [10, 10, 100], enlargedUntil: 0, burstUntil: 0, burstStep: -1, gateGlow: 0 };
@@ -78,6 +79,30 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
   pinPositions.forEach(([x, y], index) => {
     add(Bodies.circle(x, y, 7.5, { isStatic: true, label: 'pin', restitution: .85, friction: 0 }), pins, { index });
   });
+  // Collectibles only appear in reachable gaps. Reserve every moving rail's
+  // full swept area, the spinner's sweep and the center bumper's enlarged size.
+  const starLocations = [], probe = Bodies.circle(0, 0, 26);
+  const starObstacles = [...walls, ...pins, ...rails, ...diamonds, ...guards];
+  for (let y = 180; y <= 740; y += 20) for (let x = 80; x <= 620; x += 20) {
+    Body.setPosition(probe, { x, y });
+    if (Matter.Query.collides(probe, starObstacles).length) continue;
+    if (rails.some(r => {
+      const m = r.plugin.motion;
+      return m && x > r.bounds.min.x - Math.abs(m.axisX * m.amplitude) - 26 && x < r.bounds.max.x + Math.abs(m.axisX * m.amplitude) + 26
+        && y > r.bounds.min.y - Math.abs(m.axisY * m.amplitude) - 26 && y < r.bounds.max.y + Math.abs(m.axisY * m.amplitude) + 26;
+    })) continue;
+    if (bumpers.some(b => Math.hypot(x - b.position.x, y - b.position.y) < b.plugin.baseRadius * (b.plugin.index === 2 ? 1.5 : 1) + 26)) continue;
+    if (Math.hypot(x - 351, y - 540) < 94 || Math.hypot(x - 99, y - 466) < 64 || holes.some(h => Math.hypot(x - h.x, y - h.y) < 62)) continue;
+    starLocations.push({ x, y });
+  }
+  function placeStar() {
+    const candidates = starLocations.map((p, index) => ({ ...p, index })).filter(p => p.index !== lastStarLocation && balls.every(b => Math.hypot(p.x - b.body.position.x, p.y - b.body.position.y) > 65));
+    if (!candidates.length) return;
+    const p = candidates[Math.min(candidates.length - 1, Math.floor(starRandom() * candidates.length))];
+    lastStarLocation = p.index;
+    activeStar = Object.freeze({ id: nextStarId++, x: p.x, y: p.y, radius: 11, born: clock });
+  }
+  placeStar();
   function clearBalls() { for (const ball of balls) Composite.remove(engine.world, ball.body); balls.length = 0; pendingShots.length = 0; rewards.burstUntil = 0; rewards.burstStep = -1; }
   function setSlots(count) {
     if (![5, 7, 9].includes(count)) throw new RangeError('Slots must be 5, 7, or 9');
@@ -91,7 +116,7 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
   function spawn(x, y, vx, vy, { power = 0, bonus = false, kind = 'launch' } = {}) {
     const body = Bodies.circle(x, y, 11, { label: 'ball', density: .009, restitution: .65, friction: .001, frictionAir: .001, collisionFilter: { category: bonus ? FILTER.playing : FILTER.ascending, mask: 0xffffffff, group: 0 } });
     Body.setVelocity(body, { x: vx, y: vy });
-    const ball = { id: nextId++, body, power, entered: bonus, bonus, kind, redirected: false, trail: [], born: clock, stuck: 0, lastKick: -1000, lastBumperHits: [-1000, -1000, -1000], collisions: 0 };
+    const ball = { id: nextId++, body, power, entered: bonus, bonus, kind, scoreFactor: 1, redirected: false, trail: [], born: clock, stuck: 0, lastKick: -1000, lastBumperHits: [-1000, -1000, -1000], collisions: 0 };
     Composite.add(engine.world, body); balls.push(ball);
     if (bonus) stats.bonusBalls++;
     return ball;
@@ -169,6 +194,7 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
   function remove(ball, index) { Composite.remove(engine.world, ball.body); balls.splice(index, 1); }
   function step(dt = STEP) {
     clock += dt;
+    if (!activeStar && clock >= nextStarAt) placeStar();
     if (rewards.enlargedUntil && clock + 1e-6 >= rewards.enlargedUntil) { rewards.enlargedUntil = 0; resizeCenter(false); }
     rewards.gateGlow = Math.max(0, rewards.gateGlow - dt / 900);
     // Use the same simulation clock for countdowns and clock-burst scheduling;
@@ -180,6 +206,7 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
     }
     for (const ball of balls) {
       const { body } = ball;
+      ball.pickupFrom = { ...body.position };
       if (ball.entered || body.velocity.y > 0) body.collisionFilter.category = FILTER.playing;
     }
     Body.setAngle(spinner, Math.sin(clock / 1350) * .85, true);
@@ -205,6 +232,7 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
       const dx = Math.cos(p.angle), dy = Math.sin(p.angle);
       Body.setPosition(ball.body, { x: obstacle.position.x + dx * (p.radius + 14), y: obstacle.position.y + dy * (p.radius + 14) });
       Body.setVelocity(ball.body, { x: dx * 12.5, y: dy * 12.5 });
+      ball.pickupFrom = { ...ball.body.position };
       onSurprise({ kind: 'deflect', x: obstacle.position.x, y: obstacle.position.y, angle: p.angle });
     }
     for (const body of [...pins, ...bumpers, ...rails, ...diamonds, ...spinners, ...deflectors]) body.plugin.glow = Math.max(0, body.plugin.glow - dt / 320);
@@ -213,13 +241,23 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
       const ball = balls[i], { body } = ball, { x, y } = body.position;
       ball.trail.push({ x, y }); if (ball.trail.length > 18) ball.trail.shift();
       if (!ball.entered && x < 650) { ball.entered = true; body.collisionFilter.category = FILTER.playing; stats.entered++; }
+      if (activeStar && ball.entered) {
+        // Sweep the actual frame path so fast balls cannot skip a small star.
+        const from = ball.pickupFrom, dx = x - from.x, dy = y - from.y;
+        const along = Math.max(0, Math.min(1, ((activeStar.x - from.x) * dx + (activeStar.y - from.y) * dy) / (dx * dx + dy * dy || 1)));
+        if (Math.hypot(activeStar.x - from.x - along * dx, activeStar.y - from.y - along * dy) <= activeStar.radius + 11) {
+          const collected = activeStar;
+          activeStar = null; nextStarAt = clock + 500; ball.scoreFactor *= 2;
+          onSurprise({ kind: 'star', x: collected.x, y: collected.y, ballId: ball.id, scoreFactor: ball.scoreFactor });
+        }
+      }
       if (body.speed > 32) Body.setVelocity(body, { x: body.velocity.x * 32 / body.speed, y: body.velocity.y * 32 / body.speed });
       const hole = ball.entered && holes.find(h => Math.hypot(x - h.x, y - h.y) < 18);
-      if (hole) { hole.glow = 1; stats.jackpots++; stats.scored++; remove(ball, i); onScore({ kind: 'jackpot', points: 500, x: hole.x, y: hole.y, ballId: ball.id }); continue; }
+      if (hole) { hole.glow = 1; stats.jackpots++; stats.scored++; remove(ball, i); onScore({ kind: 'jackpot', basePoints: 500, scoreFactor: ball.scoreFactor, points: 500 * ball.scoreFactor, x: hole.x, y: hole.y, ballId: ball.id }); continue; }
       if (ball.entered && x < 666 && y >= TABLE.scoreLine) {
         const column = Math.max(0, Math.min(slots - 1, Math.floor((x - TABLE.left) / ((TABLE.right - TABLE.left) / slots))));
         const multiplier = slotMultipliers(slots)[column];
-        stats.scored++; remove(ball, i); onScore({ kind: 'slot', column, multiplier, points: multiplier * 10, x: TABLE.left + (column + .5) * (TABLE.right - TABLE.left) / slots, y: TABLE.scoreLine, ballId: ball.id }); continue;
+        stats.scored++; remove(ball, i); onScore({ kind: 'slot', column, multiplier, basePoints: multiplier * 10, scoreFactor: ball.scoreFactor, points: multiplier * 10 * ball.scoreFactor, x: TABLE.left + (column + .5) * (TABLE.right - TABLE.left) / slots, y: TABLE.scoreLine, ballId: ball.id }); continue;
       }
       // Balls falling back down the shooter lane are returned, never mis-scored
       // as the rightmost slot. A timeout is visible rather than a hidden teleport.
@@ -231,5 +269,5 @@ export function createTable({ slots = 7, random = Math.random, onHit = () => {},
       if (ball.stuck > 1000) { Body.setVelocity(body, { x: random() > .5 ? .9 : -.9, y: -.5 }); ball.stuck = 0; }
     }
   }
-  return { engine, balls, walls, pins, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, stats, rewards, launch, step, setSlots, get clock() { return clock; }, get slots() { return slots; } };
+  return { engine, balls, walls, pins, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, stats, rewards, launch, step, setSlots, get star() { return activeStar; }, get clock() { return clock; }, get slots() { return slots; } };
 }

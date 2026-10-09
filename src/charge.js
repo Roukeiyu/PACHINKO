@@ -1,7 +1,8 @@
-// Exponential approach: about 63% at 0.5s, 95% at 1.5s, and full at 3.45s.
+// Reach the 99.9% snap threshold in exactly two seconds.
 // Share this calculation between animation and release, independent of FPS.
 export function chargeAt(elapsedMs) {
-  const charge = -Math.expm1(-Math.max(0, elapsedMs) / 500);
+  if (elapsedMs >= 2000) return 1;
+  const charge = -Math.expm1(-Math.max(0, elapsedMs) * Math.log(1000) / 2000);
   return charge >= .999 ? 1 : charge;
 }
 

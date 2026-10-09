@@ -5,16 +5,16 @@ import { CANON_NOTES, createCanon, noteFrequency } from '../src/canon.js';
 import { chargeAt, chargePercent } from '../src/charge.js';
 
 assert.equal(chargeAt(0), 0); assert.equal(chargeAt(-1), 0);
-assert.ok(chargeAt(500) > .63 && chargeAt(500) < .64);
-assert.ok(chargeAt(1500) > .95 && chargeAt(1500) < .96);
+assert.ok(chargeAt(500) > .82 && chargeAt(500) < .83);
+assert.ok(chargeAt(1500) > .994 && chargeAt(1500) < .995);
 let previous = 0, previousGain = Infinity;
-for (let ms = 100; ms <= 3400; ms += 100) {
+for (let ms = 100; ms <= 1900; ms += 100) {
   const charge = chargeAt(ms), gain = charge - previous;
   assert.ok(gain > 0 && gain < previousGain, 'charge rises with progressively smaller increments');
   assert.ok(chargePercent(charge) < 100, 'unfinished charge never displays 100%');
   previous = charge; previousGain = gain;
 }
-const fullAt = 500 * Math.log(1000);
+const fullAt = 2000;
 assert.ok(chargeAt(fullAt - .1) < .999, 'remaining charge above 0.1% must not snap');
 assert.equal(chargeAt(fullAt), 1, '99.9% snaps to exactly full power');
 assert.equal(chargeAt(fullAt + 60000), 1);

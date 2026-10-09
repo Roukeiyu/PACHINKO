@@ -132,11 +132,28 @@ export function createRenderer(canvas) {
     box(695, springTop - 6, 36, 8, 4, '#71896a', '#ecf1d6');
     if (!game.balls.some(b => b.body.position.x > 683 && b.body.position.y > 730)) ball(TABLE.launchX, TABLE.launchY + compression, .88);
     text('PULL', 713, 850 + compression * .3, 9, '#65785c', 'bold');
+    if (game.star) {
+      const s = game.star, pulse = state.calm ? 1 : 1 + Math.sin(t * 4) * .09;
+      ctx.save(); ctx.translate(s.x, s.y); ctx.scale(pulse, pulse);
+      ctx.shadowColor = '#efc264'; ctx.shadowBlur = 12;
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const angle = -Math.PI / 2 + i * Math.PI / 5, radius = i % 2 ? 5 : 11;
+        if (i) ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius); else ctx.moveTo(0, -radius);
+      }
+      ctx.closePath(); ctx.fillStyle = '#f5cd70'; ctx.fill(); ctx.shadowBlur = 0;
+      ctx.strokeStyle = '#fff8dc'; ctx.lineWidth = 1.5; ctx.stroke();
+      text('×2', 0, 23, 11, '#b58b42', 'bold'); ctx.restore();
+    }
     for (const ripple of fx.ripples) { ctx.save(); ctx.globalAlpha = ripple.life * .65; circle(ripple.x, ripple.y, 10 + (1 - ripple.life) * (ripple.big ? 85 : 30), null, ripple.color, ripple.big ? 4 : 2); ctx.restore(); }
     for (const p of fx.particles) { ctx.save(); ctx.globalAlpha = p.life; ctx.translate(p.x, p.y); ctx.rotate(p.rotation); if (p.star) star(0, 0, p.size * 1.6, p.color); else { ctx.fillStyle = p.color; ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * .65); } ctx.restore(); }
     for (const b of game.balls) {
       if (!state.calm) b.trail.forEach((pos, i) => { ctx.save(); ctx.globalAlpha = i / b.trail.length * .5; circle(pos.x, pos.y, 3 + i / b.trail.length * 7, '#f7b863'); ctx.restore(); });
       ball(b.body.position.x, b.body.position.y);
+      if (b.scoreFactor > 1) {
+        circle(b.body.position.x, b.body.position.y, 18, null, '#e8b446b0', 1.5);
+        text(`×${b.scoreFactor}`, b.body.position.x, b.body.position.y - 25, 13, '#a87535', 'bold');
+      }
     }
     for (const p of fx.popups) {
       ctx.save(); ctx.globalAlpha = Math.min(1, p.life * 2); ctx.font = `bold ${p.big ? 26 : 23}px "Trebuchet MS", sans-serif`; ctx.textAlign = 'center'; ctx.lineWidth = 6; ctx.strokeStyle = '#fffbee';
