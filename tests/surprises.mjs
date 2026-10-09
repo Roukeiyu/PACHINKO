@@ -85,7 +85,7 @@ assert.equal(right.rewards.enlargedUntil, 0);
 console.log('PASS: left bumper grants one real ball every 10 hits; right bumper physically grows the center 1.5× for exactly 5 seconds.');
 
 const events = [], center = createTable({ onSurprise: e => events.push(e) });
-for (let i = 0; i < 99; i++) hit(center, 2);
+for (let i = 0; i < 49; i++) hit(center, 2);
 assert.equal(center.stats.clockBursts, 0); hit(center, 2); const trigger = center.clock;
 assert.equal(center.stats.clockBursts, 1);
 for (let i = 0; i < 122; i++) center.step();
@@ -98,7 +98,7 @@ for (let i = 0; i < 12; i++) {
 }
 assert.ok(shots[11].at - trigger <= 1000);
 assert.equal(new Set(shots.map(s => s.ballId)).size, 12, 'burst creates 12 separate physics bodies');
-console.log(`PASS: center triggers at 100 hits, fires 12 physical balls clockwise from 12 o'clock in ${(shots[11].at - trigger).toFixed(1)}ms.`);
+console.log(`PASS: center triggers at 50 hits, fires 12 physical balls clockwise from 12 o'clock in ${(shots[11].at - trigger).toFixed(1)}ms.`);
 
 const canon = createCanon();
 assert.deepEqual(Array.from({ length: 8 }, () => canon.next().name), ['F#5','E5','D5','C#5','B4','A4','B4','C#5']);
