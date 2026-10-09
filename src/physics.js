@@ -70,12 +70,12 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
   // Cover the outer seam between the recessed cup and the side wall, so a
   // falling ball cannot wedge into the narrow space behind the cup.
   segment(665, 413, 615, 438, 13, walls);
-  // Fixed pairs rotated 180 degrees around the playing-field center (350, 450).
+  // Fixed left/right pairs mirrored across the center bumper's vertical x=350 axis.
   // Coordinates leave space for moving rails, enlarged bumpers and the hole.
-  const pinAnchors = [[350, 160], [610, 360], [90, 230], [570, 150],
-    [250, 430], [460, 320], [270, 290], [210, 150], [140, 360],
-    [460, 170], [560, 260], [380, 260], [520, 400], [180, 260]];
-  const pinPositions = pinAnchors.flatMap(([x, y]) => [[x, y], [700 - x, 900 - y]]);
+  const pinAnchors = [[150, 155], [280, 155], [110, 235], [320, 270],
+    [250, 325], [95, 350], [190, 420], [250, 500], [250, 600],
+    [185, 640], [310, 640], [120, 730], [200, 730], [310, 730]];
+  const pinPositions = pinAnchors.flatMap(([x, y]) => [[x, y], [700 - x, y]]);
   pinPositions.forEach(([x, y], index) => {
     add(Bodies.circle(x, y, 7.5, { isStatic: true, label: 'pin', restitution: .85, friction: 0 }), pins, { index });
   });

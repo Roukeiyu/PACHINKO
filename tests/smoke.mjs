@@ -12,6 +12,8 @@ await mkdir('test-results', { recursive: true });
 try {
   await page.goto(process.env.TEST_URL || 'http://127.0.0.1:5173');
   await page.waitForFunction(() => window.__ponpon?.pins === 28);
+  assert.equal(await page.locator('.theme-card, .theme-pill').count(), 0, 'the game has no sidebar theme card or shortcuts');
+  assert.ok(await page.locator('[data-theme]').evaluateAll(buttons => buttons.length === 3 && buttons.every(b => b.closest('#settings'))), 'theme switching lives only in settings');
   await page.screenshot({ path: 'test-results/desktop.png', fullPage: true });
   await page.locator('#launch').hover();
   await page.mouse.down(); await page.waitForTimeout(1100); await page.mouse.up();
@@ -49,10 +51,12 @@ try {
     assert.equal(await page.evaluate(() => window.__ponpon.slots), slots);
     console.log(`PASS: ${slots} slots receive a physical ball and score.`);
   }
+  await page.locator('#settings-button').click();
   for (const theme of ['dessert', 'flower', 'animal']) {
-    await page.locator(`.theme-pill[data-theme="${theme}"]`).click();
+    await page.locator(`.theme-choice[data-theme="${theme}"]`).click();
     assert.equal(await page.evaluate(() => window.__ponpon.theme), theme);
   }
+  await page.locator('#done-settings').click();
   await page.locator('#auto').click();
   await page.waitForFunction(() => window.__ponpon.activeBalls >= 3);
   await page.screenshot({ path: 'test-results/playing.png', fullPage: true });

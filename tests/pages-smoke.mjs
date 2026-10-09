@@ -36,7 +36,8 @@ try {
   await page.locator('.theme-choice[data-theme="flower"]').click();
   await page.locator('#done-settings').click();
   await page.reload();
-  assert.equal(await page.locator('.theme-pill[data-theme="flower"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator('#settings .theme-choice[data-theme="flower"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator('.theme-card, .theme-pill').count(), 0);
   assert.equal(await page.locator('[data-slots="9"]').getAttribute('aria-pressed'), 'true');
   assert.equal(await page.evaluate(() => typeof window.__ponpon), 'undefined');
   assert.deepEqual(errors, []);

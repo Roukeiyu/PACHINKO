@@ -3,14 +3,14 @@ import Matter from 'matter-js';
 import { createTable, TABLE, STEP } from '../src/physics.js';
 
 function seeded(seed) { return () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 32; }; }
-// The fixed, centrally symmetric layout remains identical across new games.
+// The fixed, left/right mirrored layout remains identical across new games.
 const fixedPositions = createTable({ random: seeded(1) }).pins.map(p => ({ ...p.position }));
 for (const seed of [0, 1, 100]) {
   const game = createTable({ random: seeded(seed) });
   assert.equal(game.pins.length, 28);
   const positions = game.pins.map(p => ({ ...p.position }));
   assert.deepEqual(positions, fixedPositions, 'random gameplay must not change pin placement');
-  for (const p of positions) assert.ok(positions.some(q => q.x === 700 - p.x && q.y === 900 - p.y), 'each pin has a counterpart across the table center');
+  for (const p of positions) assert.ok(positions.some(q => q.x === 700 - p.x && q.y === p.y), 'each pin has a same-height counterpart across the vertical x=350 axis');
   for (const slots of [5, 9, 7]) { game.setSlots(slots); assert.deepEqual(game.pins.map(p => p.position), fixedPositions, 'changing slots preserves pin positions'); }
   for (let i = 0; i < positions.length; i++) for (let j = i + 1; j < positions.length; j++) {
     assert.ok(Math.hypot(positions[i].x - positions[j].x, positions[i].y - positions[j].y) >= 58, 'pins leave a passage for balls');
@@ -39,7 +39,7 @@ for (const seed of [0, 1, 100]) {
   assert.ok(extremes.every(e => e.max - e.min > 67), 'both rails reach both ends of their travel');
   assert.deepEqual(game.pins.map(p => p.position), positions, 'pins remain still during play');
 }
-console.log('PASS: fixed pins retain central symmetry across new games and slot changes, and clear moving obstacles throughout their travel.');
+console.log('PASS: fixed pins retain left/right mirror symmetry across new games and slot changes, and clear moving obstacles throughout their travel.');
 {
   const game = createTable({ random: seeded(5) }), ball = game.launch();
   Matter.Body.setPosition(ball.body, { x: 713, y: 350 });
