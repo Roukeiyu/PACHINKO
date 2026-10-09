@@ -46,8 +46,8 @@ function readableInk(ink, background) {
   if (contrast(ink) >= 4.6) return ink;
   const dark = [0,0,0], light = [255,255,255], target = contrast(dark) > contrast(light) ? dark : light;
   if (contrast(target) < 4.6) return target;
-  // Keep the desired shade as far as possible while ensuring foreground text
-  // remains readable as the interpolated background passes through mid-tones.
+  // Correct each fixed phase endpoint before blending. Choosing dark/light
+  // against the moving background would cause a discontinuous color flip.
   let low = 0, high = 1;
   for (let i = 0; i < 12; i++) { const middle = (low + high) / 2; if (contrast(lerp(ink,target,middle)) >= 4.6) high = middle; else low = middle; }
   return lerp(ink,target,high);
@@ -59,15 +59,20 @@ export function createTimePalette(elapsed) {
     if (phase.id === 'day' && phase.blend === 1) return value;
     const key = `${role}:${value}`;
     if (!cache.has(key)) {
-      const original = rgb(value), from = phaseColor(original, phase.previous, role), to = phaseColor(original, phase.id, role);
-      let channels = lerp(from, to, phase.blend);
-      if (role === 'ink') {
+      const original = rgb(value);
+      function endpoint(id) {
+        const channels = phaseColor(original, id, role);
+        // Daylight must remain identical to the selected theme, including at
+        // the end of dawn→day. Other endpoints retain their readable shades.
+        if (role !== 'ink' || id === 'day') return channels;
         // Originally near-white labels sit on the dark launch/done buttons;
         // ordinary labels sit on the page, dialog or painted board surface.
         const reference = (.2126*original[0]+.7152*original[1]+.0722*original[2])/255 > .9 ? rgb('#385442') : rgb('#fffdf5');
-        const background = lerp(phaseColor(reference,phase.previous,'surface'),phaseColor(reference,phase.id,'surface'),phase.blend);
-        channels = readableInk(channels,background);
+        return readableInk(channels, phaseColor(reference, id, 'surface'));
       }
+      // Text shares the same continuous blend as surfaces and objects. Apply
+      // no threshold-based contrast correction to intermediate colors.
+      const channels = lerp(endpoint(phase.previous), endpoint(phase.id), phase.blend);
       const mixed = channels.map(n => Math.round(n).toString(16).padStart(2,'0')).join('');
       const alpha = value.length === 9 ? value.slice(7) : value.length === 5 ? value.at(-1).repeat(2) : '';
       cache.set(key, `#${mixed}${alpha}`);

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
+import { createTimePalette, timePhase } from '../src/time-flow.js';
 const executablePath = process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
 const browser = await chromium.launch({ executablePath, args: process.platform === 'linux' ? ['--no-sandbox'] : [] });
 await mkdir('test-results', { recursive: true });
@@ -13,6 +14,14 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1180 }, colorScheme: 'dark' });
   const errors = []; page.on('pageerror',e=>errors.push(e.message));
   await page.clock.setFixedTime(epoch);
+  await page.addInitScript(() => {
+    const fillText = CanvasRenderingContext2D.prototype.fillText;
+    window.__timeFlowText = {};
+    CanvasRenderingContext2D.prototype.fillText = function(value, ...args) {
+      if (['P O N  P O N','0/20','秘密洞'].includes(value)) window.__timeFlowText[value] = { color: this.fillStyle, at: Date.now() };
+      return fillText.call(this, value, ...args);
+    };
+  });
   await page.goto(process.env.TEST_URL || 'http://127.0.0.1:5173');
   const domColors = () => page.evaluate(() => Object.fromEntries(['html','.machine','.board-wrap','#settings','.choice.selected','#launch','#done-settings'].map(selector=>{const c=getComputedStyle(document.querySelector(selector));return [selector,{ color:c.color, background:c.backgroundColor, image:c.backgroundImage,border:c.borderColor }];})));
   const original = await domColors();
@@ -43,12 +52,30 @@ try {
   const dusk=rgb(stageColors.dusk.html.background),night=rgb(stageColors.night.html.background);
   assert.ok(dusk[0]>dusk[2]);assert.ok(night[2]>night[0]&&Math.max(...night)<100);
   assert.deepEqual(stageColors.day,original,'next daylight also returns to original theme');
-  for (const position of [245000,250000,255000,305000,310000,315000,545000,550000,555000]) {
-    await page.clock.setFixedTime(epoch + position);
-    await page.waitForFunction(value=>window.__ponpon.timeFlow.position===value,position);
-    const colors=await domColors();
-    for (const selector of ['#settings','#done-settings']) assert.ok(contrast(colors[selector].color,colors[selector].background)>=4.5,`${selector} remains readable during transition at ${position}`);
+  const hexRgb = value => [1,3,5].map(i=>parseInt(value.slice(i,i+2),16));
+  // Assert real DOM text and real Canvas fillText output in both display modes.
+  // Uniform contrast cannot be preserved while dark and light inks lerp through
+  // mid-tones; endpoint readability is checked above, continuity below.
+  for (const render3D of [false,true]) {
+    await page.locator('#three-d').setChecked(render3D);
+    assert.equal(await page.evaluate(()=>window.__ponpon.rendering.mode),render3D?'webgl':'2d');
+    for (const start of [240000,300000,540000,600000]) {
+      const inkSamples = { '#settings':'#344d42', '#done-settings':'#fffdf2', 'P O N  P O N':'#69815d', '0/20':'#fff9e9', '秘密洞':'#9e9375' };
+      const from=createTimePalette(start),to=createTimePalette(start+20000);
+      for (const offset of [0,5000,7500,10000,12500,15000,20000]) {
+        const position=start+offset;
+        await page.clock.setFixedTime(epoch+position);
+        await page.waitForFunction(value=>window.__ponpon.timeFlow.position===value%600000&&window.__timeFlowText['P O N  P O N']?.at===value+Date.UTC(2026,9,9,12),position);
+        const colors=await domColors(), painted=await page.evaluate(()=>window.__timeFlowText);
+        for (const [label,ink] of Object.entries(inkSamples)) {
+          const a=hexRgb(from.color(ink,'ink')),b=hexRgb(to.color(ink,'ink')),t=timePhase(position).blend;
+          const actual=label.startsWith('#')?rgb(colors[label].color):hexRgb(painted[label].color);
+          assert.ok(actual.every((v,i)=>Math.abs(v-(a[i]+(b[i]-a[i])*t))<=1),`${render3D?'3D':'2D'} ${label}: visible text lerps at ${position}`);
+        }
+      }
+    }
   }
+  await page.locator('#three-d').uncheck();
   await page.clock.setFixedTime(epoch+630000);
   await page.waitForFunction(()=>window.__ponpon.timeFlow.phase==='day');
   // Canvas samples verify the actual background, walls, pins and bumper faces,
@@ -90,5 +117,5 @@ try {
   await page.locator('#launch').hover();await page.mouse.down();await page.waitForTimeout(500);await page.mouse.up();
   await page.waitForFunction(()=>window.__ponpon.stats.entered>0);
   assert.deepEqual(errors,[]);
-  console.log('PASS: actual DOM/canvas colors follow all four phases, accessible night controls, independent settings-time clock, saved phase, original-color restoration, mobile layout and real launching.');
+  console.log('PASS: actual DOM/canvas colors follow all four phases, continuous DOM/2D/3D text interpolation, readable phase endpoints, independent settings-time clock, saved phase, original-color restoration, mobile layout and real launching.');
 } finally {await browser.close();}
