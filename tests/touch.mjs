@@ -36,18 +36,18 @@ try {
   assert.ok(await page.evaluate(() => window.__ponpon.charging && window.__ponpon.charge === 0), 'each press starts at zero');
   await page.clock.fastForward(600);
   assert.equal(await count(), 0, 'holding must not fire prematurely');
-  assert.ok(await page.evaluate(() => window.__ponpon.charging && window.__ponpon.charge > .83 && window.__ponpon.charge < .95), '600ms reaches about 87% on the two-second exponential curve');
+  assert.ok(await page.evaluate(() => window.__ponpon.charging && window.__ponpon.charge > .97 && window.__ponpon.charge < .995), '600ms reaches about 98.4% on the one-second exponential curve');
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await page.clock.runFor(400);
   assert.equal(await count(), 1, 'touch release must fire exactly once, not again on synthesized click');
   assert.equal(await page.evaluate(() => window.__ponpon.charge), 0, 'release clears the charge');
-  assert.ok(await page.evaluate(() => window.__ponpon.positions.some(p => p.power > .83 && p.power < .97)), 'the shot uses the same exponential curve as the display');
+  assert.ok(await page.evaluate(() => window.__ponpon.positions.some(p => p.power > .97 && p.power < .995)), 'the shot uses the same exponential curve as the display');
   assert.equal(await page.evaluate(() => getSelection().toString()), '');
   await page.clock.runFor(1500);
   assert.equal(await page.evaluate(() => window.__ponpon.stats.entered), 1);
   assert.ok(await page.evaluate(() => window.__ponpon.canonNotes > 0 && window.__ponpon.canonNotes === window.__ponpon.stats.impacts));
   // Capture after release: software WebGL screenshots can take several seconds
-  // and would otherwise turn this short hold into the five-second burst gesture.
+  // and would otherwise turn this short hold into the three-second burst gesture.
   await page.screenshot({ path: 'test-results/mobile-launched.png', fullPage: true });
   console.log('PASS: mobile hold charges without firing; release launches once through the physical lane.');
 
@@ -64,7 +64,7 @@ try {
   await page.locator('#launch').focus();
   await page.keyboard.down('Space');
   assert.ok(await page.evaluate(() => window.__ponpon.charge === 0), 'keyboard charging starts from zero');
-  await page.clock.fastForward(2050);
+  await page.clock.fastForward(1050);
   assert.equal(await page.evaluate(() => window.__ponpon.charge), 1, 'holding through 99.9% snaps to full charge');
   assert.match(await page.locator('#launch-label').textContent(), /100%/);
   assert.equal(await count(), 2);

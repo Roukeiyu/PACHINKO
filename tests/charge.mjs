@@ -3,17 +3,21 @@ import Matter from 'matter-js';
 import { chargeAt, overchargeAt, chargeEffectsAt } from '../src/charge.js';
 import { createTable, STEP } from '../src/physics.js';
 
-assert.equal(chargeAt(2000), 1);
-assert.equal(overchargeAt(2000), 0);
-assert.ok(overchargeAt(4999) < 1, 'no five-ball reward before the entire extra three seconds');
-assert.equal(overchargeAt(5000), 1);
+assert.ok(chargeAt(999)<1, 'full charge is not reached before one second');
+assert.equal(chargeAt(1000), 1);
+assert.equal(chargeEffectsAt(1000).goldRadius,0);
+assert.equal(chargeEffectsAt(1000).coronaRadius,22);
+assert.equal(chargeEffectsAt(3000).coronaRadius,62);
+assert.equal(overchargeAt(1000), 0);
+assert.ok(overchargeAt(2999) < 1, 'no five-ball reward before the entire extra two seconds');
+assert.equal(overchargeAt(3000), 1);
 assert.equal(overchargeAt(20000), 1);
-for (let ms = 0; ms < 5000; ms += 10) {
+for (let ms = 0; ms < 3000; ms += 10) {
   const before = chargeEffectsAt(ms), after = chargeEffectsAt(ms + 10);
   assert.ok(after.goldRadius <= before.goldRadius, 'gold ring continuously converges');
-  if (ms >= 2000) {
+  if (ms >= 1000) {
     assert.ok(after.coronaRadius >= before.coronaRadius && after.coronaAlpha >= before.coronaAlpha, 'corona grows gradually in both size and intensity');
-    assert.ok(after.coronaRadius - before.coronaRadius < .21, 'no late snap to the maximum');
+    assert.ok(after.coronaRadius - before.coronaRadius < .31, 'no late snap to the maximum');
   }
 }
 const seeded = initial => { let seed = initial; return () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32); };

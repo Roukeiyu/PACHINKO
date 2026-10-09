@@ -70,7 +70,7 @@ try {
   r=await page.evaluate(()=>window.__ponpon.rendering);
   assert.equal(r.bodies.find(b=>b.kind==='bumper'&&b.x===350).radius,58.5);
   assert.ok(r.bodies.find(b=>b.kind==='bumper'&&b.x===350).scale>1.3);
-  await page.locator('#launch').focus();await page.keyboard.down('Space');await page.clock.fastForward(5100);await page.clock.runFor(100);
+  await page.locator('#launch').focus();await page.keyboard.down('Space');await page.clock.fastForward(3100);await page.clock.runFor(100);
   r=await page.evaluate(()=>window.__ponpon.rendering);
   assert.equal(r.motion.intensity,1);assert.ok(Math.abs(r.motion.rotation)>0 && Math.abs(r.motion.rotation)<=3);
   assert.deepEqual(r.tableTransform,{position:[0,0,0],rotation:[0,0,0]},'camera shake never translates or rotates the model');

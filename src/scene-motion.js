@@ -1,4 +1,4 @@
-import { overchargeAt } from './charge.js';
+import { overchargeAt, BURST_READY_AT } from './charge.js';
 
 export const SCENE_ROTATION_LIMIT = 3;
 export function sceneMotionAt(clock, state, fx) {
@@ -7,7 +7,7 @@ export function sceneMotionAt(clock, state, fx) {
   const t = clock / 1000;
   // The view only rolls once the entire rainbow charge is ready. Pick slow,
   // seeded random targets and ease between them instead of frame-wise jitter.
-  const fullElapsed = state.charging && !state.calm ? Math.max(0, (state.chargeElapsed || 0) - 5000) : 0;
+  const fullElapsed = state.charging && !state.calm ? Math.max(0, (state.chargeElapsed || 0) - BURST_READY_AT) : 0;
   const segment = Math.floor(fullElapsed / 1200), fraction = fullElapsed % 1200 / 1200;
   const target = index => {
     if (index < 0) return 0;
