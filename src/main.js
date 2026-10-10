@@ -184,7 +184,7 @@ function surprise(event) {
     }
     return;
   }
-  const names = { clock: '✦ 30 次碰撞！十二时钟爆发', random: '✧ 左鼓满 10 次，送一颗弹珠', enlarge: '✿ 右鼓满 10 次，中央放大 10 秒', redirect: '↙ 回流出口，再冒险一次' };
+  const names = { clock: '✦ 30 次碰撞！十二时钟爆发', random: '✧ 左鼓满 10 次，送一颗弹珠', enlarge: '✿ 右鼓满 10 次，中央放大 10 秒' };
   if (names[event.kind]) toast(names[event.kind]);
   if (event.kind === 'store') {
     tone(440 + event.count * 12, .12, 'sine', 0, .15);
