@@ -41,6 +41,12 @@ try {
   await toggleAuto();
   await page.waitForFunction(() => Number(document.querySelector('#score').textContent.replaceAll(',', '')) > 0, null, { timeout: 30000 });
   await toggleAuto();
+  await page.locator('#collection-button').click();
+  assert.equal(await page.locator('#collection-book').evaluate(el=>el.open),true);
+  assert.equal(await page.locator('[data-collection]').count(),4);
+  assert.deepEqual(await page.evaluate(()=>Object.keys(JSON.parse(localStorage.getItem('ponpon-settings')).collections)),['2','3','5','10']);
+  await page.locator('#collection-return').click();
+  assert.equal(await page.locator('#settings').evaluate(el=>el.open),false);
   await page.locator('#settings-button').click();
   await page.locator('[data-slots="9"]').click();
   await page.locator('.theme-choice[data-theme="flower"]').click();

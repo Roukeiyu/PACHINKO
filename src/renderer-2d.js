@@ -4,6 +4,7 @@ import { TABLE, slotMultipliers } from './physics.js';
 import { SLOT_DISPLAY, SLOT_SYMBOLS, slotBonusLabel } from './slot-machine.js';
 import { rewardProfile, activeRewardScenes, rewardSceneAt, marqueePoint } from './reward-effects.js';
 import { slotIcon, slotColorIndex } from './slot-icons.js';
+import { collectionStatus } from './collections.js';
 
 export function createRenderer(canvas, { textureMode = false } = {}) {
   const ctx = canvas.getContext('2d');
@@ -69,10 +70,22 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     const sw = (TABLE.right - TABLE.left) / state.slots, multipliers = slotMultipliers(state.slots);
     for (let i = 0; i < state.slots; i++) {
       const x = TABLE.left + i * sw, glow = fx.slotGlows[i] || 0;
+      const collected = collectionStatus(state.collections?.[multipliers[i]]);
       box(x + 3, TABLE.slotTop, sw - 6, 86, 12, theme.colors[slotColorIndex(multipliers[i])]);
       if (glow) { const p = rewardProfile({ multiplier: multipliers[i] }); ctx.save(); ctx.globalAlpha = glow * .65; ctx.shadowBlur = 8 + p.tier * 5; ctx.shadowColor = paintColor(p.color, 'glow'); box(x + 3, TABLE.slotTop, sw - 6, 86, 12, p.color); ctx.restore(); }
+      if (collected.level) {
+        ctx.save(); ctx.lineWidth = 1 + collected.level;
+        ctx.strokeStyle = ['','#bb8b61','#91a2b7','#d4ad55'][collected.level];
+        ctx.beginPath(); ctx.roundRect(x + 6, TABLE.slotTop + 3, sw - 12, 80, 10); ctx.stroke();
+        for (let gem = 0; gem < collected.level; gem++) {
+          const gx = x + sw / 2 + (gem - (collected.level - 1) / 2) * 8;
+          ctx.fillStyle = ctx.strokeStyle; ctx.beginPath(); ctx.moveTo(gx, TABLE.slotTop + 77); ctx.lineTo(gx+2.5,TABLE.slotTop+80);ctx.lineTo(gx,TABLE.slotTop+83);ctx.lineTo(gx-2.5,TABLE.slotTop+80);ctx.closePath();ctx.fill();
+        }
+        ctx.restore();
+      }
+      text(`Lv.${collected.level} · ${collected.next === null ? 'MAX' : `${collected.count}/${collected.next}`}`, x + sw / 2, TABLE.slotTop + 8, state.slots === 9 ? 6.5 : 7.5, '#627454', 'bold');
       text(slotIcon(multipliers[i]), x + sw / 2, TABLE.slotTop + 23, state.slots === 9 ? 22 : 26, '#627454');
-      text(`×${multipliers[i] * bonus.multiplier}`, x + sw / 2, TABLE.slotTop + 54, 17, '#4c6648', 'bold');
+      text(`×${multipliers[i] * bonus.multiplier * collected.bonus}`, x + sw / 2, TABLE.slotTop + 54, 17, '#4c6648', 'bold');
       if (bonus.multiplier > 1) text(`进洞 ×${bonus.multiplier}`, x + sw / 2, TABLE.slotTop + 73, 9, bonus.multiplier === 5 ? '#8b59b5' : '#99712d');
       else if (multipliers[i] === 10) text('LUCKY', x + sw / 2, TABLE.slotTop + 73, 9, '#aa8243');
     }

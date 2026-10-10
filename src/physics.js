@@ -1,4 +1,5 @@
 import Matter from 'matter-js';
+import { collectSlot, collectionStatus } from './collections.js';
 import { createSlotMachine, SLOT_DISPLAY } from './slot-machine.js';
 
 const { Engine, Bodies, Body, Composite, Events } = Matter;
@@ -9,7 +10,7 @@ export const slotMultipliers = count => count === 5 ? [2, 3, 10, 3, 2] : count =
 
 // Physics is independent of rendering, so trajectory and scoring can be tested at
 // the same fixed time step used on desktop and mobile (including fast launches).
-export function createTable({ slots = 7, random = Math.random, starRandom = Math.random, slotRandom = Math.random, onHit = () => {}, onScore = () => {}, onReturn = () => {}, onSurprise = () => {} } = {}) {
+export function createTable({ slots = 7, collections = null, random = Math.random, starRandom = Math.random, slotRandom = Math.random, onHit = () => {}, onScore = () => {}, onReturn = () => {}, onSurprise = () => {} } = {}) {
   const engine = Engine.create({ gravity: { x: 0, y: 1.05 }, positionIterations: 8, velocityIterations: 8 });
   const balls = [], walls = [], pins = [], kickers = [], bumpers = [], rails = [], diamonds = [], spinners = [], guards = [], dividers = [], gates = [];
   const holes = [{ x: 615, y: 482, facing: Math.PI, glow: 0 }];
@@ -283,8 +284,11 @@ export function createTable({ slots = 7, random = Math.random, starRandom = Math
     stats.scored++;
     // The bonus is read at entry, never copied to a ball or to storage stock.
     // The entry that earns a spin is scored before its future result activates.
-    onScore({ ...result, scoreFactor: ball.scoreFactor, globalMultiplier,
-      points: result.basePoints * ball.scoreFactor * globalMultiplier, ballId: ball.id });
+    // This entry earns collection progress; its upgrade applies to subsequent entries.
+    const collectionMultiplier = result.kind === 'slot' && collections ? collectionStatus(collections[result.multiplier]).bonus : 1;
+    const collection = collections ? collectSlot(collections, result) : null;
+    onScore({ ...result, scoreFactor: ball.scoreFactor, globalMultiplier, collectionMultiplier, collection,
+      points: result.basePoints * ball.scoreFactor * globalMultiplier * collectionMultiplier, ballId: ball.id });
     slotMachine.recordEntry(clock);
   }
   function step(dt = STEP) {

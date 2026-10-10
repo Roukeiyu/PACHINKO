@@ -7,8 +7,8 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "npm run test:physics && npm run test:appearance && npm run test:time-flow && npm run test:music && node tests/slot-machine-browser.mjs && node tests/reward-browser.mjs && node tests/smoke.mjs && node tests/touch.mjs && node tests/charge-browser.mjs && npm run test:3d && npm run test:mini-games",
-    "test:physics": "node tests/physics.mjs && node tests/surprises.mjs && node tests/stars.mjs && node tests/storage.mjs && node tests/reward-effects.mjs && node tests/slot-machine.mjs && node tests/charge.mjs",
+    "test": "npm run test:physics && npm run test:appearance && npm run test:time-flow && npm run test:music && node tests/slot-machine-browser.mjs && node tests/reward-browser.mjs && node tests/smoke.mjs && node tests/touch.mjs && node tests/charge-browser.mjs && npm run test:3d && npm run test:mini-games && node tests/collections-browser.mjs",
+    "test:physics": "node tests/physics.mjs && node tests/surprises.mjs && node tests/stars.mjs && node tests/storage.mjs && node tests/reward-effects.mjs && node tests/slot-machine.mjs && node tests/charge.mjs && node tests/collections.mjs",
     "test:appearance": "node tests/appearance.mjs",
     "test:pages": "node tests/pages-smoke.mjs",
     "test:music": "node tests/music.mjs",
@@ -17,6 +17,7 @@
     "test:charge": "node tests/charge.mjs && node tests/charge-browser.mjs",
     "test:3d": "node tests/scene-motion.mjs && node tests/3d-browser.mjs",
     "test:rewards": "node tests/reward-effects.mjs && node tests/reward-browser.mjs",
+    "test:collections": "node tests/collections.mjs && node tests/collections-browser.mjs",
     "test:mini-games:rules": "node tests/mini-games.mjs && node tests/secret-gate.mjs",
     "test:mini-games": "npm run test:mini-games:rules && node tests/mini-games-browser.mjs"
   },
