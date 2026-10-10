@@ -66,7 +66,7 @@ try {
   assert.deepEqual(await page.evaluate(() => ({ state: window.__ponpon.slotMachine, clock: window.__ponpon.gameClock })), hidden, 'background visibility freezes the countdown too');
   await page.evaluate(() => { delete document.hidden; document.dispatchEvent(new Event('visibilitychange')); });
   await page.locator('#settings-button').click();
-  await page.locator('[data-slots="9"]').click(); await page.locator('[data-theme="flower"]').click(); await page.locator('#calm').check(); await page.locator('#done-settings').click();
+  await page.locator('[data-slots="9"]').click(); await page.locator('#calm').check(); await page.locator('#done-settings').click();
   assert.equal(await page.evaluate(() => window.__ponpon.slotMachine.entries), 101);
   assert.equal(await page.evaluate(() => window.__ponpon.slotMachine.multiplier), 5);
   await page.screenshot({ path: 'test-results/slot-machine-x5.png', fullPage: true });

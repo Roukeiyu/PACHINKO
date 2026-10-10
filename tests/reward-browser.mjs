@@ -48,7 +48,7 @@ async function setup(fallback = false, viewport = { width: 1440, height: 1180 })
     body = body.replace(anchor, anchor + `
       window.__rewardFixture = {
         reset() { fx.celebrations.length=fx.particles.length=fx.ripples.length=fx.popups.length=0;fx.shake=0;fx.slotGlows.fill(0); },
-        theme(key, count) { state.theme=key;state.slots=count;game.setSlots(count);fx.slotGlows=Array(count).fill(0);updateTheme(); },
+        theme(key, count) { state.slots=count;game.setSlots(count);fx.slotGlows=Array(count).fill(0);updateLayout(); },
         advance(ms) { updateEffects(ms); },
         night() { state.timeFlow=true;state.timeFlowStartedAt=Date.now()-330000;updateTimeFlow(performance.now(),true); },
         calm() { state.calm=true;updateCalm(); },
@@ -64,7 +64,7 @@ async function setup(fallback = false, viewport = { width: 1440, height: 1180 })
 try {
   const fallback = await setup(true);
   const symbols = { 2:'🍒', 3:'🍊', 5:'🍇', 10:'🍍' };
-  const upper = { animal:['🐰','🐻','🐱'], dessert:['🍰','🍩','🍬'], flower:['🌷','🌼','🌸'] };
+  const upper = { animal:['🐰','🐻','🐱'] };
   for (const theme of Object.keys(upper)) for (const count of [5,7,9]) {
     await fallback.evaluate(({theme,count}) => window.__rewardFixture.theme(theme,count), {theme,count});
     await fallback.clock.runFor(50);
@@ -118,5 +118,5 @@ try {
   await page.clock.runFor(50);
   await page.screenshot({path:'test-results/reward-lucky-calm.png',fullPage:true});
   assert.deepEqual(errors, []);
-  console.log('PASS: consistent fruits across three themes and 5/7/9 slots; actual 3D scoring produces Lucky/x5/treasure effects, long treasure text, settings pause, mobile/night rendering and reduced motion without browser errors.');
+  console.log('PASS: consistent fruits in the animal scene and 5/7/9 slots; actual 3D scoring produces Lucky/x5/treasure effects, long treasure text, settings pause, mobile/night rendering and reduced motion without browser errors.');
 } finally { await browser.close(); }

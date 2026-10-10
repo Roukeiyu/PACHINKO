@@ -24,7 +24,7 @@ try {
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   assert.equal(await page.evaluate(() => getSelection().toString()), '', 'long-pressing interface text cannot select it');
   const protections = await page.evaluate(() => {
-    const elements = ['.mobile-title', '#launch-label', '.brand-name', '.theme-name', '#board'];
+    const elements = ['.mobile-title', '#launch-label', '.brand-name', '#collection-button', '#board'];
     return elements.every(selector => {
       const el = document.querySelector(selector);
       return getComputedStyle(el).userSelect === 'none' && !el.dispatchEvent(new Event('selectstart', { bubbles: true, cancelable: true })) && !el.dispatchEvent(new Event('contextmenu', { bubbles: true, cancelable: true })) && !el.dispatchEvent(new Event('dragstart', { bubbles: true, cancelable: true }));
@@ -80,11 +80,11 @@ try {
   await page.waitForTimeout(400);
   assert.deepEqual(await page.evaluate(() => window.__ponpon.positions), before, 'settings must pause physical motion');
   assert.deepEqual(await page.evaluate(() => window.__ponpon.star), starBefore, 'settings also pause star respawning');
-  await page.locator('[data-slots="9"]').tap(); await page.locator('.theme-choice[data-theme="dessert"]').tap();
+  await page.locator('[data-slots="9"]').tap();
   await page.screenshot({ path: 'test-results/mobile-settings.png', fullPage: true });
   await page.locator('#done-settings').tap();
   assert.equal(await page.evaluate(() => window.__ponpon.slots), 9);
-  assert.equal(await page.evaluate(() => window.__ponpon.theme), 'dessert');
+  assert.equal(await page.locator('[data-theme]').count(), 0);
   for (const [width, height] of [[320,568], [390,664], [390,844], [430,932], [844,390]]) {
     await page.setViewportSize({ width, height }); await page.evaluate(() => scrollTo(0, 0));
     await page.waitForTimeout(100);

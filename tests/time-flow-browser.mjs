@@ -30,7 +30,6 @@ try {
     mascot: [...document.querySelectorAll('.mascot *,.brand-mark svg *')].map(el => {const s=getComputedStyle(el);return [s.fill,s.stroke];}),
     filters: [...document.querySelectorAll('.theme-choice span,.theme-emoji')].map(el=>getComputedStyle(el).filter),
     scoreFilter: getComputedStyle(document.querySelector('.score-card'),'::after').filter,
-    mascotFilter: getComputedStyle(document.querySelector('.mascot')).filter,
   }));
   const originalIcons = await iconStyles();
   await page.waitForFunction(()=>Object.keys(window.__timeFlowIcons).length>=7);
@@ -110,20 +109,18 @@ try {
   const canvasNight=await samples();
   for (const [i,label] of ['background','wall','pin','drum face','reel face','secret cup'].entries()) assert.ok(canvasDay[i].some((v,k)=>k<3&&v!==canvasNight[i][k]),`${label} changes color independently of its icon`);
   await page.evaluate(() => {const d=document.querySelector('#settings');d.close();d.style.visibility='';d.showModal();});
-  await page.locator('[data-theme="dessert"]').click();
-  assert.equal(await page.evaluate(()=>window.__ponpon.timeFlow.startedAt),start,'changing themes does not reset the day');
+  assert.equal(await page.evaluate(()=>window.__ponpon.timeFlow.startedAt),start,'the day clock survives display checks');
   assert.equal(await page.locator('#time-phase').textContent(),'夜间');
   await page.reload(); await page.locator('#settings-button').click();
   assert.equal(await page.locator('#time-flow').isChecked(),true);
   assert.equal(await page.locator('#time-phase').textContent(),'夜间','saved start time preserves phase across reload');
-  assert.equal(await page.locator('.theme-emoji').evaluate(el=>getComputedStyle(el).filter),originalIcons.mascotFilter,'dessert preview keeps original colors at night');
   await page.locator('#time-flow').uncheck();
   assert.equal(await page.locator('#time-cycle-info').isVisible(),false);
   assert.equal(await page.evaluate(()=>document.documentElement.classList.contains('time-flow')),false);
-  const dessert=await domColors();assert.equal(dessert['.board-wrap'].background,'rgb(255, 240, 239)');
-  await page.locator('[data-theme="animal"]').click();
+  const restored=await domColors();assert.equal(restored['.board-wrap'].background,'rgb(251, 243, 233)');
   await page.waitForTimeout(240);
-  assert.deepEqual(await domColors(),original,'disabling restores all original page and theme colors');
+  await page.waitForFunction(expected=>Object.entries(expected).every(([selector,colors])=>{const actual=getComputedStyle(document.querySelector(selector));return actual.color===colors.color&&actual.backgroundColor===colors.background&&actual.borderColor===colors.border;}),original);
+  assert.deepEqual(await domColors(),original,'disabling restores all original animal-scene colors');
   await page.setViewportSize({width:390,height:844});
   await page.locator('#time-flow').check();
   await page.clock.setFixedTime(epoch+1260000);

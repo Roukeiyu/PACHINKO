@@ -20,7 +20,7 @@ try {
   assert.equal(await page.locator('#settings #auto[role="switch"]').count(), 1, 'automatic launch is a settings switch');
   assert.equal(await page.locator('.launch-row button').count(), 1, 'only the manual launch button remains outside settings');
   assert.equal(await page.locator('.theme-card, .theme-pill').count(), 0, 'the game has no sidebar theme card or shortcuts');
-  assert.ok(await page.locator('[data-theme]').evaluateAll(buttons => buttons.length === 3 && buttons.every(b => b.closest('#settings'))), 'theme switching lives only in settings');
+  assert.equal(await page.locator('[data-theme]').count(),0,'theme switching is removed');
   await page.screenshot({ path: 'test-results/desktop.png', fullPage: true });
   await page.locator('#launch').hover();
   await page.mouse.down(); await page.waitForTimeout(1100); await page.mouse.up();
@@ -63,10 +63,7 @@ try {
     console.log(`PASS: ${slots} slots receive a physical ball and score.`);
   }
   await page.locator('#settings-button').click();
-  for (const theme of ['dessert', 'flower', 'animal']) {
-    await page.locator(`.theme-choice[data-theme="${theme}"]`).click();
-    assert.equal(await page.evaluate(() => window.__ponpon.theme), theme);
-  }
+
   await page.locator('#done-settings').click();
   await toggleAuto();
   await page.waitForFunction(() => window.__ponpon.activeBalls >= 3);
@@ -75,16 +72,15 @@ try {
   const count = await page.locator('#ball-count').textContent();
   await page.waitForTimeout(900);
   assert.equal(await page.locator('#ball-count').textContent(), count);
-  console.log('PASS: all three themes and automatic launch/pause.');
+  console.log('PASS: animal scene and automatic launch/pause.');
   await page.locator('#settings-button').click();
   await page.locator('[data-slots="9"]').click();
-  await page.locator('.theme-choice[data-theme="flower"]').click();
   await page.locator('#calm').check();
   await page.screenshot({ path: 'test-results/settings.png' });
   await page.keyboard.press('Escape');
   await page.locator('#sound-button').click();
   await page.reload();
-  await page.waitForFunction(() => window.__ponpon?.slots === 9 && window.__ponpon.theme === 'flower');
+  await page.waitForFunction(() => window.__ponpon?.slots === 9);
   assert.equal(await page.locator('#sound-button').getAttribute('aria-label'), '开启声音');
   assert.ok(Number((await page.locator('#best').textContent()).replaceAll(',', '')) > 0);
   await page.locator('#settings-button').click();

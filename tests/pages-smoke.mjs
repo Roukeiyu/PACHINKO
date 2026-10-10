@@ -44,12 +44,13 @@ try {
   await page.locator('#collection-button').click();
   assert.equal(await page.locator('#collection-book').evaluate(el=>el.open),true);
   assert.equal(await page.locator('[data-collection]').count(),4);
+  assert.equal(await page.locator('#settings').evaluate(el=>el.open),false);
+  assert.equal(await page.locator('#settings [data-collection]').count(),0);
   assert.deepEqual(await page.evaluate(()=>Object.keys(JSON.parse(localStorage.getItem('ponpon-settings')).collections)),['2','3','5','10']);
   await page.locator('#collection-return').click();
   assert.equal(await page.locator('#settings').evaluate(el=>el.open),false);
   await page.locator('#settings-button').click();
   await page.locator('[data-slots="9"]').click();
-  await page.locator('.theme-choice[data-theme="flower"]').click();
   await page.locator('#three-d').check();
   assert.equal(await page.locator('#board').getAttribute('data-renderer'), 'webgl');
   await page.locator('#time-flow').check();
@@ -59,7 +60,7 @@ try {
   assert.ok(night[2] > night[0] && Math.max(...night) < 100, 'production CSS and canvas mode share the night palette');
   await page.locator('#done-settings').click();
   await page.reload();
-  assert.equal(await page.locator('#settings .theme-choice[data-theme="flower"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator('[data-theme]').count(),0);
   assert.equal(await page.locator('.theme-card, .theme-pill').count(), 0);
   assert.equal(await page.locator('[data-slots="9"]').getAttribute('aria-pressed'), 'true');
   assert.equal(await page.evaluate(() => typeof window.__ponpon), 'undefined');

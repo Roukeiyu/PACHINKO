@@ -22,16 +22,13 @@ const icons = {
   auto: '<path d="M19 8a8 8 0 0 0-14-1L3 10m0-6v6h6m-4 6a8 8 0 0 0 14 1l2-3m0 6v-6h-6"/>',
 };
 const icon = (name, size = 18) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
-const themes = {
-  animal: { label: '动物', name: '小动物的游乐园', description: '和毛茸茸的朋友，接住好运气', emoji: '🐰', motifs: ['🐰','🐻','🐱'], bg: '#fbf3e9', pin: '#b2c3a1', accent: '#e994a4', colors: ['#e6ecca','#f8dfb1','#efc2cb','#d5e6d3','#f6dba7','#efc2cb','#e6ecca'] },
-  dessert: { label: '甜品', name: '甜甜的白日梦', description: '每一次落下，都有一点点甜', emoji: '🍰', motifs: ['🍰','🍩','🍬'], bg: '#fff0ef', pin: '#d6b3c9', accent: '#d980ae', colors: ['#f6d7d8','#e6d5f2','#f8dfb1','#d6eae2','#f8dfb1','#e6d5f2','#f6d7d8'] },
-  flower: { label: '花朵', name: '花园里的小确幸', description: '让快乐发芽，让心情开一朵花', emoji: '🌷', motifs: ['🌷','🌼','🌸'], bg: '#f4f6e9', pin: '#a5be9d', accent: '#d49ca7', colors: ['#d9e9c7','#f6e4b2','#efcbd5','#cadfd2','#f6e4b2','#efcbd5','#d9e9c7'] },
-};
+const animalScene = { motifs: ['🐰','🐻','🐱'], bg: '#fbf3e9', pin: '#b2c3a1', accent: '#e994a4', colors: ['#e6ecca','#f8dfb1','#efc2cb','#d5e6d3','#f6dba7','#efc2cb','#e6ecca'] };
+
 let saved = {};
 try { saved = JSON.parse(localStorage.getItem('ponpon-settings') || '{}'); } catch {}
 const state = {
   collections: restoreCollections(saved?.collections),
-  theme: themes[saved.theme] ? saved.theme : 'animal', slots: [5,7,9].includes(saved.slots) ? saved.slots : 7,
+  slots: [5,7,9].includes(saved.slots) ? saved.slots : 7,
   sound: saved.sound !== false, volume: Number.isFinite(saved.volume) ? Math.max(0,Math.min(1,saved.volume)) : .55,
   music: saved.music !== false, musicVolume: Number.isFinite(saved.musicVolume) ? Math.max(0,Math.min(1,saved.musicVolume)) : .35,
   timeFlow: saved.timeFlow === true, timeFlowStartedAt: Number.isFinite(saved.timeFlowStartedAt) && saved.timeFlowStartedAt > 0 ? saved.timeFlowStartedAt : Date.now(),
@@ -39,8 +36,7 @@ const state = {
   render3D: saved.render3D === true, secretPending: false, gm: false,
   score: 0, balls: 0, best: Number.isFinite(saved.best) ? Math.max(0,saved.best) : 0, power: 65, auto: false, charging: false, charge: 0, chargeElapsed: 0,
 };
-const persist = () => { try { localStorage.setItem('ponpon-settings', JSON.stringify({theme:state.theme,render3D:state.render3D,slots:state.slots,sound:state.sound,volume:state.volume,music:state.music,musicVolume:state.musicVolume,timeFlow:state.timeFlow,timeFlowStartedAt:state.timeFlowStartedAt,calm:state.calm,best:state.best,collections:state.collections})); } catch {} };
-const mascot = `<svg class="mascot" viewBox="0 0 130 135" fill="none" aria-hidden="true"><ellipse cx="46" cy="32" rx="14" ry="30" transform="rotate(-14 46 32)" fill="#fffaf0" stroke="#d9cdbb" stroke-width="2"/><ellipse cx="84" cy="32" rx="14" ry="30" transform="rotate(14 84 32)" fill="#fffaf0" stroke="#d9cdbb" stroke-width="2"/><ellipse cx="45" cy="29" rx="6" ry="18" transform="rotate(-14 45 29)" fill="#efc4cb"/><ellipse cx="85" cy="29" rx="6" ry="18" transform="rotate(14 85 29)" fill="#efc4cb"/><path d="M19 83C19 53 39 43 65 43S111 53 111 83C111 111 92 127 65 127S19 111 19 83Z" fill="#fffaf0" stroke="#d9cdbb" stroke-width="2"/><ellipse cx="37" cy="91" rx="10" ry="6" fill="#f0bdc6"/><ellipse cx="93" cy="91" rx="10" ry="6" fill="#f0bdc6"/><ellipse cx="48" cy="80" rx="3" ry="4" fill="#435444"/><ellipse cx="82" cy="80" rx="3" ry="4" fill="#435444"/><path d="m62 90 3 3 3-3m-3 3v4m-6-1q3 5 6 1 3 4 6-1" stroke="#705d50" stroke-width="2" stroke-linecap="round"/><path d="M102 110c-9-6-24 3-23 11 13 3 21-1 23-11Z" fill="#a6b88b"/><path d="M79 121c-1-17-9-22-14-19-4 12 5 19 14 19Z" fill="#bfcd9d"/></svg>`;
+const persist = () => { try { localStorage.setItem('ponpon-settings', JSON.stringify({render3D:state.render3D,slots:state.slots,sound:state.sound,volume:state.volume,music:state.music,musicVolume:state.musicVolume,timeFlow:state.timeFlow,timeFlowStartedAt:state.timeFlowStartedAt,calm:state.calm,best:state.best,collections:state.collections})); } catch {} };
 
 document.querySelector('#app').innerHTML = `
 <div class="shell">
@@ -51,9 +47,10 @@ document.querySelector('#app').innerHTML = `
     <aside class="sidebar"><section class="card score-card"><div class="card-label">今日份快乐 <span class="small-label">HAPPY POINTS</span></div><div class="score-value"><span id="score">0</span><span class="score-unit">分</span></div><div class="score-divider"></div><div class="score-stats"><span>已投小球 &nbsp;<strong id="ball-count">0</strong></span><span>最高纪录 &nbsp;<strong id="best">0</strong></span></div></section><section class="card how-card"><div class="card-label">快乐使用说明 <span>↗</span></div><ol><li><span class="step-no">01</span>力度决定高度，回流口重返球场</li><li><span class="step-no">02</span>左右鼓满 10 次，赠球或放大中央</li><li><span class="step-no">03</span>中央满 30 次，十二时钟大爆发</li><li><span class="step-no">04</span>蓄球罐存满 20 颗，顶部落下 40 颗</li><li><span class="step-no">05</span>进洞满 50 次转好运，两同 ×2，三同 ×5</li></ol></section><div class="little-note">✿ &nbsp; 不用赶路，弹一会儿也很好</div></aside>
   </main><div class="bottom-info"><span>✧ &nbsp; 真实物理碰撞 · 无限次小快乐</span><span class="sound-indicator"><span class="sound-bars"><i></i><i></i><i></i></span><span id="sound-status">声音已开启，快乐有回响</span></span></div><footer class="footer"><span>PON PON · YOUR POCKET-SIZED HAPPY PLACE</span><span>MADE WITH <b>♡</b> & A LITTLE BOUNCE</span></footer>
 </div><div class="toast" id="toast" role="status"></div>
-<dialog id="settings"><div class="dialog-inner"><div class="dialog-head"><button id="gm-dot" class="gm-dot" type="button" aria-label="边框装饰" aria-pressed="false"><span></span></button><h2>布置你的游乐场</h2><button class="icon-button" id="close-settings" aria-label="关闭设置">${icon('close')}</button></div><p class="dialog-sub">换一种心情，再接住一颗小快乐。</p><div id="gm-tools" class="gm-tools" hidden><span>GM · 小游戏试玩</span><div><button type="button" data-mini="pairs">对对碰</button><button type="button" data-mini="blocks">消消乐</button><button type="button" data-mini="moles">打地鼠</button></div></div><details id="collection-book" class="collection-book"><summary>水果收集册 <span>收集水果，升级槽位</span></summary><p>每次进槽收集 1 颗，同类水果共享进度。累计 20 / 50 / 100 颗自动升级，奖励变为原来的 1.5 / 2 / 3 倍，从下一次进槽生效。</p><div class="collection-grid">${COLLECTION_TYPES.map(({multiplier,name})=>`<article class="collection-item" data-collection="${multiplier}"><span class="collection-icon" aria-hidden="true">${slotIcon(multiplier)}</span><div><strong>${name}</strong><span class="collection-level"></span></div><p class="collection-reward"></p><progress max="20" value="0" aria-label="${name}收集进度"></progress><small class="collection-count"></small></article>`).join('')}</div><p class="collection-note">进度自动保存在当前浏览器。星星和老虎机加倍只增加积分，不增加收集数量；切换主题或槽位后保留进度。</p><button type="button" id="collection-return" class="done-button">返回弹珠台</button></details><label class="setting-row auto-setting" for="auto"><span>自动弹射<small>关闭设置后连续发射，力度在球台下方调整</small></span><input id="auto" type="checkbox" role="switch" /></label><div class="setting-label">落袋槽位<small>越多槽位，越多惊喜</small></div><div class="choices">${[5,7,9].map(n=>`<button class="choice" data-slots="${n}">${n} 个槽位</button>`).join('')}</div><div class="setting-label">游乐场主题</div><div class="settings-theme"><div class="theme-preview"><div id="mascot">${mascot}</div></div><div><div class="theme-name" id="theme-name"></div><div class="theme-description" id="theme-description"></div></div></div><div class="choices">${Object.entries(themes).map(([key,t])=>`<button class="choice theme-choice" data-theme="${key}"><span>${t.emoji}</span>${t.label}主题</button>`).join('')}</div><label class="setting-row mode-setting" for="three-d"><span>3D 模式<small>关闭使用 2D 画面，开启使用立体球台</small></span><input id="three-d" type="checkbox" role="switch" ${state.render3D?'checked':''}/></label><label class="setting-row time-setting" for="time-flow"><span>时间流逝模式<small>白天 4 分钟 → 黄昏 1 分钟 → 夜间 4 分钟 → 清晨 1 分钟</small></span><input id="time-flow" type="checkbox" role="switch" ${state.timeFlow?'checked':''}/></label><div id="time-cycle-info" class="time-cycle-info" ${state.timeFlow?'':'hidden'}><div class="time-cycle-head"><strong id="time-phase">白天</strong><span id="time-phase-clock"></span></div><progress id="time-cycle-progress" max="${TIME_CYCLE}" value="0" aria-label="十分钟昼夜循环进度"></progress></div><label class="setting-row music-setting" for="music"><span>律动背景音乐<small>120 BPM · 轻快入场，随后律动循环</small></span><input id="music" type="checkbox" role="switch" ${state.music?'checked':''}/></label><label class="setting-row" for="music-volume">音乐音量<input id="music-volume" type="range" min="0" max="100" value="${state.musicVolume*100}" /></label><label class="setting-row" for="volume">音效音量<input id="volume" type="range" min="0" max="100" value="${state.volume*100}" /></label><label class="setting-row" for="calm">轻柔模式（减少装饰动效）<input id="calm" type="checkbox" ${state.calm?'checked':''}/></label><button class="done-button" id="done-settings">好啦，继续快乐</button><p class="setting-note">设置自动保存。调整槽位会清空在途小球，保留得分。</p></div></dialog>${miniGameMarkup}`;
+<dialog id="settings"><div class="dialog-inner"><div class="dialog-head"><button id="gm-dot" class="gm-dot" type="button" aria-label="边框装饰" aria-pressed="false"><span></span></button><h2>布置你的游乐场</h2><button class="icon-button" id="close-settings" aria-label="关闭设置">${icon('close')}</button></div><p class="dialog-sub">换一种心情，再接住一颗小快乐。</p><div id="gm-tools" class="gm-tools" hidden><span>GM · 小游戏试玩</span><div><button type="button" data-mini="pairs">对对碰</button><button type="button" data-mini="blocks">消消乐</button><button type="button" data-mini="moles">打地鼠</button></div></div><label class="setting-row auto-setting" for="auto"><span>自动弹射<small>关闭设置后连续发射，力度在球台下方调整</small></span><input id="auto" type="checkbox" role="switch" /></label><div class="setting-label">落袋槽位<small>越多槽位，越多惊喜</small></div><div class="choices">${[5,7,9].map(n=>`<button class="choice" data-slots="${n}">${n} 个槽位</button>`).join('')}</div><label class="setting-row mode-setting" for="three-d"><span>3D 模式<small>关闭使用 2D 画面，开启使用立体球台</small></span><input id="three-d" type="checkbox" role="switch" ${state.render3D?'checked':''}/></label><label class="setting-row time-setting" for="time-flow"><span>时间流逝模式<small>白天 4 分钟 → 黄昏 1 分钟 → 夜间 4 分钟 → 清晨 1 分钟</small></span><input id="time-flow" type="checkbox" role="switch" ${state.timeFlow?'checked':''}/></label><div id="time-cycle-info" class="time-cycle-info" ${state.timeFlow?'':'hidden'}><div class="time-cycle-head"><strong id="time-phase">白天</strong><span id="time-phase-clock"></span></div><progress id="time-cycle-progress" max="${TIME_CYCLE}" value="0" aria-label="十分钟昼夜循环进度"></progress></div><label class="setting-row music-setting" for="music"><span>律动背景音乐<small>120 BPM · 轻快入场，随后律动循环</small></span><input id="music" type="checkbox" role="switch" ${state.music?'checked':''}/></label><label class="setting-row" for="music-volume">音乐音量<input id="music-volume" type="range" min="0" max="100" value="${state.musicVolume*100}" /></label><label class="setting-row" for="volume">音效音量<input id="volume" type="range" min="0" max="100" value="${state.volume*100}" /></label><label class="setting-row" for="calm">轻柔模式（减少装饰动效）<input id="calm" type="checkbox" ${state.calm?'checked':''}/></label><button class="done-button" id="done-settings">好啦，继续快乐</button><p class="setting-note">设置自动保存。调整槽位会清空在途小球，保留得分。</p></div></dialog><dialog id="collection-book" class="collection-dialog" aria-labelledby="collection-title"><div class="dialog-inner"><div class="dialog-head"><h2 id="collection-title">水果收集册</h2><button type="button" id="close-collection" class="icon-button" aria-label="关闭收集册">${icon('close')}</button></div><div class="collection-book"><p>每次进槽收集 1 颗，同类水果共享进度。累计 20 / 50 / 100 颗自动升级，奖励变为原来的 1.5 / 2 / 3 倍，从下一次进槽生效。</p><div class="collection-grid">${COLLECTION_TYPES.map(({multiplier,name})=>`<article class="collection-item" data-collection="${multiplier}"><span class="collection-icon" aria-hidden="true">${slotIcon(multiplier)}</span><div><strong>${name}</strong><span class="collection-level"></span></div><p class="collection-reward"></p><progress max="20" value="0" aria-label="${name}收集进度"></progress><small class="collection-count"></small></article>`).join('')}</div><p class="collection-note">进度自动保存在当前浏览器。星星和老虎机加倍只增加积分，不增加收集数量；调整槽位后保留进度。</p><button type="button" id="collection-return" class="done-button">返回弹珠台</button></div></div></dialog>${miniGameMarkup}`;
 
 const $ = (s) => document.querySelector(s);
+const panelOpen = () => $('#settings').open || $('#collection-book').open;
 const timeTokens = collectTimeTokens(document);
 let timePalette = null, lastTimePaint = -Infinity;
 function updateTimeFlow(now = performance.now(), force = false) {
@@ -63,9 +60,8 @@ function updateTimeFlow(now = performance.now(), force = false) {
   timePalette = state.timeFlow ? createTimePalette(Date.now() - state.timeFlowStartedAt) : null;
   applyTimePalette(document.documentElement, timeTokens, timePalette);
   $('#time-cycle-info').hidden = !state.timeFlow;
-  const theme = themes[state.theme];
-  document.documentElement.style.setProperty('--accent', timePalette?.color(theme.accent) ?? theme.accent);
-  $('.board-wrap').style.background = timePalette?.color(theme.bg, 'surface') ?? theme.bg;
+  document.documentElement.style.setProperty('--accent', timePalette?.color(animalScene.accent) ?? animalScene.accent);
+  $('.board-wrap').style.background = timePalette?.color(animalScene.bg, 'surface') ?? animalScene.bg;
   if (timePalette) {
     const phase = timePalette.phase, seconds = Math.ceil(phase.remaining / 1000);
     $('#time-phase').textContent = phase.label;
@@ -119,14 +115,14 @@ function playCanon(hit) {
 }
 function sound(kind,value=0){
   if(kind==='launch'){tone(330,.14,'sine',0,.4,880);tone(110,.09,'triangle',0,.2);}
-  if(kind==='theme'){tone(660,.12,'sine');tone(880,.16,'sine',.075);}
+  if(kind==='confirm'){tone(660,.12,'sine');tone(880,.16,'sine',.075);}
   if(kind==='star'){[880,1175,1568].forEach((n,i)=>tone(n,.24,'sine',i*.055,.22));}
 }
 
 const fx = { celebrations: [], particles: [], ripples: [], popups: [], slotGlows: Array(state.slots).fill(0), shake: 0 };
 const game = createTable({ slots: state.slots, collections: state.collections, onHit: hit => {
   playCanon(hit);
-  if (!state.calm) fx.ripples.push({ ...hit, life: 1, color: themes[state.theme].accent });
+  if (!state.calm) fx.ripples.push({ ...hit, life: 1, color: animalScene.accent });
 }, onScore: award, onReturn: () => toast('弹珠已回收，再试试另一种力度吧'), onSurprise: surprise });
 const renderer = createRenderer($('#board'));
 let frame = 0, last = 0, accumulator = 0, lastDrop = -1000, lastAuto = 0;
@@ -252,7 +248,7 @@ function rewardSound(profile) {
 }
 
 function launch(power = state.auto ? state.power / 100 : 0, burst = false) {
-  if ($('#settings').open || miniGames.open || state.secretPending || document.hidden) return;
+  if (panelOpen() || miniGames.open || state.secretPending || document.hidden) return;
   unlockAudio();
   const now = performance.now(); if (now - lastDrop < 250) return;
   const ball = burst ? game.launchBurst() : game.launch(power);
@@ -279,7 +275,7 @@ function setAuto(enabled) {
   state.auto = enabled; syncLaunchControls(); $('#power-value').textContent = `${state.power}%`; $('#auto').checked = enabled;
 }
 function beginCharge(source) {
-  if (state.charging || $('#settings').open || miniGames.open || state.secretPending || document.hidden) return false;
+  if (state.charging || panelOpen() || miniGames.open || state.secretPending || document.hidden) return false;
   unlockAudio(); setAuto(false); state.charging = true; chargeSource = source; chargeStart = performance.now(); state.charge = 0; state.chargeElapsed = 0;
   $('#launch').style.setProperty('--charge', '0%'); $('#launch-label').textContent = '蓄力 0% · 松开发射';
   $('#launch').classList.add('charging'); return true;
@@ -306,7 +302,7 @@ for (const button of [$('#launch'), $('#plunger')]) {
 document.addEventListener('keydown', event => {
   const tag = document.activeElement.tagName;
   const launchFocused = document.activeElement === $('#launch') || document.activeElement === $('#plunger');
-  if (event.code === 'Space' && !$('#settings').open && !miniGames.open && !state.secretPending && (launchFocused || !['INPUT', 'BUTTON', 'TEXTAREA', 'SELECT'].includes(tag))) {
+  if (event.code === 'Space' && !panelOpen() && !miniGames.open && !state.secretPending && (launchFocused || !['INPUT', 'BUTTON', 'TEXTAREA', 'SELECT'].includes(tag))) {
     event.preventDefault(); if (!event.repeat) beginCharge('keyboard');
   }
 });
@@ -329,7 +325,7 @@ function tick(now) {
   updateTimeFlow(now);
   miniGames.update(now);
   const delta = last ? Math.min(now - last, 50) : 0; last = now;
-  if (!document.hidden && !$('#settings').open && !miniGames.open) {
+  if (!document.hidden && !panelOpen() && !miniGames.open) {
     accumulator += delta;
     while (accumulator >= STEP) { game.step(); updateEffects(STEP); accumulator -= STEP; }
     for (let i = 0; i < 3; i++) {
@@ -351,12 +347,12 @@ function tick(now) {
     } else if (!state.secretPending && now - lastDrop > 1700) $('#shot-state').textContent = game.balls.length ? `${game.balls.length} 颗小快乐在冒险` : '右下角 · 弹珠就位';
     if (state.auto && !state.secretPending && now - lastAuto > 1100) { launch(); lastAuto = now; }
   }
-  if (state.secretPending && !game.balls.length && !miniGames.open && !$('#settings').open && !document.hidden) { miniGames.start(randomMiniGame()); syncLaunchControls(); }
+  if (state.secretPending && !game.balls.length && !miniGames.open && !panelOpen() && !document.hidden) { miniGames.start(randomMiniGame()); syncLaunchControls(); }
   if (miniGames.open) { $('.game-layout').style.removeProperty('transform'); frame = requestAnimationFrame(tick); return; }
   const motion = sceneMotionAt(game.clock, state, fx);
   if (motion.intensity) $('.game-layout').style.transform = `translate(${motion.uiX.toFixed(2)}px, ${motion.uiY.toFixed(2)}px)`;
   else $('.game-layout').style.removeProperty('transform');
-  renderer.draw(game, themes[state.theme], state, fx, timePalette);
+  renderer.draw(game, animalScene, state, fx, timePalette);
   const hitPoints = [[686,724],[741,724],[741,884],[686,884]].map(([x,y]) => renderer.project(x,y,12));
   const left = Math.min(...hitPoints.map(p=>p.x)), right = Math.max(...hitPoints.map(p=>p.x));
   const top = Math.max(0, Math.min(...hitPoints.map(p=>p.y))), bottom = Math.min(1, Math.max(...hitPoints.map(p=>p.y)));
@@ -378,12 +374,8 @@ function updateCollections() {
     item.querySelector('.collection-count').textContent = next === null ? `已收集 ${count.toLocaleString()} 颗` : `${count.toLocaleString()} / ${next} 颗 · 再收集 ${next - count} 颗升级`;
   }
 }
-function updateTheme() {
-  updateCollections();
-  const theme = themes[state.theme]; $('#theme-name').textContent = theme.name; $('#theme-description').textContent = theme.description;
-  $('#mascot').innerHTML = state.theme === 'animal' ? mascot : `<div class="mascot theme-emoji">${theme.emoji}</div>`;
-  updateTimeFlow(performance.now(), true);
-  document.querySelectorAll('[data-theme]').forEach(b => { b.classList.toggle('selected', b.dataset.theme === state.theme); b.setAttribute('aria-pressed', String(b.dataset.theme === state.theme)); });
+function updateLayout() {
+  updateCollections(); updateTimeFlow(performance.now(), true);
   document.querySelectorAll('[data-slots]').forEach(b => { b.classList.toggle('selected', +b.dataset.slots === state.slots); b.setAttribute('aria-pressed', String(+b.dataset.slots === state.slots)); });
 }
 function updateSound() {
@@ -396,26 +388,29 @@ function updateSound() {
 function updateCalm() { document.documentElement.classList.toggle('calm', state.calm); document.querySelectorAll('.mascot,.mascot-spark,.sound-bars i').forEach(el => el.style.animationPlayState = state.calm ? 'paused' : 'running'); }
 $('#compact-sound').addEventListener('click', () => $('#sound-button').click());
 $('#compact-settings').addEventListener('click', () => $('#settings-button').click());
-$('#collection-return').addEventListener('click', () => { $('#settings').close(); $('#collection-button').focus(); });
-$('#collection-button').addEventListener('click', () => {
+function openPanel(id) {
   if (miniGames.open) return;
-  endCharge(false); updateCollections(); $('#collection-book').open = true; $('#settings').showModal();
-  $('#collection-book').scrollIntoView({ block: 'start' }); $('#collection-book summary').focus();
-});
-$('#sound-button').addEventListener('click', () => { state.sound = !state.sound; unlockAudio(); updateSound(); persist(); if (state.sound) sound('theme'); });
-$('#settings-button').addEventListener('click', () => { if (miniGames.open) return; endCharge(false); $('#settings').showModal(); });
+  endCharge(false);
+  for (const panel of [$('#settings'), $('#collection-book')]) if (panel.id !== id) panel.close();
+  if (id === 'collection-book') updateCollections();
+  const panel = $(`#${id}`); if (!panel.open) panel.showModal(); panel.scrollTop = 0;
+}
+$('#collection-return').addEventListener('click', () => $('#collection-book').close());
+$('#close-collection').addEventListener('click', () => $('#collection-book').close());
+$('#collection-button').addEventListener('click', () => openPanel('collection-book'));
+$('#sound-button').addEventListener('click', () => { state.sound = !state.sound; unlockAudio(); updateSound(); persist(); if (state.sound) sound('confirm'); });
+$('#settings-button').addEventListener('click', () => openPanel('settings'));
 $('#close-settings').addEventListener('click', () => $('#settings').close()); $('#done-settings').addEventListener('click', () => $('#settings').close());
-$('#settings').addEventListener('click', event => { if (event.target === $('#settings')) { const r = event.target.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) event.target.close(); } });
-document.querySelectorAll('[data-theme]').forEach(b => b.addEventListener('click', () => { state.theme = b.dataset.theme; updateTheme(); updateCalm(); persist(); unlockAudio(); sound('theme'); }));
-document.querySelectorAll('[data-slots]').forEach(b => b.addEventListener('click', () => { if (state.slots === +b.dataset.slots) return; state.slots = +b.dataset.slots; game.setSlots(state.slots); fx.slotGlows = Array(state.slots).fill(0); updateTheme(); persist(); }));
+for (const panel of [$('#settings'), $('#collection-book')]) panel.addEventListener('click', event => { if (event.target === panel) { const r = panel.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) panel.close(); } });
+document.querySelectorAll('[data-slots]').forEach(b => b.addEventListener('click', () => { if (state.slots === +b.dataset.slots) return; state.slots = +b.dataset.slots; game.setSlots(state.slots); fx.slotGlows = Array(state.slots).fill(0); updateLayout(); persist(); }));
 $('#volume').addEventListener('input', event => { state.volume = +event.target.value / 100; if (state.volume > 0) state.sound = true; unlockAudio(); updateSound(); persist(); });
-$('#volume').addEventListener('change', () => sound('theme'));
+$('#volume').addEventListener('change', () => sound('confirm'));
 $('#music').addEventListener('change', event => { state.music = event.target.checked; unlockAudio(); updateSound(); persist(); });
 $('#music-volume').addEventListener('input', event => { state.musicVolume = +event.target.value / 100; unlockAudio(); updateSound(); persist(); });
 $('#time-flow').addEventListener('change', event => { state.timeFlow = event.target.checked; if (state.timeFlow) state.timeFlowStartedAt = Date.now(); updateTimeFlow(performance.now(), true); persist(); });
 $('#calm').addEventListener('change', event => { state.calm = event.target.checked; updateCalm(); persist(); });
-$('#best').textContent = state.best.toLocaleString(); updateTheme(); updateSound(); updateCalm();
+$('#best').textContent = state.best.toLocaleString(); updateLayout(); updateSound(); updateCalm();
 frame = requestAnimationFrame(tick);
 window.addEventListener('pagehide', () => { endCharge(false); cancelAnimationFrame(frame); frame = 0; audio?.suspend().catch(()=>{}); });
 window.addEventListener('pageshow', () => { if (!frame) { last = 0; accumulator = 0; frame = requestAnimationFrame(tick); } syncAudioVisibility(); });
-if (import.meta.env.DEV) Object.defineProperty(window, '__ponpon', { get: () => ({ score: state.score, collections: structuredClone(state.collections), secretPending: state.secretPending, emissionPaused: game.emissionPaused, gm: state.gm, miniGame: miniGames.snapshot(), render3D: state.render3D, rendering: renderer.snapshot(), star: game.star ? { ...game.star } : null, activeBalls: game.balls.length, slots: state.slots, pins: game.pins.length, theme: state.theme, auto: state.auto, charging: state.charging, charge: state.charge, chargeEffects: state.charging ? chargeEffectsAt(state.chargeElapsed) : null, pendingLaunches: game.pendingLaunches, stats: structuredClone(game.stats), rewards: structuredClone(game.rewards), collector: { count: game.collector.stored.length, capacity: game.collector.capacity, remaining: game.collector.remaining, outlets: game.collector.outlets.map(p => ({ ...p })) }, bumpers: game.bumpers.map(b => ({ ...b.position })), timeFlow: { enabled: state.timeFlow, startedAt: state.timeFlowStartedAt, phase: timePalette?.phase.id, position: timePalette?.phase.position, tokens: timeTokens.length }, gameClock: game.clock, slotMachine: structuredClone(game.slotMachine), centerRadius: game.bumpers[2].plugin.radius, canonNotes: canon.count, currentNote: currentNote?.name, positions: game.balls.map(b => ({ ...b.body.position, entered: b.entered, power: b.power, bonus: b.bonus, scoreFactor: b.scoreFactor })), music: backgroundMusic?.status, musicEnabled: state.music, musicVolume: state.musicVolume, audioState: audio?.state }) });
+if (import.meta.env.DEV) Object.defineProperty(window, '__ponpon', { get: () => ({ score: state.score, collections: structuredClone(state.collections), secretPending: state.secretPending, emissionPaused: game.emissionPaused, gm: state.gm, miniGame: miniGames.snapshot(), render3D: state.render3D, rendering: renderer.snapshot(), star: game.star ? { ...game.star } : null, activeBalls: game.balls.length, slots: state.slots, pins: game.pins.length,  auto: state.auto, charging: state.charging, charge: state.charge, chargeEffects: state.charging ? chargeEffectsAt(state.chargeElapsed) : null, pendingLaunches: game.pendingLaunches, stats: structuredClone(game.stats), rewards: structuredClone(game.rewards), collector: { count: game.collector.stored.length, capacity: game.collector.capacity, remaining: game.collector.remaining, outlets: game.collector.outlets.map(p => ({ ...p })) }, bumpers: game.bumpers.map(b => ({ ...b.position })), timeFlow: { enabled: state.timeFlow, startedAt: state.timeFlowStartedAt, phase: timePalette?.phase.id, position: timePalette?.phase.position, tokens: timeTokens.length }, gameClock: game.clock, slotMachine: structuredClone(game.slotMachine), centerRadius: game.bumpers[2].plugin.radius, canonNotes: canon.count, currentNote: currentNote?.name, positions: game.balls.map(b => ({ ...b.body.position, entered: b.entered, power: b.power, bonus: b.bonus, scoreFactor: b.scoreFactor })), music: backgroundMusic?.status, musicEnabled: state.music, musicVolume: state.musicVolume, audioState: audio?.state }) });
