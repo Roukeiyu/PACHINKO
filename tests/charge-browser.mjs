@@ -31,7 +31,8 @@ try {
     await page.screenshot({path:`test-results/charge-${render3D ? '3d' : '2d'}-${mode}-growing.png`});
     await page.clock.fastForward(1100);s=await snapshot();assert.equal(s.effects.overcharge,1);assert.equal(s.count,0);assert.equal(s.overflow,false);
     assert.equal(s.motion.intensity,mode==='calm'?0:1);
-    assert.ok(Math.abs(s.motion.rotation)<=3 && Math.abs(s.motion.uiX)<=.45 && Math.abs(s.motion.uiY)<=.3);
+    assert.equal(s.motion.rotation,0,'fully charged camera stays level');
+    assert.ok(Math.abs(s.motion.uiX)<=.45 && Math.abs(s.motion.uiY)<=.3);
     assert.equal(s.transform==='',mode==='calm','calm mode cancels scene and UI shake');
     await page.screenshot({path:`test-results/charge-${render3D ? '3d' : '2d'}-${mode}-max.png`});
     await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});

@@ -7,20 +7,32 @@ assert.equal(sceneMotionAt(10,{charging:true,chargeElapsed:1000},{}).intensity,0
 assert.equal(sceneMotionAt(10,{charging:true,chargeElapsed:2000},{}).intensity,.5);
 assert.equal(sceneMotionAt(10,{charging:true,chargeElapsed:3000},{}).intensity,1);
 assert.equal(sceneMotionAt(10,{}, {shake:1.5}).intensity,.3);
-for (const chargeElapsed of [0,999,1000,2000,2999,3000]) assert.equal(sceneMotionAt(100,{charging:true,chargeElapsed},{shake:12}).rotation,0,'no rotation before the rainbow charge is fully ready');
-assert.equal(sceneMotionAt(100,{}, {shake:12}).rotation,0,'reward shake only translates the camera');
-let varied = new Set(), previous=0;
+for (const chargeElapsed of [0,999,1000,2000,2999,3000,3100,10000,60000]) {
+  assert.equal(sceneMotionAt(100,{charging:true,chargeElapsed},{shake:12}).rotation,0,'camera never rotates, even during long holds');
+}
+let maxX=0, maxY=0;
 for (let clock=0;clock<10000;clock++) {
   const motion=sceneMotionAt(clock,{charging:true,chargeElapsed:3000+clock},{shake:12});
-  assert.ok(Math.abs(motion.x)<=7 && Math.abs(motion.y)<=5 && Math.abs(motion.rotation)<=3);
+  assert.ok(Math.abs(motion.x)<=11 && Math.abs(motion.y)<=8);
+  assert.equal(motion.rotation,0);
   assert.ok(Math.abs(motion.uiX)<=.45 && Math.abs(motion.uiY)<=.3);
-  varied.add(motion.rotation.toFixed(1));
-  assert.ok(Math.abs(motion.rotation-previous)<.01,'random camera targets ease continuously');previous=motion.rotation;
-  assert.equal(sceneMotionAt(clock,{calm:true,charging:true,chargeElapsed:3000+clock},{shake:12}).rotation,0);
-  assert.equal(sceneMotionAt(clock,{calm:true,charging:true,chargeElapsed:3000+clock},{shake:12}).intensity,0);
+  maxX=Math.max(maxX,Math.abs(motion.x));maxY=Math.max(maxY,Math.abs(motion.y));
+  const calm=sceneMotionAt(clock,{calm:true,charging:true,chargeElapsed:3000+clock},{shake:12});
+  for (const value of Object.values(calm)) assert.ok(value===0,'calm mode disables all motion');
+  const reward=sceneMotionAt(clock,{}, {shake:12});
+  assert.equal(reward.rotation,0);
+  assert.ok(Math.abs(reward.x)<=7 && Math.abs(reward.y)<=5,'ordinary reward shake keeps its existing amplitude');
 }
-assert.ok(varied.size>20,'fully charged camera roll varies instead of following a periodic sine');
-assert.notEqual(sceneMotionAt(500,{charging:true,chargeElapsed:4500,chargeSeed:1},{}).rotation,sceneMotionAt(500,{charging:true,chargeElapsed:4500,chargeSeed:2},{}).rotation,'each hold can choose different random targets');
-const rotated=project2DMotion(400,450,{x:0,y:0,rotation:3});
-assert.ok(rotated.x>380/760 && rotated.y>450/900,'the hit projection follows the rotating 2D drawing');
-console.log('PASS: gradual scene motion, translation-only charge/reward shake, fully-ready random ±3° camera roll, subpixel UI displacement, matching 2D hit projection and reduced motion.');
+assert.ok(maxX>10.99 && maxY>7.99,'full rainbow shake is stronger in both axes');
+let previous=sceneMotionAt(10,{charging:true,chargeElapsed:1000},{});
+for (let chargeElapsed=1010;chargeElapsed<=3100;chargeElapsed+=10) {
+  const motion=sceneMotionAt(10,{charging:true,chargeElapsed},{});
+  assert.ok(motion.x>=previous.x && motion.y>=previous.y,'displacement grows with charge');
+  assert.ok(motion.x-previous.x<.12 && motion.y-previous.y<.12,'charge grows without snapping');
+  previous=motion;
+}
+for (const [x,y] of [[713,787],[686,724],[741,884],[0,0],[760,900]]) {
+  const shifted=project2DMotion(x,y,{x:11,y:-8,rotation:0});
+  assert.deepEqual(shifted,{x:(x+11)/760,y:(y-8)/900},'hit targets follow translation without rotation');
+}
+console.log('PASS: stronger gradual translation-only charge, no camera rotation during long holds, unchanged reward/UI shake, matching hit projection and reduced motion.');

@@ -45,7 +45,7 @@ try {
   assert.equal(r.bodies.filter(b=>b.kind==='pin').length,28);
   assert.deepEqual(r.bodies.filter(b=>b.kind==='bumper').map(b=>[b.x,b.y]),[[238,236],[462,236],[350,367]]);
   assert.ok(r.bodies.every(b=>b.height>0));
-  const geometryCount=r.geometries;
+  const geometryCount=r.geometries, cameraQuaternion=r.cameraQuaternion;
   for(let i=0;i<3;i++) {
     await mode(false);assert.deepEqual(await physical(),preserved);assert.equal(await page.evaluate(()=>window.__ponpon.rendering.mode),'2d');
     await mode(true);assert.deepEqual(await physical(),preserved);assert.equal(await page.evaluate(()=>window.__ponpon.rendering.geometries),geometryCount,'repeated mode switches release and rebuild the same geometry');
@@ -72,7 +72,8 @@ try {
   assert.ok(r.bodies.find(b=>b.kind==='bumper'&&b.x===350).scale>1.3);
   await page.locator('#launch').focus();await page.keyboard.down('Space');await page.clock.fastForward(3100);await page.clock.runFor(100);
   r=await page.evaluate(()=>window.__ponpon.rendering);
-  assert.equal(r.motion.intensity,1);assert.ok(Math.abs(r.motion.rotation)>0 && Math.abs(r.motion.rotation)<=3);
+  assert.equal(r.motion.intensity,1);assert.equal(r.motion.rotation,0);
+  assert.ok(r.cameraQuaternion.every((v,i)=>Math.abs(v-cameraQuaternion[i])<1e-12),'full charge preserves actual camera orientation');
   assert.deepEqual(r.tableTransform,{position:[0,0,0],rotation:[0,0,0]},'camera shake never translates or rotates the model');
   assert.notDeepEqual(r.cameraPosition,[0,-Math.sin(14*Math.PI/180)*1400,Math.cos(14*Math.PI/180)*1400],'shake moves the actual camera');
   const matrix=await page.evaluate(()=>{const m=new DOMMatrix(getComputedStyle(document.querySelector('.game-layout')).transform);return {a:m.a,b:m.b,c:m.c,d:m.d,x:m.e,y:m.f};});

@@ -42,8 +42,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     motion = textureMode ? sceneMotionAt(0, {}, {}) : sceneMotionAt(game.clock, state, fx);
     // This transform moves the 2D camera view, leaving physical coordinates fixed.
     if (!textureMode && motion.intensity) {
-      ctx.translate(W / 2 + motion.x, H / 2 + motion.y);
-      ctx.rotate(motion.rotation * Math.PI / 180); ctx.translate(-W / 2, -H / 2);
+      ctx.translate(motion.x, motion.y);
     }
     ctx.fillStyle = paintColor('#b8b08b1d', 'object');
     for (let x = 12; x < W; x += 24) for (let y = 12; y < H; y += 24) circle(x, y, .8, '#b8b08b26');

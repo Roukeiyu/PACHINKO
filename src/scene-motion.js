@@ -1,30 +1,19 @@
-import { overchargeAt, BURST_READY_AT } from './charge.js';
+import { overchargeAt } from './charge.js';
 
-export const SCENE_ROTATION_LIMIT = 3;
 export function sceneMotionAt(clock, state, fx) {
   const charge = state.charging ? overchargeAt(state.chargeElapsed) : 0;
   const intensity = state.calm ? 0 : Math.max(charge, Math.max(0, Math.min(1, (fx.shake || 0) / 5)));
   const t = clock / 1000;
-  // The view only rolls once the entire rainbow charge is ready. Pick slow,
-  // seeded random targets and ease between them instead of frame-wise jitter.
-  const fullElapsed = state.charging && !state.calm ? Math.max(0, (state.chargeElapsed || 0) - BURST_READY_AT) : 0;
-  const segment = Math.floor(fullElapsed / 1200), fraction = fullElapsed % 1200 / 1200;
-  const target = index => {
-    if (index < 0) return 0;
-    const value = Math.sin((index + 1 + (state.chargeSeed || 0)) * 12.9898) * 43758.5453;
-    return ((value - Math.floor(value)) * 2 - 1) * SCENE_ROTATION_LIMIT;
-  };
-  const blend = fraction * fraction * (3 - 2 * fraction);
-  const rotation = fullElapsed ? target(segment - 1) + (target(segment) - target(segment - 1)) * blend : 0;
+  // Rainbow charge smoothly adds displacement while the camera stays level.
+  const chargeBoost = charge * charge;
   return {
-    intensity, x: Math.sin(t * 47) * intensity * 7, y: Math.cos(t * 41) * intensity * 5,
-    rotation,
+    intensity,
+    x: Math.sin(t * 47) * intensity * (7 + 4 * chargeBoost),
+    y: Math.cos(t * 41) * intensity * (5 + 3 * chargeBoost),
+    rotation: 0,
     uiX: Math.sin(t * 37) * intensity * .45, uiY: Math.cos(t * 31) * intensity * .3,
   };
 }
 export function project2DMotion(x, y, motion, width = 760, height = 900) {
-  const angle = motion.rotation * Math.PI / 180, c = Math.cos(angle), s = Math.sin(angle);
-  const dx = x - width / 2, dy = y - height / 2;
-  return { x: (width / 2 + motion.x + dx * c - dy * s) / width,
-    y: (height / 2 + motion.y + dx * s + dy * c) / height };
+  return { x: (x + motion.x) / width, y: (y + motion.y) / height };
 }

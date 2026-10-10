@@ -270,7 +270,7 @@ function setAuto(enabled) {
 }
 function beginCharge(source) {
   if (state.charging || $('#settings').open || miniGames.open || state.secretPending || document.hidden) return false;
-  unlockAudio(); setAuto(false); state.charging = true; chargeSource = source; chargeStart = performance.now(); state.charge = 0; state.chargeElapsed = 0; state.chargeSeed = Math.random() * 10000;
+  unlockAudio(); setAuto(false); state.charging = true; chargeSource = source; chargeStart = performance.now(); state.charge = 0; state.chargeElapsed = 0;
   $('#launch').style.setProperty('--charge', '0%'); $('#launch-label').textContent = '蓄力 0% · 松开发射';
   $('#launch').classList.add('charging'); return true;
 }
