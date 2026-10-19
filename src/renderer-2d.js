@@ -1,6 +1,6 @@
 import { chargeEffectsAt } from './charge.js';
 import { sceneMotionAt, project2DMotion } from './scene-motion.js';
-import { TABLE, slotMultipliers } from './physics.js';
+import { TABLE, slotMultipliers, LAUNCH_SQUASH } from './physics.js';
 import { SLOT_DISPLAY, SLOT_SYMBOLS, slotBonusLabel } from './slot-machine.js';
 import { rewardProfile, activeRewardScenes, rewardSceneAt, marqueePoint } from './reward-effects.js';
 import { slotIcon, slotColorIndex } from './slot-icons.js';
@@ -201,7 +201,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     text(reelStatus, cabinet.x, top + 40, 8, '#856842');
     // The spring compresses while held. A ready ball remains visually separate
     // from any live ball travelling along the lane.
-    const compression = state.charging ? state.charge * 22 : 0;
+    const compression = state.charging ? state.charge * LAUNCH_SQUASH : 0;
     const springTop = 813 + compression, springBottom = 865;
     if (!textureMode) {
     ctx.beginPath(); ctx.moveTo(713, springTop);

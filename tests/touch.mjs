@@ -71,6 +71,17 @@ try {
   await page.keyboard.up('Space'); await page.clock.runFor(400);
   assert.equal(await count(), 3, 'keyboard release fires exactly once even when launch button has focus');
   assert.ok(await page.evaluate(() => window.__ponpon.positions.some(p => p.power === 1)), 'a full-charge release actually uses 100% power');
+  await page.locator('#launch').focus();
+  await page.keyboard.down('Enter');
+  assert.equal(await page.evaluate(() => window.__ponpon.charging), true, 'Enter starts a charge instead of a zero-power click');
+  assert.equal(await count(), 3, 'Enter keydown must not fire immediately');
+  await page.clock.fastForward(280);
+  await page.keyboard.up('Enter');
+  const enterPower = await page.evaluate(() => window.__ponpon.positions.at(-1).power);
+  await page.evaluate(() => document.querySelector('#launch').click());
+  await page.clock.runFor(400);
+  assert.equal(await count(), 4, 'Enter release fires once and the synthetic click does not repeat it');
+  assert.ok(enterPower > .5 && enterPower < 1, 'the Enter shot keeps the held power');
   console.log('PASS: canceled gestures, right-hand spring tapping and keyboard charge/release.');
 
   await page.clock.resume();
@@ -94,6 +105,8 @@ try {
     assert.ok(layout.launchBottom <= layout.viewport + 1, `${width}×${height}: launch control must be visible without scrolling (${JSON.stringify(layout)})`);
     assert.ok(layout.launchHeight >= 44, 'touch targets at least 44px high');
     assert.ok(Math.abs(layout.ratio - 760 / 900) < .002, 'orientation changes preserve physics aspect ratio');
+    assert.equal(await page.locator('.hud-best').evaluate(el => getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0), true, `${width}×${height}: best score is visible on the phone HUD`);
+    assert.equal(await page.locator('#mobile-best').textContent(), await page.locator('#best').textContent());
     await page.screenshot({ path: `test-results/h5-${width}x${height}.png`, fullPage: true });
   }
   await page.locator('#compact-settings').tap();

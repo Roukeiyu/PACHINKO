@@ -4,6 +4,9 @@ import { createSlotMachine, SLOT_DISPLAY } from './slot-machine.js';
 
 const { Engine, Bodies, Body, Composite, Events } = Matter;
 export const TABLE = Object.freeze({ width: 760, height: 900, left: 39, right: 655, slotTop: 797, scoreLine: 865, launchX: 713, launchY: 787 });
+// Full charge seats the ball this far down with the painted spring. Spawn uses
+// the same offset so the released ball does not pop above the plunger.
+export const LAUNCH_SQUASH = 22;
 export const STEP = 1000 / 120;
 const FILTER = { world: 1, ascending: 2, playing: 4, returnRamp: 8, launchDoor: 16 };
 export const slotMultipliers = count => count === 5 ? [2, 3, 10, 3, 2] : count === 9 ? [2, 2, 3, 5, 10, 5, 3, 2, 2] : [2, 3, 5, 10, 5, 3, 2];
@@ -150,19 +153,21 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   function launch(power = .65) {
     if (emissionPaused) return null;
     if (balls.length >= 24 || pendingLaunches.length || laneOccupied()) return null;
-    return launchBall(power);
+    return launchBall(power, 'launch', true);
   }
-  function launchBall(power, kind = 'launch') {
+  function launchBall(power, kind = 'launch', seated = false) {
     power = Math.max(0, Math.min(1, power));
     // One spring impulse proportional to the held charge. No minimum velocity,
     // continuing booster, or speed maintenance: weak shots fall back naturally.
-    const ball = spawn(TABLE.launchX + (random() - .5) * 1.5, TABLE.launchY, -.05 * power, -32 * power, { power, kind });
+    // Only the ball leaving a held spring is seated; later burst shots spawn at rest.
+    const y = TABLE.launchY + (seated ? power * LAUNCH_SQUASH : 0);
+    const ball = spawn(TABLE.launchX + (random() - .5) * 1.5, y, -.05 * power, -32 * power, { power, kind });
     stats.launches++;
     return ball;
   }
-  function emitCharged(ordinal) {
-    const ball = launchBall(1, 'charged');
-    onSurprise({ kind: 'emit', source: 'charged', ordinal, angle: -Math.PI / 2, x: TABLE.launchX, y: TABLE.launchY, ballId: ball.id, at: clock });
+  function emitCharged(ordinal, seated = false) {
+    const ball = launchBall(1, 'charged', seated);
+    onSurprise({ kind: 'emit', source: 'charged', ordinal, angle: -Math.PI / 2, x: TABLE.launchX, y: ball.body.position.y, ballId: ball.id, at: clock });
     return ball;
   }
   function launchBurst() {
@@ -171,7 +176,7 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     // full-power ball clears the spring before the next real impulse is applied.
     if (balls.length + 5 > 24 || pendingLaunches.length || laneOccupied()) return null;
     for (let i = 1; i < 5; i++) pendingLaunches.push({ due: clock + i * 90, ordinal: i });
-    return emitCharged(0);
+    return emitCharged(0, true);
   }
   function setEmissionPaused(paused) {
     if (emissionPaused === paused) return;
@@ -295,7 +300,13 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     clock += dt;
     // Freeze earned bonus/drop schedules while existing balls drain, including
     // any rewards those balls earn during the wait. Inventory is never lost.
-    if (emissionPaused) for (const queue of [pendingShots,pendingDrops]) for (const shot of queue) shot.due += dt;
+    if (emissionPaused) {
+      for (const queue of [pendingShots, pendingDrops]) for (const shot of queue) shot.due += dt;
+      // Drum-reward countdowns share that freeze. Otherwise the center shrinks
+      // and the clock-burst pips vanish while their shots are still waiting.
+      if (rewards.enlargedUntil) rewards.enlargedUntil += dt;
+      if (rewards.burstUntil) rewards.burstUntil += dt;
+    }
     slotMachine.advance(clock);
     if (activeStar && clock + 1e-6 >= activeStar.expiresAt) {
       activeStar = null;
@@ -382,8 +393,11 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
       // Balls falling back down the shooter lane are returned, never mis-scored
       // as the rightmost slot. A timeout is visible rather than a hidden teleport.
       if ((x > 688 && y > 815 && body.velocity.y > 0) || y > 960 || clock - ball.born > 45000) {
-        if (clock - ball.born > 45000) stats.timeouts++;
-        stats.returns++; remove(ball, i); onReturn({ ballId: ball.id }); continue;
+        const timedOut = clock - ball.born > 45000;
+        if (timedOut) stats.timeouts++;
+        stats.returns++; remove(ball, i);
+        onReturn({ ballId: ball.id, reason: timedOut ? 'timeout' : y > 960 ? 'out' : 'weak' });
+        continue;
       }
       if (body.speed < .18) ball.stuck += dt; else ball.stuck = 0;
       if (ball.stuck > 1000) { Body.setVelocity(body, { x: random() > .5 ? .9 : -.9, y: -.5 }); ball.stuck = 0; }

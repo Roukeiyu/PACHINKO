@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
+import { collectionStatus } from '../src/collections.js';
+import { slotMultipliers, TABLE } from '../src/physics.js';
 const executablePath = process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
 const browser = await chromium.launch({ executablePath, args: process.platform === 'linux' ? ['--no-sandbox'] : [] });
 await mkdir('test-results', { recursive: true });
@@ -33,6 +35,28 @@ try {
     }; return { engine, balls`);
     await route.fulfill({ response, body });
   });
+  // Slot face = base fruit × global reel multiplier × collection bonus.
+  async function waitForSlotProduct() {
+    const started = Date.now();
+    let expected = '';
+    while (Date.now() - started < 30000) {
+      const snap = await page.evaluate(({ left, right }) => {
+        const pon = window.__ponpon;
+        if (!pon?.slotMachine) return null;
+        const column = Math.max(0, Math.min(pon.slots - 1, Math.floor((347 - left) / ((right - left) / pon.slots))));
+        return { slots: pon.slots, column, collections: pon.collections, global: pon.slotMachine.multiplier, labels: window.__canvasLabels || [] };
+      }, { left: TABLE.left, right: TABLE.right });
+      if (snap) {
+        const base = slotMultipliers(snap.slots)[snap.column];
+        const label = `×${base * snap.global * collectionStatus(snap.collections[base]).bonus}`;
+        const hole = `+${500 * snap.global}`;
+        expected = `${label} ${hole}`;
+        if (snap.labels.includes(label) && snap.labels.includes(hole)) return;
+      }
+      await page.waitForTimeout(40);
+    }
+    throw new Error(`computed slot label not painted: ${expected}`);
+  }
   await page.goto(process.env.TEST_URL || 'http://127.0.0.1:5173');
   await page.waitForFunction(() => window.__slotFixture);
   await page.evaluate(() => window.__slotFixture.enter(49));
@@ -44,17 +68,23 @@ try {
   await page.waitForFunction(() => window.__ponpon.slotMachine.completed === 1);
   await page.waitForFunction(() => document.querySelector('#machine-caption').textContent.includes('×2'));
   assert.equal(await page.locator('#hole-points').textContent(), '+1000');
-  await page.waitForFunction(() => window.__canvasLabels.includes('×20') && window.__canvasLabels.includes('+1000'));
+  await waitForSlotProduct();
   await page.screenshot({ path: 'test-results/slot-machine-x2.png', fullPage: true });
   await page.evaluate(() => window.__slotFixture.enter(50));
   await page.waitForFunction(() => window.__ponpon.slotMachine.completed === 2);
   await page.waitForFunction(() => document.querySelector('#machine-caption').textContent.includes('×5'));
   assert.equal(await page.locator('#hole-points').textContent(), '+2500');
-  await page.waitForFunction(() => window.__canvasLabels.includes('×50') && window.__canvasLabels.includes('+2500'));
+  await waitForSlotProduct();
   assert.match(await page.locator('#slot-status').textContent(), /持续 1 分钟/);
-  const before = await page.evaluate(() => window.__ponpon.score);
+  const scored = await page.evaluate(({ left, right }) => {
+    const pon = window.__ponpon;
+    const column = Math.max(0, Math.min(pon.slots - 1, Math.floor((347 - left) / ((right - left) / pon.slots))));
+    return { score: pon.score, slots: pon.slots, column, collections: pon.collections, global: pon.slotMachine.multiplier, star: pon.star.multiplier };
+  }, { left: TABLE.left, right: TABLE.right });
+  const fruit = slotMultipliers(scored.slots)[scored.column];
+  const scoredDelta = fruit * 10 * scored.star * scored.global * collectionStatus(scored.collections[fruit]).bonus;
   await page.evaluate(() => window.__slotFixture.enter(1, true));
-  assert.equal(await page.evaluate(() => window.__ponpon.score), before + 1000, 'actual score UI includes a collected x2 star and global x5');
+  assert.equal(await page.evaluate(() => window.__ponpon.score), scored.score + scoredDelta, 'score is base × star × global reel × collection bonus');
   await page.locator('#settings-button').click();
   const paused = await page.evaluate(() => ({ state: window.__ponpon.slotMachine, clock: window.__ponpon.gameClock }));
   await page.waitForTimeout(400);
@@ -76,11 +106,11 @@ try {
   const until = await page.evaluate(() => window.__ponpon.slotMachine.tripleUntil);
   await page.evaluate(time => window.__slotFixture.advanceTo(time), until);
   await page.waitForFunction(() => window.__ponpon.slotMachine.multiplier === 2);
-  await page.waitForFunction(() => window.__canvasLabels.includes('×20'));
+  await waitForSlotProduct();
   assert.equal(await page.locator('#hole-points').textContent(), '+1000');
   const pairUntil = await page.evaluate(() => window.__ponpon.slotMachine.pairUntil);
   await page.evaluate(time => window.__slotFixture.advanceTo(time), pairUntil);
-  await page.waitForFunction(() => window.__canvasLabels.includes('×10') && window.__canvasLabels.includes('+500'));
+  await waitForSlotProduct();
   assert.equal(await page.locator('#hole-points').textContent(), '+500');
   assert.equal(await page.locator('#machine-caption').textContent(), 'THE HAPPY LITTLE PACHINKO');
   assert.deepEqual(errors, []);

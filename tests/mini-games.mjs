@@ -54,6 +54,9 @@ for(let seed=0;seed<25;seed++) {
 const noHit=createMiniGame('moles');
 for(let round=1;round<=9;round++){noHit.tick(round*3000);assert.equal(noHit.state.wave,round+1);}
 noHit.tick(30000);assert.equal(noHit.state.status,'complete');assert.equal(noHit.state.score,0);
+const jumped=createMiniGame('moles',{now:0});
+jumped.tick(16000);assert.equal(jumped.state.wave,2,'one tick advances at most one mole wave');assert.equal(jumped.state.status,'playing');
+jumped.tick(30000);assert.equal(jumped.state.status,'timeout');assert.equal(jumped.state.score,0);
 for(const kind of ['pairs','blocks']) {
   const game=createMiniGame(kind,{random:seeded(4),now:500});
   if(kind==='pairs'){const partner=game.state.board.findIndex((c,i)=>i>0&&c.pair===game.state.board[0].pair);game.select(0,501);game.select(partner,502);}

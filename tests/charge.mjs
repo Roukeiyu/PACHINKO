@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import Matter from 'matter-js';
 import { chargeAt, overchargeAt, chargeEffectsAt } from '../src/charge.js';
-import { createTable, STEP } from '../src/physics.js';
+import { createTable, STEP, TABLE, LAUNCH_SQUASH } from '../src/physics.js';
 
 assert.ok(chargeAt(999)<1, 'full charge is not reached before one second');
 assert.equal(chargeAt(1000), 1);
@@ -21,6 +21,16 @@ for (let ms = 0; ms < 3000; ms += 10) {
   }
 }
 const seeded = initial => { let seed = initial; return () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32); };
+{
+  const seated = createTable({ random: () => .5 });
+  assert.equal(seated.launch(1).body.position.y, TABLE.launchY + LAUNCH_SQUASH);
+  const follow = [];
+  const burst = createTable({ random: () => .5, onSurprise: event => { if (event.source === 'charged') follow.push(event.y); } });
+  assert.ok(burst.launchBurst());
+  assert.equal(follow[0], TABLE.launchY + LAUNCH_SQUASH, 'the first burst ball leaves the compressed spring');
+  for (let i = 0; i < Math.ceil(100 / STEP); i++) burst.step();
+  assert.equal(follow[1], TABLE.launchY, 'later burst balls spawn at the resting spring');
+}
 for (const slots of [5,7,9]) for (let seed = 1; seed <= 20; seed++) {
   const shots = [], settlements = new Set();
   const game = createTable({ slots, random: seeded(seed), starRandom: seeded(seed+80), onSurprise: e => { if(e.source === 'charged') {

@@ -73,8 +73,17 @@ try {
  }
  assert.equal((await mini()).status,'complete');assert.equal((await mini()).hit,40);assert.equal(await score(),initial+1000);await back();
  // A timed wave advances even if the player does not hit any mole.
- await start('moles');await page.clock.fastForward(3000);assert.equal((await mini()).wave,2);
- await page.clock.fastForward(27100);assert.equal((await mini()).status,'complete');assert.equal((await mini()).score,0);await back();
+ await start('moles');
+ for(let wave=2;wave<=10;wave++){await page.clock.fastForward(3000);assert.equal((await mini()).wave,wave,'each visible slice advances one wave');}
+ await page.clock.fastForward(3000);assert.equal((await mini()).status,'complete');assert.equal((await mini()).score,0);await back();
+ await start('moles');const pausedWave=(await mini()).wave;
+ await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'));});
+ await page.clock.fastForward(20000);
+ assert.equal((await mini()).wave,pausedWave,'background time does not skip mole waves');
+ assert.equal((await mini()).status,'playing');
+ await page.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});
+ for(let i=0;i<12&&(await mini()).status==='playing';i++)await page.clock.fastForward(3000);
+ assert.equal((await mini()).status,'complete');await back();
  for(let i=0;i<3;i++){await page.locator('#gm-dot').click();await page.clock.runFor(200);}assert.equal((await state()).gm,false);assert.equal(await page.locator('#gm-tools').isVisible(),false);
  assert.equal(await page.locator('#gm-dot').getAttribute('aria-pressed'),'false');
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&document.documentElement.scrollHeight<=innerHeight+1));

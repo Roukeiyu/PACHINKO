@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import Matter from 'matter-js';
-import { createTable, TABLE, STEP } from '../src/physics.js';
+import { createTable, TABLE, STEP, LAUNCH_SQUASH } from '../src/physics.js';
 import { CANON_NOTES, createCanon, noteFrequency } from '../src/canon.js';
 import { chargeAt, chargePercent } from '../src/charge.js';
 
@@ -37,14 +37,16 @@ function hit(game, index) {
 let lastRise = -1;
 for (const power of [0, .01, .05, .1, .2, .4, .6]) {
   const game = createTable({ random: () => .5 }), ball = game.launch(power);
-  let minY = TABLE.launchY, previousVelocity = ball.body.velocity.y;
+  const originY = ball.body.position.y;
+  assert.equal(originY, TABLE.launchY + power * LAUNCH_SQUASH, 'the seated ball leaves from the compressed spring');
+  let minY = originY, previousVelocity = ball.body.velocity.y;
   for (let i = 0; i < 400 && game.balls.includes(ball); i++) {
     game.step(); minY = Math.min(minY, ball.body.position.y);
     assert.ok(ball.body.velocity.y > previousVelocity, 'gravity must slow ascent from the first step, with no hidden boost');
     previousVelocity = ball.body.velocity.y;
     if (ball.body.velocity.y >= 0) break;
   }
-  const rise = TABLE.launchY - minY;
+  const rise = originY - minY;
   assert.ok(rise > lastRise, 'more charge produces a higher initial flight'); lastRise = rise;
   if (power === 0) assert.equal(rise, 0, 'zero charge has no launch energy');
   if (power === .01) assert.ok(rise < 2, '1% power can only make a tiny hop');
