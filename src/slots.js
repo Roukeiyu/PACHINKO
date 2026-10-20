@@ -1,5 +1,5 @@
-// Slot count follows the happiness score and never steps backward.
-// A saved unlock survives refresh even though the visible score starts over.
+// Within one round the slot count follows the happiness score and never steps backward.
+// A new round starts at 5. Refresh continues the saved round instead of a fresh table.
 export const SLOT_UNLOCK_7 = 5000;
 export const SLOT_UNLOCK_9 = 20000;
 

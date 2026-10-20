@@ -3,6 +3,7 @@ import { chromium } from 'playwright';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { CHARGE_DURATION, OVERCHARGE_DURATION, BURST_READY_AT } from '../src/charge.js';
+import { START_BALLS } from '../src/round.js';
 const goldAt = Math.round(CHARGE_DURATION * .35);
 const fullAt = CHARGE_DURATION + 50;
 const midAt = CHARGE_DURATION + OVERCHARGE_DURATION / 2;
@@ -51,7 +52,7 @@ try {
       await page.evaluate(() => document.querySelector('#done-settings').click());
     }
     await page.clock.runFor(550);s=await snapshot();assert.equal(s.count,5);assert.equal(s.pending,0);
-    assert.equal(await page.locator('#ball-count').textContent(),'5','HUD counts each actual shot exactly once');
+    assert.equal(await page.locator('#ball-count').textContent(), String(START_BALLS - 5), 'a five-ball burst spends five balls at once');
     await page.clock.runFor(600);
     // Releasing early after full charge retains normal single-ball behavior.
     await page.locator('#launch').focus();await page.keyboard.down('Space');await page.clock.fastForward(midAt);await page.keyboard.up('Space');await page.clock.runFor(550);

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createRenderer as createCanvasRenderer } from './renderer-2d.js';
 import { TABLE, LAUNCH_SQUASH } from './physics.js';
+import { slotFrame } from './round.js';
 import { SLOT_DISPLAY } from './slot-machine.js';
 import { chargeEffectsAt } from './charge.js';
 import { sceneMotionAt } from './scene-motion.js';
@@ -104,6 +105,7 @@ function create3DRenderer(canvas) {
   const wallSide = material('#829d78'), railSide = material('#c7798e'), pinSide = material('#8ca37c');
   const drumSide = material('#c7798e'), goldSide = material('#b49a65'), purpleSide = material('#9981b2');
   const spinnerSide = material('#779d83'), floorSide = material('#b6bea5'), darkSide = material('#405c59', 'object', { side: THREE.DoubleSide });
+  const hazardSide = material('#6e2c32');
   function roundedShape(width, height, radius) {
     const x = -width / 2, y = -height / 2, s = new THREE.Shape();
     s.moveTo(x + radius, y); s.lineTo(x + width - radius, y); s.quadraticCurveTo(x + width, y, x + width, y + radius);
@@ -165,15 +167,21 @@ function create3DRenderer(canvas) {
     box(SLOT_DISPLAY.x, SLOT_DISPLAY.y, SLOT_DISPLAY.width, SLOT_DISPLAY.height, 3, goldSide, -1, 8);
     for (const spinner of game.spinners) disc(spinner.position.x, spinner.position.y, 15, 5, goldSide, 12);
   }
-  let slotCount = 0;
+  let slotCount = 0, dividerKey = '';
   function updateLayout(game) {
-    if (slotCount === game.slots) return;
+    const ids = game.dividers.map(body => body.id).join(',');
+    if (slotCount === game.slots && dividerKey === ids) return;
     for (const mesh of layoutModels.splice(0)) { table.remove(mesh); mesh.geometry.dispose(); }
     for (const [id, entry] of bodies) if (entry.body.label === 'divider') { table.remove(entry.mesh); entry.mesh.geometry.dispose(); bodies.delete(id); }
-    slotCount = game.slots; const width = (TABLE.right - TABLE.left) / slotCount;
-    for (let i = 0; i < slotCount; i++) layoutModels.push(box(TABLE.left + (i + .5) * width, TABLE.slotTop + 43, width - 6, 84, 3, goldSide, -.5, 10));
+    slotCount = game.slots; dividerKey = ids;
+    const frame = slotFrame(game.slots);
+    for (const region of frame.regions) {
+      const cx = (region.x0 + region.x1) / 2, width = region.x1 - region.x0;
+      if (region.kind === 'drain') layoutModels.push(box(cx, TABLE.slotTop + 50, Math.max(4, width - 2), 96, 2, hazardSide, -6, 2));
+      else layoutModels.push(box(cx, TABLE.slotTop + 43, Math.max(8, width - 4), 78, 3, goldSide, -.5, 6));
+    }
     for (const outlet of game.collector.outlets) layoutModels.push(box(outlet.x, outlet.y, 52, 17, 7, purpleSide, 0, 6));
-    for (const b of game.dividers) bodyModel(b, goldSide, 9);
+    for (const b of game.dividers) bodyModel(b, hazardSide, 9);
   }
   const sphere = new THREE.SphereGeometry(11, 24, 16);
   const ballMaterial = new THREE.MeshStandardMaterial({ color: '#ffedb0', metalness: .6, roughness: .2, envMapIntensity: 1.4 });

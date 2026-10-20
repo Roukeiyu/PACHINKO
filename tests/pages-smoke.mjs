@@ -60,8 +60,17 @@ try {
   const night = await page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor.match(/\d+/g).slice(0,3).map(Number));
   assert.ok(night[2] > night[0] && Math.max(...night) < 100, 'production CSS and canvas mode share the night palette');
   await page.locator('#done-settings').click();
-  await page.evaluate(() => { const saved = JSON.parse(localStorage.getItem('ponpon-settings') || '{}'); saved.slots = 9; localStorage.setItem('ponpon-settings', JSON.stringify(saved)); });
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('ponpon-pages-resume-applied')) return;
+    sessionStorage.setItem('ponpon-pages-resume-applied', '1');
+    const saved = JSON.parse(localStorage.getItem('ponpon-settings') || '{}');
+    saved.slots = 9;
+    saved.run = { ...(saved.run || {}), slots: 9, score: 1500, balls: 42, over: false };
+    localStorage.setItem('ponpon-settings', JSON.stringify(saved));
+  });
   await page.reload();
+  assert.equal(await page.locator('#score').textContent(), (1500).toLocaleString());
+  assert.equal(await page.locator('#ball-count').textContent(), '42');
   assert.equal(await page.locator('[data-theme]').count(),0);
   assert.equal(await page.locator('.theme-card, .theme-pill').count(), 0);
   assert.equal(await page.locator('#slot-tier').evaluate(el => el.textContent.includes('当前 9 槽')), true);

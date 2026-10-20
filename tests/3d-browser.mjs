@@ -69,7 +69,7 @@ try {
   await page.evaluate(()=>document.querySelector('#settings-button').click());
   for(const count of [7,9,5]) {
     await page.evaluate(n=>window.__ponpon.setSlots(n),count);await page.clock.runFor(50);
-    assert.equal(await page.evaluate(()=>window.__ponpon.rendering.bodies.filter(b=>b.kind==='divider').length),count-1);
+    assert.equal(await page.evaluate(()=>window.__ponpon.rendering.bodies.filter(b=>b.kind==='divider').length),count*2,'each pocket keeps two drain lips');
     assert.equal(await page.evaluate(()=>window.__ponpon.rendering.alignmentError),0);
   }
   assert.equal(await page.evaluate(()=>window.__ponpon.rendering.geometries),geometryCount);

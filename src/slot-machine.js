@@ -47,6 +47,12 @@ export function createSlotMachine({ random = Math.random, onEvent = () => {} } =
       start(clock);
     },
     advance,
+    reset() {
+      Object.assign(state, { entries: 0, progress: 0, queued: 0, spins: 0, completed: 0,
+        reels: [0, 1, 2], target: [0, 1, 2], stopped: [true, true, true], spinning: false,
+        startedAt: 0, stopAt: [0, 0, 0], nextSpinAt: 0, result: 1,
+        pairUntil: 0, tripleUntil: 0, multiplier: 1, activeUntil: 0 });
+    },
   };
 }
 export function slotBonusLabel(state, clock) {

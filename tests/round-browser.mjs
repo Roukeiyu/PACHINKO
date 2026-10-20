@@ -1,0 +1,89 @@
+import assert from 'node:assert/strict';
+import { chromium } from 'playwright';
+import { existsSync } from 'node:fs';
+import { START_BALLS, BURST_COST } from '../src/round.js';
+import { BURST_READY_AT } from '../src/charge.js';
+
+const executablePath = process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
+const browser = await chromium.launch({ executablePath, args: process.platform === 'linux' ? ['--no-sandbox'] : [] });
+try {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => {
+    const saved = JSON.parse(localStorage.getItem('ponpon-settings') || '{}');
+    saved.sound = false;
+    saved.calm = true;
+    saved.vibrate = false;
+    saved.music = false;
+    localStorage.setItem('ponpon-settings', JSON.stringify(saved));
+  });
+  const epoch = Date.UTC(2026, 9, 10, 12);
+  await page.clock.install({ time: epoch });
+  await page.clock.pauseAt(epoch + 1000);
+  await page.goto(process.env.TEST_URL || 'http://127.0.0.1:5173');
+  await page.clock.runFor(40);
+  assert.equal(await page.locator('#ball-count').textContent(), String(START_BALLS));
+  assert.equal(await page.locator('#mobile-balls').textContent(), String(START_BALLS));
+  const spent = await page.evaluate(() => {
+    const before = window.__ponpon.available;
+    const score = window.__ponpon.score;
+    const ok = window.__ponpon.dropSlot(0);
+    return { ok, before, after: window.__ponpon.available, score: window.__ponpon.score - score, drains: window.__ponpon.stats.drains };
+  });
+  assert.equal(spent.ok, true);
+  assert.equal(spent.after - spent.before, 2, 'a ×2 pocket returns 2 balls');
+  assert.equal(spent.score, 20);
+  const missed = await page.evaluate(() => {
+    const before = window.__ponpon.available;
+    const score = window.__ponpon.score;
+    window.__ponpon.dropDrain();
+    return { before, after: window.__ponpon.available, score: window.__ponpon.score - score, drains: window.__ponpon.stats.drains };
+  });
+  assert.equal(missed.after, missed.before, 'a drain does not return a ball');
+  assert.equal(missed.score, 0, 'a drain does not score');
+  assert.equal(missed.drains, 1);
+
+  await page.evaluate(stock => window.__ponpon.setStock(stock), BURST_COST - 1);
+  await page.locator('#launch').focus();
+  await page.keyboard.down('Space');
+  await page.clock.fastForward(BURST_READY_AT + 50);
+  await page.keyboard.up('Space');
+  await page.clock.runFor(80);
+  assert.equal(await page.evaluate(() => window.__ponpon.available), BURST_COST - 1, 'a short stock cannot start a five-ball burst');
+  assert.equal(await page.evaluate(() => window.__ponpon.stats.launches), 2, 'the refused burst does not launch');
+
+  await page.evaluate(() => window.__ponpon.setStock(0));
+  assert.equal(await page.evaluate(() => window.__ponpon.holdBall()), true);
+  await page.clock.runFor(60);
+  assert.equal(await page.locator('#settlement').evaluate(el => el.open), false, 'a ball on the table blocks game over');
+  await page.locator('#settings-button').click();
+  for (let i = 0; i < 3; i++) await page.locator('#gm-dot').click();
+  await page.locator('[data-mini="pairs"]').click();
+  await page.evaluate(() => window.__ponpon.releaseWave());
+  await page.clock.runFor(80);
+  assert.equal(await page.locator('#mini-game').evaluate(el => el.open), true);
+  assert.equal(await page.locator('#settlement').evaluate(el => el.open), false, 'an open mini-game blocks game over');
+  await page.locator('#mini-return').click({ force: true }).catch(() => {});
+  await page.evaluate(() => { document.querySelector('#mini-game').close(); });
+  await page.clock.runFor(80);
+  assert.equal(await page.locator('#settlement').evaluate(el => el.open), true);
+
+  const best = await page.locator('#best').textContent();
+  await page.locator('#play-again').click();
+  await page.clock.runFor(30);
+  assert.equal(await page.evaluate(() => window.__ponpon.slots), 5);
+  assert.equal(await page.evaluate(() => window.__ponpon.score), 0);
+  assert.equal(await page.evaluate(() => window.__ponpon.available), START_BALLS);
+  assert.equal(await page.locator('#best').textContent(), best, 'a new round keeps the saved record');
+  assert.equal(await page.locator('#settlement').evaluate(el => el.open), false);
+
+  await page.evaluate(() => { window.__ponpon.setStock(64); window.__ponpon.grant(4321); });
+  await page.reload();
+  await page.clock.runFor(40);
+  assert.equal(await page.evaluate(() => window.__ponpon.available), 64, 'refresh restores the ball stock');
+  assert.equal(await page.evaluate(() => window.__ponpon.score), 4321, 'refresh restores the score');
+  assert.equal(await page.evaluate(() => window.__ponpon.slots), 5, '4321 has not unlocked 7 slots');
+  assert.deepEqual(errors, []);
+  console.log('PASS: ball spend and return, drains, blocked game over, restart, and refresh resume.');
+} finally { await browser.close(); }

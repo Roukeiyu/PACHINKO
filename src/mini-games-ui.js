@@ -128,7 +128,7 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
       const moleNote=s.kind==='moles'?` · 打中 ${s.hit}/40 只`:'';
       const doubleNote=scoreMultiplier>1?' · 双球入洞 ×2':'';
       $('#mini-result-score').textContent=`收下 ${paid.toLocaleString()} 分快乐${moleNote}${doubleNote}`;
-      onFinish({kind:s.kind,score:paid,baseScore:s.score,multiplier:scoreMultiplier,source,status:s.status});
+      onFinish({kind:s.kind,score:paid,baseScore:s.score,multiplier:scoreMultiplier,source,status:s.status,bestCombo:s.bestCombo});
       $('#mini-return').focus();
     }
   }

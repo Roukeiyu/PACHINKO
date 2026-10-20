@@ -1,6 +1,7 @@
 import { chargeEffectsAt } from './charge.js';
 import { sceneMotionAt, project2DMotion } from './scene-motion.js';
 import { TABLE, slotMultipliers, LAUNCH_SQUASH } from './physics.js';
+import { slotFrame } from './round.js';
 import { SLOT_DISPLAY, SLOT_SYMBOLS, slotBonusLabel } from './slot-machine.js';
 import { rewardProfile, activeRewardScenes, rewardSceneAt, marqueePoint } from './reward-effects.js';
 import { slotIcon, slotColorIndex } from './slot-icons.js';
@@ -66,15 +67,27 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     ctx.save();ctx.globalAlpha=.8;bodyShape(game.gates[1], game.rewards.gateGlow ? '#f8cc77' : '#d7bf97', '#fff3d6', false);ctx.restore();
     ctx.save();ctx.setLineDash([5,6]);ctx.strokeStyle = paintColor('#a7ba8e', 'line');ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(676,539);ctx.lineTo(676,615);ctx.stroke();ctx.restore();
     text('↙ 回流口', 624, 640, 12, '#9b8965');
-    const sw = (TABLE.right - TABLE.left) / state.slots, multipliers = slotMultipliers(state.slots);
-    for (let i = 0; i < state.slots; i++) {
-      const x = TABLE.left + i * sw, glow = fx.slotGlows[i] || 0;
-      box(x + 3, TABLE.slotTop, sw - 6, 86, 12, theme.colors[slotColorIndex(multipliers[i])]);
-      if (glow) { const p = rewardProfile({ multiplier: multipliers[i] }); ctx.save(); ctx.globalAlpha = glow * .65; ctx.shadowBlur = 8 + p.tier * 5; ctx.shadowColor = paintColor(p.color, 'glow'); box(x + 3, TABLE.slotTop, sw - 6, 86, 12, p.color); ctx.restore(); }
-      text(slotIcon(multipliers[i]), x + sw / 2, TABLE.slotTop + 23, state.slots === 9 ? 22 : 26, '#627454');
-      text(`×${multipliers[i] * bonus.multiplier}`, x + sw / 2, TABLE.slotTop + 54, 17, '#4c6648', 'bold');
-      if (bonus.multiplier > 1) text(`进洞 ×${bonus.multiplier}`, x + sw / 2, TABLE.slotTop + 73, 9, bonus.multiplier === 5 ? '#8b59b5' : '#99712d');
-      else if (i === (state.slots - 1) / 2 || multipliers[i] >= 10) text('LUCKY', x + sw / 2, TABLE.slotTop + 73, 9, '#aa8243');
+    const multipliers = slotMultipliers(state.slots);
+    for (const region of slotFrame(state.slots).regions) {
+      const width = region.x1 - region.x0;
+      if (region.kind === 'drain') {
+        box(region.x0, TABLE.slotTop, width, 98, 3, '#5c2428');
+        ctx.save();
+        ctx.beginPath(); ctx.rect(region.x0, TABLE.slotTop, width, 98); ctx.clip();
+        ctx.strokeStyle = paintColor('#e7b8a2', 'line'); ctx.lineWidth = 1.5; ctx.globalAlpha = .55;
+        for (let y = TABLE.slotTop - 6; y < TABLE.slotTop + 98; y += 8) { ctx.beginPath(); ctx.moveTo(region.x0, y); ctx.lineTo(region.x1, y + 7); ctx.stroke(); }
+        ctx.restore();
+        if (width >= 22) text('漏', (region.x0 + region.x1) / 2, TABLE.slotTop + 78, width >= 36 ? 13 : 10, '#f6d7c8', 'bold');
+        continue;
+      }
+      const i = region.column, glow = fx.slotGlows[i] || 0;
+      const inset = Math.min(3, width / 6);
+      box(region.x0 + inset, TABLE.slotTop, width - inset * 2, 86, 8, theme.colors[slotColorIndex(multipliers[i])]);
+      if (glow) { const p = rewardProfile({ multiplier: multipliers[i] }); ctx.save(); ctx.globalAlpha = glow * .65; ctx.shadowBlur = 8 + p.tier * 5; ctx.shadowColor = paintColor(p.color, 'glow'); box(region.x0 + inset, TABLE.slotTop, width - inset * 2, 86, 8, p.color); ctx.restore(); }
+      text(slotIcon(multipliers[i]), (region.x0 + region.x1) / 2, TABLE.slotTop + 23, state.slots === 9 ? 16 : 20, '#627454');
+      text(`×${multipliers[i] * bonus.multiplier}`, (region.x0 + region.x1) / 2, TABLE.slotTop + 54, state.slots === 9 ? 12 : 15, '#4c6648', 'bold');
+      if (bonus.multiplier > 1) text(`进洞 ×${bonus.multiplier}`, (region.x0 + region.x1) / 2, TABLE.slotTop + 73, 9, bonus.multiplier === 5 ? '#8b59b5' : '#99712d');
+      else if (i === (state.slots - 1) / 2 || multipliers[i] >= 10) text('LUCKY', (region.x0 + region.x1) / 2, TABLE.slotTop + 73, 8, '#aa8243');
     }
     for (const hole of game.holes) {
       const treasure = (fx.celebrations || []).find(b => b.kind === 'jackpot' && b.x === hole.x && b.y === hole.y);

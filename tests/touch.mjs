@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { CHARGE_DURATION } from '../src/charge.js';
+import { START_BALLS } from '../src/round.js';
 const almostFull = Math.round(CHARGE_DURATION * .6);
 const partialHold = Math.round(CHARGE_DURATION * .28);
 
@@ -38,11 +39,11 @@ try {
   await touchStart('#launch');
   assert.ok(await page.evaluate(() => window.__ponpon.charging && window.__ponpon.charge === 0), 'each press starts at zero');
   await page.clock.fastForward(almostFull);
-  assert.equal(await count(), 0, 'holding must not fire prematurely');
+  assert.equal(await count(), START_BALLS, 'holding must not fire prematurely');
   assert.ok(await page.evaluate(() => window.__ponpon.charging && window.__ponpon.charge > .97 && window.__ponpon.charge < .995), '60% of the charge window is about 98.4% power');
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await page.clock.runFor(400);
-  assert.equal(await count(), 1, 'touch release must fire exactly once, not again on synthesized click');
+  assert.equal(await count(), START_BALLS - 1, 'touch release must fire exactly once, not again on synthesized click');
   assert.equal(await page.evaluate(() => window.__ponpon.charge), 0, 'release clears the charge');
   assert.ok(await page.evaluate(() => window.__ponpon.positions.some(p => p.power > .97 && p.power < .995)), 'the shot uses the same exponential curve as the display');
   assert.equal(await page.evaluate(() => getSelection().toString()), '');
@@ -60,9 +61,9 @@ try {
   await session.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] });
   assert.equal(await page.evaluate(() => window.__ponpon.charging), false);
   assert.equal(await page.evaluate(() => window.__ponpon.charge), 0, 'canceling clears the charge');
-  assert.equal(await count(), 1, 'an interrupted gesture must cancel, not launch');
+  assert.equal(await count(), START_BALLS - 1, 'an interrupted gesture must cancel, not launch');
   await touchStart('#plunger'); await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); await page.clock.runFor(400);
-  assert.equal(await count(), 2, 'the right-hand spring is a working touch target');
+  assert.equal(await count(), START_BALLS - 2, 'the right-hand spring is a working touch target');
   await page.clock.runFor(600);
   await page.locator('#launch').focus();
   await page.keyboard.down('Space');
@@ -70,20 +71,20 @@ try {
   await page.clock.fastForward(CHARGE_DURATION);
   assert.equal(await page.evaluate(() => window.__ponpon.charge), 1, 'holding through 99.9% snaps to full charge');
   assert.match(await page.locator('#launch-label').textContent(), /100%/);
-  assert.equal(await count(), 2);
+  assert.equal(await count(), START_BALLS - 2);
   await page.keyboard.up('Space'); await page.clock.runFor(400);
-  assert.equal(await count(), 3, 'keyboard release fires exactly once even when launch button has focus');
+  assert.equal(await count(), START_BALLS - 3, 'keyboard release fires exactly once even when launch button has focus');
   assert.ok(await page.evaluate(() => window.__ponpon.positions.some(p => p.power === 1)), 'a full-charge release actually uses 100% power');
   await page.locator('#launch').focus();
   await page.keyboard.down('Enter');
   assert.equal(await page.evaluate(() => window.__ponpon.charging), true, 'Enter starts a charge instead of a zero-power click');
-  assert.equal(await count(), 3, 'Enter keydown must not fire immediately');
+  assert.equal(await count(), START_BALLS - 3, 'Enter keydown must not fire immediately');
   await page.clock.fastForward(partialHold);
   await page.keyboard.up('Enter');
   const enterPower = await page.evaluate(() => window.__ponpon.positions.at(-1).power);
   await page.evaluate(() => document.querySelector('#launch').click());
   await page.clock.runFor(400);
-  assert.equal(await count(), 4, 'Enter release fires once and the synthetic click does not repeat it');
+  assert.equal(await count(), START_BALLS - 4, 'Enter release fires once and the synthetic click does not repeat it');
   assert.ok(enterPower > .5 && enterPower < 1, 'the Enter shot keeps the held power');
   console.log('PASS: canceled gestures, right-hand spring tapping and keyboard charge/release.');
 

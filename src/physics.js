@@ -3,9 +3,11 @@ import { collectSlot } from './collections.js';
 import { slotMultipliers } from './slots.js';
 export { slotMultipliers };
 import { createSlotMachine, SLOT_DISPLAY } from './slot-machine.js';
+import { SLOT_ROW_LEFT, SLOT_ROW_RIGHT, DRAIN_WALL, DRAIN_FLOOR, slotFrame, classifyBottom } from './round.js';
+export { slotFrame, classifyBottom };
 
 const { Engine, Bodies, Body, Composite, Events } = Matter;
-export const TABLE = Object.freeze({ width: 760, height: 900, left: 39, right: 655, slotTop: 797, scoreLine: 865, launchX: 713, launchY: 787 });
+export const TABLE = Object.freeze({ width: 760, height: 900, left: SLOT_ROW_LEFT, right: SLOT_ROW_RIGHT, slotTop: 797, scoreLine: 865, launchX: 713, launchY: 787 });
 // Full charge seats the ball this far down with the painted spring. Spawn uses
 // the same offset so the released ball does not pop above the plunger.
 export const LAUNCH_SQUASH = 22;
@@ -20,7 +22,7 @@ const DWELL_RADIUS = 12, DWELL_LIMIT = 1500, COLLECTOR_HOLD = 48;
 
 // Physics is independent of rendering, so trajectory and scoring can be tested at
 // the same fixed time step used on desktop and mobile (including fast launches).
-export function createTable({ slots = 7, collections = null, random = Math.random, starRandom = Math.random, slotRandom = Math.random, onHit = () => {}, onScore = () => {}, onReturn = () => {}, onSurprise = () => {} } = {}) {
+export function createTable({ slots = 7, collections = null, random = Math.random, starRandom = Math.random, slotRandom = Math.random, onHit = () => {}, onScore = () => {}, onReturn = () => {}, onDrain = () => {}, onSurprise = () => {} } = {}) {
   const engine = Engine.create({ gravity: { x: 0, y: 1.05 }, positionIterations: 8, velocityIterations: 8 });
   const balls = [], walls = [], pins = [], kickers = [], bumpers = [], rails = [], diamonds = [], spinners = [], guards = [], dividers = [], gates = [];
   const holes = [{ x: 615, y: 482, facing: Math.PI, glow: 0 }];
@@ -32,7 +34,7 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   const collector = { x: 100, y: 650, radius: 26, capacity: 20, stored: [], remaining: 0, glow: 0, outlets: [] };
   const rewards = { hits: [0, 0, 0], goals: [10, 10, 30], enlargedUntil: 0, burstUntil: 0, burstStep: -1, gateGlow: 0, ordinaryStars: 0 };
   const slotMachine = createSlotMachine({ random: slotRandom, onEvent: event => onSurprise({ ...event, x: SLOT_DISPLAY.x, y: SLOT_DISPLAY.y }) });
-  const stats = { launches: 0, entered: 0, scored: 0, jackpots: 0, returns: 0, timeouts: 0, redirected: 0, bonusBalls: 0, randomShots: 0, clockBursts: 0, enlargements: 0, absorbed: 0, storageBursts: 0, storageDrops: 0, impacts: 0, hits: { pin: 0, kicker: 0, bumper: 0, rail: 0, spinner: 0, diamond: 0, wall: 0, deflector: 0 } };
+  const stats = { launches: 0, entered: 0, scored: 0, jackpots: 0, returns: 0, drains: 0, timeouts: 0, redirected: 0, bonusBalls: 0, randomShots: 0, clockBursts: 0, enlargements: 0, absorbed: 0, storageBursts: 0, storageDrops: 0, impacts: 0, hits: { pin: 0, kicker: 0, bumper: 0, rail: 0, spinner: 0, diamond: 0, wall: 0, deflector: 0 } };
   const add = (body, group, extra = {}) => { body.plugin = { glow: 0, ...extra }; group.push(body); Composite.add(engine.world, body); return body; };
   const segment = (x1, y1, x2, y2, thickness, group, label = 'wall', restitution = .65) => {
     const length = Math.hypot(x2 - x1, y2 - y1);
@@ -142,9 +144,19 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     slots = count; clearBalls();
     for (const body of dividers) Composite.remove(engine.world, body);
     dividers.length = 0;
-    const sw = (TABLE.right - TABLE.left) / slots;
-    for (let i = 1; i < slots; i++) segment(TABLE.left + i * sw, TABLE.slotTop, TABLE.left + i * sw, 894, 7, dividers, 'divider', .4);
-    collector.outlets = Array.from({ length: slots }, (_, column) => ({ column, x: TABLE.left + (column + .5) * sw, y: 74, glow: 0 }));
+    const frame = slotFrame(slots);
+    // Lips sit inside the pocket, so the painted mouth stays fully open and a
+    // ball that misses the lip falls through instead of being guided in.
+    for (const region of frame.regions) {
+      if (region.kind !== 'slot') continue;
+      const left = region.x0 + DRAIN_WALL / 2;
+      const right = region.x1 - DRAIN_WALL / 2;
+      segment(left, TABLE.slotTop, left, DRAIN_FLOOR, DRAIN_WALL, dividers, 'divider', .2);
+      segment(right, TABLE.slotTop, right, DRAIN_FLOOR, DRAIN_WALL, dividers, 'divider', .2);
+    }
+    collector.outlets = frame.regions.filter(region => region.kind === 'slot').map(region => ({
+      column: region.column, x: (region.x0 + region.x1) / 2, y: 74, glow: 0, pocket: region.x1 - region.x0,
+    }));
     // Stored balls and drops that have not yet emerged survive a layout change.
     const columns = shuffledColumns(pendingDrops.length);
     pendingDrops.forEach((drop, i) => { drop.column = columns[i]; });
@@ -188,12 +200,32 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     return emitCharged(0, true);
   }
   function setEmissionPaused(paused) {
-    if (emissionPaused === paused) return;
+    if (emissionPaused === paused) return 0;
     emissionPaused = paused;
-    if (paused) {
-      // Stop the un-fired part of a charged burst as soon as a secret opens.
-      pendingLaunches.length = 0;
-    }
+    if (!paused) return 0;
+    // Stop the un-fired part of a charged burst as soon as a secret opens.
+    // The caller refunds these shots; they were already paid for.
+    const dropped = pendingLaunches.length;
+    pendingLaunches.length = 0;
+    return dropped;
+  }
+  function takeStored(count) {
+    const n = Math.max(0, Math.min(collector.stored.length, Math.floor(count) || 0));
+    return collector.stored.splice(0, n).length;
+  }
+  function resetRound() {
+    clearBalls();
+    collector.stored.length = 0;
+    pendingDrops.length = 0;
+    collector.remaining = 0;
+    rewards.hits = [0, 0, 0];
+    rewards.enlargedUntil = 0;
+    rewards.burstUntil = 0;
+    rewards.burstStep = -1;
+    rewards.ordinaryStars = 0;
+    emissionPaused = false;
+    resizeCenter(false);
+    slotMachine.reset();
   }
   function emitFrom(bumper, angle, kind, ordinal = 0) {
     const radius = bumper.plugin.radius + 26;
@@ -228,8 +260,10 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     onSurprise({ kind: 'storage-burst', x: collector.x, y: collector.y, amount: factors.length });
   }
   function emitDrop(drop) {
-    const outlet = collector.outlets[drop.column], sw = (TABLE.right - TABLE.left) / slots;
-    const x = outlet.x + (random() * 2 - 1) * Math.min(8, sw / 2 - 18);
+    const outlet = collector.outlets[drop.column];
+    const slack = (outlet.pocket - DRAIN_WALL * 2) / 2 - 12;
+    const room = Math.min(8, Math.max(1, slack));
+    const x = outlet.x + (random() * 2 - 1) * room;
     // Drop beneath the top mouth, clear of the upper spring stud and pin row.
     // A gentle downward velocity lets gravity and the full board decide the outcome.
     const ball = spawn(x, outlet.y + 21, (random() - .5) * .7, .6 + random() * .8, { bonus: true, kind: 'storage' });
@@ -413,11 +447,20 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
         if (!ball.entered) { pushOut(ball, hole); continue; }
         hole.glow = 1; stats.jackpots++; remove(ball, i); settleScore({ kind: 'jackpot', basePoints: 500, x: hole.x, y: hole.y }, ball); continue;
       }
-      if (ball.entered && x < 666 && y >= TABLE.scoreLine) {
-        const column = Math.max(0, Math.min(slots - 1, Math.floor((x - TABLE.left) / ((TABLE.right - TABLE.left) / slots))));
-        const multiplier = slotMultipliers(slots)[column];
-        const lucky = column === (slots - 1) / 2;
-        remove(ball, i); settleScore({ kind: 'slot', column, multiplier, lucky, basePoints: multiplier * 10, x: TABLE.left + (column + .5) * (TABLE.right - TABLE.left) / slots, y: TABLE.scoreLine }, ball); continue;
+      if (ball.entered && y >= TABLE.scoreLine) {
+        const region = classifyBottom(x, slots);
+        if (region?.kind === 'slot') {
+          const multiplier = slotMultipliers(slots)[region.column];
+          const lucky = region.column === (slots - 1) / 2;
+          remove(ball, i);
+          settleScore({ kind: 'slot', column: region.column, multiplier, lucky, basePoints: multiplier * 10, x: (region.x0 + region.x1) / 2, y: TABLE.scoreLine }, ball);
+          continue;
+        }
+        if (region?.kind === 'drain') {
+          remove(ball, i); stats.drains++;
+          onDrain({ ballId: ball.id, x, y, mouth: region.index });
+          continue;
+        }
       }
       // Balls falling back down the shooter lane are returned, never mis-scored
       // as the rightmost slot. A timeout is visible rather than a hidden teleport.
@@ -444,5 +487,9 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
       }
     }
   }
-  return { engine, balls, walls, pins, kickers, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, collector, slotMachine: slotMachine.state, stats, rewards, launch, launchBurst, setEmissionPaused, get emissionPaused() { return emissionPaused; }, get pendingLaunches() { return pendingLaunches.length; }, step, setSlots, get star() { return activeStar; }, get clock() { return clock; }, get slots() { return slots; } };
+  function nudge(ball, x, y, vy = 6) {
+    Body.setPosition(ball.body, { x, y });
+    Body.setVelocity(ball.body, { x: 0, y: vy });
+  }
+  return { engine, balls, walls, pins, kickers, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, collector, slotMachine: slotMachine.state, stats, rewards, launch, launchBurst, setEmissionPaused, takeStored, resetRound, nudge, get emissionPaused() { return emissionPaused; }, get pendingLaunches() { return pendingLaunches.length; }, step, setSlots, get star() { return activeStar; }, get clock() { return clock; }, get slots() { return slots; } };
 }

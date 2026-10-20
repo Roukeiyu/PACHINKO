@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { PAIR_DURATION } from '../src/mini-games.js';
+import { TABLE } from '../src/physics.js';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 const executablePath = process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
@@ -28,7 +29,7 @@ async function setup(fallback = false, viewport = { width: 1440, height: 1180 })
     body = body.replace('return { engine, balls', `window.__rewardPhysics = {
       slot(multiplier) {
         const column = slotMultipliers(slots).indexOf(multiplier), ball = launch(); ball.entered = true;
-        Body.setPosition(ball.body, {x: TABLE.left + (column + .5) * (TABLE.right - TABLE.left) / slots, y: TABLE.scoreLine-1});
+        Body.setPosition(ball.body, {x: collector.outlets[column].x, y: TABLE.scoreLine-1});
         Body.setVelocity(ball.body, {x:0,y:6}); step();
       }, secret() {
         // Keep one real ball in play so the treasure effect is visible while
@@ -70,7 +71,7 @@ try {
     await fallback.evaluate(({theme,count}) => window.__rewardFixture.theme(theme,count), {theme,count});
     await fallback.clock.runFor(50);
     const labels = await fallback.evaluate(() => window.__rewardLabels);
-    const slots = labels.filter(l => l.y === 820), factors = count===5 ? [2,3,5,3,2] : count===7 ? [2,3,5,10,5,3,2] : [2,3,5,10,20,10,5,3,2];
+    const slots = labels.filter(l => l.y === TABLE.slotTop + 23), factors = count===5 ? [2,3,5,3,2] : count===7 ? [2,3,5,10,5,3,2] : [2,3,5,10,20,10,5,3,2];
     assert.deepEqual(slots.map(l => l.value), factors.map(m => symbols[m]), `${theme}/${count}: repeated multipliers always share a fruit`);
     for (const motif of upper[theme]) assert.ok(labels.some(l => l.value === motif && l.y < 400));
     assert.ok(upper[theme].every(icon => !slots.some(l => l.value === icon)), 'drums use a separate icon family');

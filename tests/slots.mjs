@@ -10,7 +10,7 @@ assert.equal(restoreSlots(9), 9);
 assert.equal(restoreSlots(3), 5);
 assert.equal(nextSlotCount(5, 0), 5);
 assert.equal(nextSlotCount(5, 5000), 7);
-assert.equal(nextSlotCount(7, 0), 7, 'a saved 7-slot unlock does not fall back when the score resets');
+assert.equal(nextSlotCount(7, 0), 7, 'within a round a 7-slot table does not fall back');
 assert.equal(nextSlotCount(7, 20000), 9);
 assert.equal(nextSlotCount(9, 0), 9);
 assert.deepEqual(slotMultipliers(5), [2, 3, 5, 3, 2]);

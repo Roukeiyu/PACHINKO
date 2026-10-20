@@ -24,7 +24,7 @@ try {
         if(global)slotMachine.state.tripleUntil=clock+60000;
         const column=last?slotMultipliers(slots).lastIndexOf(multiplier):slotMultipliers(slots).indexOf(multiplier);
         const ball=launch();ball.entered=true;ball.scoreFactor=factor;
-        Body.setPosition(ball.body,{x:TABLE.left+(column+.5)*(TABLE.right-TABLE.left)/slots,y:TABLE.scoreLine-1});Body.setVelocity(ball.body,{x:0,y:6});step();
+        Body.setPosition(ball.body,{x:collector.outlets[column].x,y:TABLE.scoreLine-1});Body.setVelocity(ball.body,{x:0,y:6});step();
       }
     };return { engine, balls`);
     await route.fulfill({response,body});

@@ -20,10 +20,11 @@ assert.equal(maximum[2], Number.MAX_SAFE_INTEGER);
 console.log('PASS: shared fruit counts, one collection per slot entry, old-save migration and safe saved progress.');
 
 const { createTable, TABLE, slotMultipliers } = await import('../src/physics.js');
+const { pocketCenter } = await import('../src/round.js');
 const { default: Matter } = await import('matter-js');
 function drop(game, column, factor = 1) {
   const ball = game.launch(); assert.ok(ball); ball.entered = true; ball.scoreFactor = factor;
-  Matter.Body.setPosition(ball.body, { x: TABLE.left + (column + .5) * (TABLE.right - TABLE.left) / game.slots, y: TABLE.scoreLine - 1 });
+  Matter.Body.setPosition(ball.body, { x: pocketCenter(game.slots, column), y: TABLE.scoreLine - 1 });
   Matter.Body.setVelocity(ball.body, { x: 0, y: 6 }); game.step();
 }
 for (const slots of [5, 7, 9]) for (const multiplier of new Set(slotMultipliers(slots))) {

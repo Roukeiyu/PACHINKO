@@ -2,6 +2,7 @@ import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { START_BALLS } from '../src/round.js';
 
 const executablePath = process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
 const browser = await chromium.launch({ executablePath, headless: true, args: process.platform === 'linux' ? ['--no-sandbox'] : [] });
@@ -26,7 +27,7 @@ try {
   await page.mouse.down(); await page.waitForTimeout(1100); await page.mouse.up();
   await page.waitForFunction(() => window.__ponpon.positions.some(p => p.x > 680 && p.y < 650));
   await page.waitForFunction(() => window.__ponpon.stats.entered > 0);
-  assert.equal(await page.locator('#ball-count').textContent(), '1');
+  assert.equal(await page.locator('#ball-count').textContent(), String(START_BALLS - 1));
   assert.equal(await page.evaluate(() => window.__ponpon.audioState), 'running');
   await toggleAuto();
   assert.equal(await page.locator('#auto-power').isVisible(), true);
@@ -51,13 +52,14 @@ try {
   assert.ok(await page.evaluate(before => window.__ponpon.stats.returns > before, returnsBefore), 'weak automatic shots return');
   await page.keyboard.press('End'); await toggleAuto();
   console.log('PASS: the 1% automatic slider produces only a tiny hop and natural return.');
+  assert.equal(await page.locator('#power-value').textContent(), '100%', 'full power is restored before the slot layouts');
   assert.equal(await page.locator('[data-slots]').count(), 0, 'slot count is no longer a manual setting');
   assert.equal(await page.evaluate(() => window.__ponpon.slots), 5, 'a new table starts at 5 slots');
   for (const slots of [5, 9, 7]) {
     await page.evaluate(n => window.__ponpon.setSlots(n), slots);
     const before = await page.evaluate(() => window.__ponpon.score);
     await toggleAuto();
-    await page.waitForFunction(previous => window.__ponpon.score > previous, before, { timeout: 30000 });
+    await page.waitForFunction(previous => window.__ponpon.score > previous, before, { timeout: 120000 });
     await toggleAuto();
     assert.equal(await page.evaluate(() => window.__ponpon.slots), slots);
     console.log(`PASS: ${slots} slots receive a physical ball and score.`);
@@ -69,9 +71,9 @@ try {
   await page.waitForFunction(() => window.__ponpon.activeBalls >= 3);
   await page.screenshot({ path: 'test-results/playing.png', fullPage: true });
   await toggleAuto();
-  const count = await page.locator('#ball-count').textContent();
+  const launches = await page.evaluate(() => window.__ponpon.launches);
   await page.waitForTimeout(900);
-  assert.equal(await page.locator('#ball-count').textContent(), count);
+  assert.equal(await page.evaluate(() => window.__ponpon.launches), launches, 'pausing automatic fire spends no further balls');
   console.log('PASS: animal scene and automatic launch/pause.');
   await page.evaluate(() => window.__ponpon.setSlots(9));
   await page.locator('#settings-button').click();

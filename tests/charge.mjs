@@ -55,7 +55,7 @@ for (const slots of [5,7,9]) for (let seed = 1; seed <= 20; seed++) {
   assert.deepEqual(shots.map(e => e.ordinal), [0,1,2,3,4]);
   assert.equal(game.stats.entered, 5, 'all five shots pass through the real lane into play');
   assert.equal(game.stats.timeouts, 0); assert.equal(game.balls.length, 0);
-  assert.equal(game.stats.launches + game.stats.bonusBalls, game.stats.scored + game.stats.absorbed + game.stats.returns, 'all original and rewarded balls accounted for');
+  assert.equal(game.stats.launches + game.stats.bonusBalls, game.stats.scored + game.stats.absorbed + game.stats.returns + game.stats.drains, 'all original and rewarded balls accounted for');
 }
 {
   const game = createTable();

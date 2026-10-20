@@ -98,7 +98,8 @@ for (const slots of [5, 7, 9]) for (const seedOffset of [0, 100, 200]) {
   }
   assert.equal(escaped, 0, 'fast balls must not tunnel through side or top walls');
   assert.ok(game.stats.entered >= 116, 'shooter lane must reliably lead to the playing field');
-  assert.ok(game.stats.scored + game.stats.absorbed >= 100, 'the large majority of launches must score or enter storage');
+  assert.ok(game.stats.scored >= 10, 'scoring pockets stay reachable after drain mouths open');
+  assert.ok(game.stats.scored + game.stats.absorbed + game.stats.drains + game.stats.returns >= 100, 'every launch still resolves on the board');
   assert.ok(game.stats.timeouts <= 3, 'obstacle layout must not trap balls');
   assert.ok(columns.size >= slots - 1, 'multiple routes must reach almost all slots');
   for (const kind of ['bumper', 'rail', 'spinner', 'diamond', 'pin', 'deflector']) assert.ok(game.stats.hits[kind] > 0, `${kind} participates in physical trajectories`);

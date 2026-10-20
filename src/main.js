@@ -1,4 +1,4 @@
-import { createTable, STEP } from './physics.js';
+import { createTable, STEP, TABLE } from './physics.js';
 import { createRenderer } from './renderer.js';
 import { createCanon } from './canon.js';
 import { SLOT_SYMBOLS, slotBonusLabel } from './slot-machine.js';
@@ -12,8 +12,9 @@ import { createMiniGamesUI, miniGameMarkup } from './mini-games-ui.js';
 import { sceneMotionAt } from './scene-motion.js';
 import { celebrateReward, advanceCelebrations } from './reward-effects.js';
 import { COLLECTION_TYPES, restoreCollections } from './collections.js';
-import { nextSlotCount, restoreSlots, SLOT_UNLOCK_7, SLOT_UNLOCK_9 } from './slots.js';
-import { createLeaderboard, createRunId, LEADERBOARD_QUALIFY_SCORE, sanitizeName } from './leaderboard.js';
+import { nextSlotCount, SLOT_UNLOCK_7, SLOT_UNLOCK_9 } from './slots.js';
+import { createLeaderboard, createRunId, PRESET_BOARD, sanitizeName } from './leaderboard.js';
+import { START_BALLS, LOW_BALLS, LAUNCH_COST, BURST_COST, SECRET_BALLS, LUCKY_BALLS, SLOT_MACHINE_BALLS, DRUM_RANDOM_BALLS, DRUM_ENLARGE_BALLS, DRUM_CLOCK_BALLS, miniGameBalls, roundCanEnd, qualifiesForLeaderboard, restoreRun, pocketCenter, slotFrame } from './round.js';
 import { slotIcon } from './slot-icons.js';
 import './style.css';
 
@@ -30,35 +31,39 @@ const animalScene = { motifs: ['🐰','🐻','🐱'], bg: '#fbf3e9', pin: '#b2c3
 
 let saved = {};
 try { saved = JSON.parse(localStorage.getItem('ponpon-settings') || '{}'); } catch {}
+const savedBest = Number.isFinite(saved.best) ? Math.max(0, saved.best) : 0;
+const resumed = restoreRun(saved.run, savedBest);
 const state = {
   collections: restoreCollections(saved?.collections),
-  slots: restoreSlots(saved.slots),
+  slots: resumed.slots,
   sound: saved.sound !== false, volume: Number.isFinite(saved.volume) ? Math.max(0,Math.min(1,saved.volume)) : .55,
   music: saved.music !== false, musicVolume: Number.isFinite(saved.musicVolume) ? Math.max(0,Math.min(1,saved.musicVolume)) : .35,
   timeFlow: saved.timeFlow === true, timeFlowStartedAt: Number.isFinite(saved.timeFlowStartedAt) && saved.timeFlowStartedAt > 0 ? saved.timeFlowStartedAt : Date.now(),
   calm: saved.calm ?? matchMedia('(prefers-reduced-motion: reduce)').matches,
   vibrate: saved.vibrate !== false,
   render3D: saved.render3D === true, secretPending: false, gm: false,
-  score: 0, balls: 0, best: Number.isFinite(saved.best) ? Math.max(0,saved.best) : 0, power: 65, auto: false, charging: false, charge: 0, chargeElapsed: 0,
+  score: resumed.score, stock: resumed.balls, best: savedBest, power: 65, auto: false, charging: false, charge: 0, chargeElapsed: 0,
+  launches: resumed.launches, combo: 0, bestCombo: resumed.bestCombo, bestSlot: resumed.bestSlot, bestBefore: resumed.bestBefore,
+  over: resumed.over, nameDecided: resumed.nameDecided,
 };
-const runId = createRunId();
+let runId = saved.run?.runId || createRunId();
 const leaderboard = createLeaderboard({ url: import.meta.env.VITE_LEADERBOARD_URL || '' });
-let playerName = '', namePrompted = false;
-const persist = () => { try { localStorage.setItem('ponpon-settings', JSON.stringify({render3D:state.render3D,slots:state.slots,sound:state.sound,volume:state.volume,music:state.music,musicVolume:state.musicVolume,timeFlow:state.timeFlow,timeFlowStartedAt:state.timeFlowStartedAt,calm:state.calm,vibrate:state.vibrate,best:state.best,collections:state.collections})); } catch {} };
+let playerName = '';
+const persist = () => { try { localStorage.setItem('ponpon-settings', JSON.stringify({render3D:state.render3D,slots:state.slots,sound:state.sound,volume:state.volume,music:state.music,musicVolume:state.musicVolume,timeFlow:state.timeFlow,timeFlowStartedAt:state.timeFlowStartedAt,calm:state.calm,vibrate:state.vibrate,best:state.best,collections:state.collections,run:{score:state.score,balls:availableBalls(),slots:state.slots,launches:state.launches,bestCombo:state.bestCombo,bestSlot:state.bestSlot,bestBefore:state.bestBefore,over:state.over,nameDecided:state.nameDecided,runId}})); } catch {} };
 
 document.querySelector('#app').innerHTML = `
 <div class="shell">
   <header><div class="brand"><div class="brand-mark"><svg width="32" height="32" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="14" fill="#fff9e9"/><circle cx="15" cy="18" r="1.5" fill="#435444"/><circle cx="25" cy="18" r="1.5" fill="#435444"/><path d="M16 24q4 4 8 0" fill="none" stroke="#435444" stroke-width="1.5" stroke-linecap="round"/></svg></div><div class="brand-copy"><div class="brand-name">PON <span>PON</span><span style="font-size:13px;color:var(--flow-ink-89957a,#89957a)"> ✳</span></div><div class="brand-caption">A LITTLE JOY MACHINE</div></div><h1 class="mobile-title">弹一点，小快乐</h1></div><div class="header-actions"><span class="quiet-tag">TAKE A BREAK. MAKE A PON.</span><button class="icon-button" id="sound-button" aria-label="关闭声音"></button><button class="settings-button" id="settings-button" aria-label="游乐场设置">${icon('settings')}<span>游乐场设置</span></button></div></header>
   <section class="intro"><div><div class="eyebrow">YOUR DAILY DOSE OF HAPPY</div><h1>弹一点，小快乐<em>✧</em></h1><p>蓄一点力，弹进一场奇妙的小冒险。</p></div><div class="intro-sticker">100% 快乐<br>0% 压力</div></section>
   <main class="game-layout">
-    <section class="machine" aria-label="柏青哥游戏区"><div class="mobile-hud"><div class="hud-score-row"><span class="hud-score-label">快乐积分</span><strong id="mobile-score">0</strong></div><div class="hud-meta-row"><span class="hud-best">最高<strong id="mobile-best">0</strong></span><span id="shot-state">右下角 · 弹珠就位</span><span class="bonus-label">秘密洞 <b id="hole-points">+500</b></span><button type="button" id="collection-button" class="collection-button" aria-label="打开水果收集册">收集册</button><button type="button" id="leaderboard-button" class="collection-button" aria-label="打开排行榜">排行</button></div></div><div class="machine-top"><span class="machine-label"><i class="status-dot"></i> <span id="machine-caption">THE HAPPY LITTLE PACHINKO</span></span><span class="tiny-dots">● ● ●</span></div><div class="board-wrap"><canvas id="board" tabindex="0" width="760" height="900" aria-describedby="slot-status" aria-label="${state.render3D ? '3D' : '2D'} 球台；弹珠从右下角沿轨道发射；长按下方按钮或右侧弹簧蓄力，${CHARGE_DURATION/1000}秒满蓄力，再按${OVERCHARGE_DURATION/1000}秒松手五球连发。右侧秘密洞奖励500分，左侧三角平台随机换向；左下蓄球罐存满20颗，从顶部均匀随机落下40颗；每进洞50次自动转动三格老虎机，两格相同全场3分钟双倍，三格相同全场1分钟五倍。"></canvas><div id="slot-upgrade" class="slot-upgrade" hidden></div><span id="slot-status" class="sr-only" role="status">老虎机：进洞 0/50；两格相同全场 ×2 三分钟，三格相同全场 ×5 一分钟。</span><button class="plunger-hit" id="plunger" aria-label="长按右侧弹簧${CHARGE_DURATION/1000}秒满蓄力，再按${OVERCHARGE_DURATION/1000}秒松手五球连发"></button></div><div class="launch-control"><div class="compact-tools"><button class="icon-button" id="compact-sound" aria-label="关闭声音"></button><button class="settings-button" id="compact-settings" aria-label="游乐场设置">${icon('settings')}<span>设置</span></button></div><div class="launch-row"><div class="launch-mode"><button class="launch-button" id="launch">${icon('arrow')} <span id="launch-label">按住蓄力 · 松开发射</span><kbd>SPACE</kbd></button><label class="power-row" id="auto-power" for="power" hidden><span>弹射力度</span><output id="power-value" for="power">65%</output><input type="range" min="1" max="100" value="65" id="power" aria-label="自动弹射力度"/></label></div></div><p class="machine-foot">蓄力 ${CHARGE_DURATION/1000} 秒满 · 再按 ${OVERCHARGE_DURATION/1000} 秒五球连发 · 拾星本球加倍 · 蓄满 20 颗落 40 颗</p></div><div class="reward-dashboard" aria-label="反弹点惊喜进度"><div><span>左鼓 · 随机赠球 <b id="reward-0">0/10</b></span><progress id="reward-progress-0" max="10" value="0" aria-label="左侧反弹点命中次数"></progress><small>满 10 次送一颗</small></div><div><span>中央 · 时钟爆发 <b id="reward-2">0/30</b></span><progress id="reward-progress-2" max="30" value="0" aria-label="中央反弹点命中次数"></progress><small>1 秒发射 12 颗</small></div><div><span>右鼓 · 中央变大 <b id="reward-1">0/10</b></span><progress id="reward-progress-1" max="10" value="0" aria-label="右侧反弹点命中次数"></progress><small id="reward-timer">持续 10 秒</small></div></div></section>
-    <aside class="sidebar"><section class="card score-card"><div class="card-label">今日份快乐 <span class="small-label">HAPPY POINTS</span></div><div class="score-value"><span id="score">0</span><span class="score-unit">分</span></div><div class="score-divider"></div><div class="score-stats"><span>已投小球 &nbsp;<strong id="ball-count">0</strong></span><span>最高纪录 &nbsp;<strong id="best">0</strong></span></div></section><section class="card how-card"><div class="card-label">快乐使用说明 <span>↗</span></div><ol><li><span class="step-no">01</span>力度决定高度，回流口重返球场</li><li><span class="step-no">02</span>左右鼓满 10 次，赠球或放大中央</li><li><span class="step-no">03</span>中央满 30 次，十二时钟大爆发</li><li><span class="step-no">04</span>蓄球罐存满 20 颗，顶部落下 40 颗</li><li><span class="step-no">05</span>进洞满 50 次转好运，两同 ×2，三同 ×5</li></ol></section><div class="little-note">✿ &nbsp; 不用赶路，弹一会儿也很好</div></aside>
-  </main><div class="bottom-info"><span>✧ &nbsp; 真实物理碰撞 · 无限次小快乐</span><span class="sound-indicator"><span class="sound-bars"><i></i><i></i><i></i></span><span id="sound-status">声音已开启，快乐有回响</span></span></div><footer class="footer"><span>PON PON · YOUR POCKET-SIZED HAPPY PLACE</span><span>MADE WITH <b>♡</b> & A LITTLE BOUNCE</span></footer>
+    <section class="machine" aria-label="柏青哥游戏区"><div class="mobile-hud"><div class="hud-score-row"><span class="hud-score-label">快乐积分</span><strong id="mobile-score">0</strong><span class="hud-ball-label">小球</span><strong id="mobile-balls" class="ball-count">0</strong></div><div class="hud-meta-row"><span class="hud-best">最高<strong id="mobile-best">0</strong></span><span id="shot-state">右下角 · 弹珠就位</span><span class="bonus-label">秘密洞 <b id="hole-points">+500</b></span><button type="button" id="collection-button" class="collection-button" aria-label="打开水果收集册">收集册</button><button type="button" id="leaderboard-button" class="collection-button" aria-label="打开排行榜">排行</button></div></div><div class="machine-top"><span class="machine-label"><i class="status-dot"></i> <span id="machine-caption">THE HAPPY LITTLE PACHINKO</span></span><span class="tiny-dots">● ● ●</span></div><div class="board-wrap"><canvas id="board" tabindex="0" width="760" height="900" aria-describedby="slot-status" aria-label="${state.render3D ? '3D' : '2D'} 球台；弹珠从右下角沿轨道发射；长按下方按钮或右侧弹簧蓄力，${CHARGE_DURATION/1000}秒满蓄力，再按${OVERCHARGE_DURATION/1000}秒松手五球连发。右侧秘密洞奖励500分，左侧三角平台随机换向；左下蓄球罐存满20颗，从顶部均匀随机落下40颗；每进洞50次自动转动三格老虎机，两格相同全场3分钟双倍，三格相同全场1分钟五倍。"></canvas><div id="slot-upgrade" class="slot-upgrade" hidden></div><span id="slot-status" class="sr-only" role="status">老虎机：进洞 0/50；两格相同全场 ×2 三分钟，三格相同全场 ×5 一分钟。</span><button class="plunger-hit" id="plunger" aria-label="长按右侧弹簧${CHARGE_DURATION/1000}秒满蓄力，再按${OVERCHARGE_DURATION/1000}秒松手五球连发"></button></div><div class="launch-control"><div class="compact-tools"><button class="icon-button" id="compact-sound" aria-label="关闭声音"></button><button class="settings-button" id="compact-settings" aria-label="游乐场设置">${icon('settings')}<span>设置</span></button></div><div class="launch-row"><div class="launch-mode"><button class="launch-button" id="launch">${icon('arrow')} <span id="launch-label">按住蓄力 · 松开发射</span><kbd>SPACE</kbd></button><label class="power-row" id="auto-power" for="power" hidden><span>弹射力度</span><output id="power-value" for="power">65%</output><input type="range" min="1" max="100" value="65" id="power" aria-label="自动弹射力度"/></label></div></div><p class="machine-foot">蓄力 ${CHARGE_DURATION/1000} 秒满 · 再按 ${OVERCHARGE_DURATION/1000} 秒五球连发 · 拾星本球加倍 · 蓄满 20 颗落 40 颗</p></div><div class="reward-dashboard" aria-label="反弹点惊喜进度"><div><span>左鼓 · 随机赠球 <b id="reward-0">0/10</b></span><progress id="reward-progress-0" max="10" value="0" aria-label="左侧反弹点命中次数"></progress><small>满 10 次送一颗</small></div><div><span>中央 · 时钟爆发 <b id="reward-2">0/30</b></span><progress id="reward-progress-2" max="30" value="0" aria-label="中央反弹点命中次数"></progress><small>1 秒发射 12 颗</small></div><div><span>右鼓 · 中央变大 <b id="reward-1">0/10</b></span><progress id="reward-progress-1" max="10" value="0" aria-label="右侧反弹点命中次数"></progress><small id="reward-timer">持续 10 秒</small></div></div></section>
+    <aside class="sidebar"><section class="card score-card"><div class="card-label">今日份快乐 <span class="small-label">HAPPY POINTS</span></div><div class="score-value"><span id="score">0</span><span class="score-unit">分</span></div><div class="score-divider"></div><div class="score-stats"><span>剩余小球 &nbsp;<strong id="ball-count" class="ball-count">0</strong></span><span>最高纪录 &nbsp;<strong id="best">0</strong></span></div></section><section class="card how-card"><div class="card-label">快乐使用说明 <span>↗</span></div><ol><li><span class="step-no">01</span>力度决定高度，回流口重返球场</li><li><span class="step-no">02</span>左右鼓满 10 次，赠球或放大中央</li><li><span class="step-no">03</span>中央满 30 次，十二时钟大爆发</li><li><span class="step-no">04</span>蓄球罐存满 20 颗，顶部落下 40 颗</li><li><span class="step-no">05</span>进洞满 50 次转好运，两同 ×2，三同 ×5</li></ol></section><div class="little-note">✿ &nbsp; 不用赶路，弹一会儿也很好</div></aside>
+  </main><div class="bottom-info"><span>✧ &nbsp; 真实物理碰撞 · 球数就是这一局的生命</span><span class="sound-indicator"><span class="sound-bars"><i></i><i></i><i></i></span><span id="sound-status">声音已开启，快乐有回响</span></span></div><footer class="footer"><span>PON PON · YOUR POCKET-SIZED HAPPY PLACE</span><span>MADE WITH <b>♡</b> & A LITTLE BOUNCE</span></footer>
 </div><div class="toast" id="toast" role="status"></div>
-<dialog id="settings"><div class="dialog-inner"><div class="dialog-head"><button id="gm-dot" class="gm-dot" type="button" aria-label="边框装饰" aria-pressed="false"><span></span></button><h2>布置你的游乐场</h2><button class="icon-button" id="close-settings" aria-label="关闭设置">${icon('close')}</button></div><p class="dialog-sub">换一种心情，再接住一颗小快乐。</p><div id="gm-tools" class="gm-tools" hidden><span>GM · 小游戏试玩</span><div><button type="button" data-mini="pairs">对对碰</button><button type="button" data-mini="blocks">消消乐</button><button type="button" data-mini="moles">打地鼠</button></div></div><label class="setting-row auto-setting" for="auto"><span>自动弹射<small>关闭设置后连续发射，力度在球台下方调整</small></span><input id="auto" type="checkbox" role="switch" /></label><p id="slot-tier" class="setting-note">落袋随快乐积分自动增加：${SLOT_UNLOCK_7.toLocaleString()} 分升至 7 槽，${SLOT_UNLOCK_9.toLocaleString()} 分升至 9 槽。</p><label class="setting-row mode-setting" for="three-d"><span>3D 模式<small>关闭使用 2D 画面，开启使用立体球台</small></span><input id="three-d" type="checkbox" role="switch" ${state.render3D?'checked':''}/></label><label class="setting-row time-setting" for="time-flow"><span>时间流逝模式<small>白天 4 分钟 → 黄昏 1 分钟 → 夜间 4 分钟 → 清晨 1 分钟</small></span><input id="time-flow" type="checkbox" role="switch" ${state.timeFlow?'checked':''}/></label><div id="time-cycle-info" class="time-cycle-info" ${state.timeFlow?'':'hidden'}><div class="time-cycle-head"><strong id="time-phase">白天</strong><span id="time-phase-clock"></span></div><progress id="time-cycle-progress" max="${TIME_CYCLE}" value="0" aria-label="十分钟昼夜循环进度"></progress></div><label class="setting-row music-setting" for="music"><span>律动背景音乐<small>120 BPM · 轻快入场，随后律动循环</small></span><input id="music" type="checkbox" role="switch" ${state.music?'checked':''}/></label><label class="setting-row" for="music-volume">音乐音量<input id="music-volume" type="range" min="0" max="100" value="${state.musicVolume*100}" /></label><label class="setting-row" for="volume">音效音量<input id="volume" type="range" min="0" max="100" value="${state.volume*100}" /></label><label class="setting-row mode-setting" for="vibrate"><span>震动<small>碰撞轻一下，进普通洞稍强，Lucky 和秘密洞更明显。静音不影响；不支持的手机会自动跳过</small></span><input id="vibrate" type="checkbox" role="switch" ${state.vibrate?'checked':''}/></label><label class="setting-row" for="calm">轻柔模式（减少装饰动效）<input id="calm" type="checkbox" ${state.calm?'checked':''}/></label><button class="done-button" id="done-settings">好啦，继续快乐</button><p class="setting-note">设置自动保存。槽位升级会等这一波弹珠落完再切换，已经打开的槽位不会降回去。</p></div></dialog><dialog id="collection-book" class="collection-dialog" aria-labelledby="collection-title"><div class="dialog-inner"><div class="dialog-head"><h2 id="collection-title">水果收集册</h2><button type="button" id="close-collection" class="icon-button" aria-label="关闭收集册">${icon('close')}</button></div><div class="collection-book"><p>每种水果进槽一次记 1 个。这里只囤积数量，留给以后的功能使用，不改变槽位得分。</p><div class="collection-grid">${COLLECTION_TYPES.map(({id,name})=>`<article class="collection-item" data-collection="${id}"><span class="collection-icon" aria-hidden="true">${slotIcon(id)}</span><div><strong>${name}</strong><small class="collection-count"></small></div></article>`).join('')}</div><p class="collection-note">数量自动保存在当前浏览器。星星和老虎机加倍只增加积分，不增加收集数量。</p><button type="button" id="collection-return" class="done-button">返回弹珠台</button></div></div></dialog><dialog id="leaderboard" class="arcade-dialog" aria-labelledby="lb-title"><div class="dialog-inner arcade-inner"><div class="dialog-head"><h2 id="lb-title">HIGH SCORES</h2><button type="button" id="close-leaderboard" class="icon-button" aria-label="关闭排行榜">${icon('close')}</button></div><p class="arcade-sub">前 20 名</p><ol id="lb-list" class="lb-list"></ol><button type="button" id="leaderboard-return" class="done-button">返回弹珠台</button></div></dialog><dialog id="name-entry" class="arcade-dialog name-dialog" aria-labelledby="name-title"><div class="dialog-inner arcade-inner"><p class="arcade-kicker">NEW RECORD</p><h2 id="name-title">留下你的名字</h2><p class="arcade-sub">本局快乐积分到了 ${LEADERBOARD_QUALIFY_SCORE.toLocaleString()}。名字 1 到 12 个字符。</p><form id="name-form"><input id="player-name" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="done" aria-label="玩家名字" placeholder="AAA" /><p id="name-error" class="name-error" hidden>请输入 1 到 12 个字符</p><div class="name-actions"><button type="submit" class="done-button">确定</button><button type="button" id="name-skip">这次先不留名</button></div></form></div></dialog>${miniGameMarkup}`;
+<dialog id="settings"><div class="dialog-inner"><div class="dialog-head"><button id="gm-dot" class="gm-dot" type="button" aria-label="边框装饰" aria-pressed="false"><span></span></button><h2>布置你的游乐场</h2><button class="icon-button" id="close-settings" aria-label="关闭设置">${icon('close')}</button></div><p class="dialog-sub">换一种心情，再接住一颗小快乐。</p><div id="gm-tools" class="gm-tools" hidden><span>GM · 小游戏试玩</span><div><button type="button" data-mini="pairs">对对碰</button><button type="button" data-mini="blocks">消消乐</button><button type="button" data-mini="moles">打地鼠</button></div></div><label class="setting-row auto-setting" for="auto"><span>自动弹射<small>关闭设置后连续发射，力度在球台下方调整</small></span><input id="auto" type="checkbox" role="switch" /></label><p id="slot-tier" class="setting-note">本局从 5 槽开始。快乐积分 ${SLOT_UNLOCK_7.toLocaleString()} 升至 7 槽，${SLOT_UNLOCK_9.toLocaleString()} 升至 9 槽。新的一局重新从 5 槽开始。</p><label class="setting-row mode-setting" for="three-d"><span>3D 模式<small>关闭使用 2D 画面，开启使用立体球台</small></span><input id="three-d" type="checkbox" role="switch" ${state.render3D?'checked':''}/></label><label class="setting-row time-setting" for="time-flow"><span>时间流逝模式<small>白天 4 分钟 → 黄昏 1 分钟 → 夜间 4 分钟 → 清晨 1 分钟</small></span><input id="time-flow" type="checkbox" role="switch" ${state.timeFlow?'checked':''}/></label><div id="time-cycle-info" class="time-cycle-info" ${state.timeFlow?'':'hidden'}><div class="time-cycle-head"><strong id="time-phase">白天</strong><span id="time-phase-clock"></span></div><progress id="time-cycle-progress" max="${TIME_CYCLE}" value="0" aria-label="十分钟昼夜循环进度"></progress></div><label class="setting-row music-setting" for="music"><span>律动背景音乐<small>120 BPM · 轻快入场，随后律动循环</small></span><input id="music" type="checkbox" role="switch" ${state.music?'checked':''}/></label><label class="setting-row" for="music-volume">音乐音量<input id="music-volume" type="range" min="0" max="100" value="${state.musicVolume*100}" /></label><label class="setting-row" for="volume">音效音量<input id="volume" type="range" min="0" max="100" value="${state.volume*100}" /></label><label class="setting-row mode-setting" for="vibrate"><span>震动<small>碰撞轻一下，进普通洞稍强，Lucky 和秘密洞更明显。静音不影响；不支持的手机会自动跳过</small></span><input id="vibrate" type="checkbox" role="switch" ${state.vibrate?'checked':''}/></label><label class="setting-row" for="calm">轻柔模式（减少装饰动效）<input id="calm" type="checkbox" ${state.calm?'checked':''}/></label><button class="done-button" id="done-settings">好啦，继续快乐</button><p class="setting-note">设置和这一局的球数、积分、槽位会自动保存。刷新会接着玩，不能靠刷新重开。槽位升级会等这一波弹珠落完再切换。</p></div></dialog><dialog id="collection-book" class="collection-dialog" aria-labelledby="collection-title"><div class="dialog-inner"><div class="dialog-head"><h2 id="collection-title">水果收集册</h2><button type="button" id="close-collection" class="icon-button" aria-label="关闭收集册">${icon('close')}</button></div><div class="collection-book"><p>每种水果进槽一次记 1 个。这里只囤积数量，留给以后的功能使用，不改变槽位得分。</p><div class="collection-grid">${COLLECTION_TYPES.map(({id,name})=>`<article class="collection-item" data-collection="${id}"><span class="collection-icon" aria-hidden="true">${slotIcon(id)}</span><div><strong>${name}</strong><small class="collection-count"></small></div></article>`).join('')}</div><p class="collection-note">数量自动保存在当前浏览器。星星和老虎机加倍只增加积分，不增加收集数量。</p><button type="button" id="collection-return" class="done-button">返回弹珠台</button></div></div></dialog><dialog id="leaderboard" class="arcade-dialog" aria-labelledby="lb-title"><div class="dialog-inner arcade-inner"><div class="dialog-head"><h2 id="lb-title">HIGH SCORES</h2><button type="button" id="close-leaderboard" class="icon-button" aria-label="关闭排行榜">${icon('close')}</button></div><p class="arcade-sub">前 20 名</p><ol id="lb-list" class="lb-list"></ol><button type="button" id="leaderboard-return" class="done-button">返回弹珠台</button></div></dialog><dialog id="name-entry" class="arcade-dialog name-dialog" aria-labelledby="name-title"><div class="dialog-inner arcade-inner"><p class="arcade-kicker">NEW RECORD</p><h2 id="name-title">留下你的名字</h2><p class="arcade-sub">这一局的成绩可以留下名字。1 到 12 个字符，提交的是本局最终分。</p><form id="name-form"><input id="player-name" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="done" aria-label="玩家名字" placeholder="AAA" /><p id="name-error" class="name-error" hidden>请输入 1 到 12 个字符</p><div class="name-actions"><button type="submit" class="done-button">确定</button><button type="button" id="name-skip">这次先不留名</button></div></form></div></dialog><dialog id="settlement" class="arcade-dialog"><div class="dialog-inner arcade-inner"><p class="arcade-kicker">GAME OVER</p><h2>本局结束</h2><dl class="settle-list"><div><dt>快乐积分</dt><dd id="settle-score">0</dd></div><div><dt>发射数</dt><dd id="settle-launches">0</dd></div><div><dt>最高连击</dt><dd id="settle-combo">0</dd></div><div><dt>最高槽位</dt><dd id="settle-slot">—</dd></div><div><dt>纪录</dt><dd id="settle-record">未打破</dd></div></dl><button type="button" id="play-again" class="done-button">再来一局</button></div></dialog>${miniGameMarkup}`;
 
 const $ = (s) => document.querySelector(s);
-const panels = () => [$('#settings'), $('#collection-book'), $('#leaderboard'), $('#name-entry')];
+const panels = () => [$('#settings'), $('#collection-book'), $('#leaderboard'), $('#name-entry'), $('#settlement')];
 const panelOpen = () => panels().some(panel => panel?.open);
 const timeTokens = collectTimeTokens(document);
 let timePalette = null, lastTimePaint = -Infinity;
@@ -135,12 +140,23 @@ const game = createTable({ slots: state.slots, collections: state.collections, o
   playCanon(hit);
   haptics.collision(hit.speed);
   if (!state.calm) fx.ripples.push({ ...hit, life: 1, color: animalScene.accent });
-}, onScore: award, onReturn: ({ reason } = {}) => toast(reason === 'timeout' ? '这颗弹珠停留太久，先收回来了' : reason === 'out' ? '弹珠掉出球台了，再来一颗吧' : '弹珠已回收，再试试另一种力度吧'), onSurprise: surprise });
+}, onScore: award, onReturn: ({ reason } = {}) => { state.combo = 0; toast(reason === 'timeout' ? '这颗弹珠停留太久，先收回来了' : reason === 'out' ? '弹珠掉出球台了，再来一颗吧' : '弹珠已回收，再试试另一种力度吧'); }, onDrain: miss => {
+  state.combo = 0;
+  fx.shake = Math.max(fx.shake, 2);
+  fx.popups.push({ x: miss.x, y: miss.y - 28, text: '漏', life: 1, color: '#c2453a', size: 16 });
+  if (!state.calm) fx.ripples.push({ x: miss.x, y: miss.y, life: 1, color: '#c2453a', radius: 18, width: 2 });
+  tone(150, .16, 'triangle', 0, .14, 80);
+  haptics.collision(6);
+}, onSurprise: surprise });
 const renderer = createRenderer($('#board'));
 let frame = 0, last = 0, accumulator = 0, lastDrop = -1000, lastAuto = 0;
 let chargeStart = 0, chargeSource = null, suppressAssistClickUntil = 0;
 const secretWave = createSecretWave();
-const miniGames = createMiniGamesUI({ root: $('#mini-game'), onFinish: result => addScore(result.score),
+const miniGames = createMiniGamesUI({ root: $('#mini-game'), onFinish: result => {
+  addScore(result.score);
+  if (result.bestCombo) state.bestCombo = Math.max(state.bestCombo, result.bestCombo);
+  if (result.source === 'secret') grantBalls(miniGameBalls(result.baseScore ?? result.score), 350, 420);
+},
   onPoints: () => tone(784,.12,'sine',0,.12), vibrate: ms => haptics.tap(ms), onExit: source => {
     if (source === 'secret') { state.secretPending = false; game.setEmissionPaused(false); secretWave.reset(); }
     last = 0; accumulator = 0; lastAuto = performance.now(); syncLaunchControls();
@@ -158,26 +174,87 @@ document.querySelectorAll('[data-mini]').forEach(button => button.addEventListen
   if (!state.gm || miniGames.open) return;
   endCharge(false);$('#settings').close();miniGames.start(button.dataset.mini,'gm');syncLaunchControls();
 }));
+function spendable() { return state.stock + game.collector.stored.length; }
+function availableBalls() { return state.stock + game.collector.stored.length + game.collector.remaining; }
+function updateBallHud() {
+  const count = availableBalls();
+  const low = count < LOW_BALLS;
+  for (const el of [$('#ball-count'), $('#mobile-balls')]) {
+    el.textContent = count.toLocaleString();
+    el.classList.toggle('is-low', low);
+  }
+}
+function ballCounterEl() {
+  const card = $('.score-card');
+  const shown = card && getComputedStyle(card).display !== 'none' && card.getBoundingClientRect().width > 0;
+  return shown ? $('#ball-count') : $('#mobile-balls');
+}
+function flyBalls(count, x, y) {
+  if (state.calm || !(count > 0)) return;
+  const start = renderer.project(x, y);
+  const board = $('#board').getBoundingClientRect();
+  const target = ballCounterEl().getBoundingClientRect();
+  const el = document.createElement('span');
+  el.className = 'ball-fly';
+  el.textContent = `+${count}`;
+  const left = board.left + start.x * board.width;
+  const top = board.top + start.y * board.height;
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
+  document.body.append(el);
+  const dx = target.left + target.width / 2 - left;
+  const dy = target.top + target.height / 2 - top;
+  const motion = el.animate([{ transform: 'translate(0,0)', opacity: 1 }, { transform: `translate(${dx}px, ${dy}px)`, opacity: .15 }], { duration: 650, easing: 'cubic-bezier(.2,.7,.2,1)' });
+  motion.onfinish = () => el.remove();
+}
+function grantBalls(count, x, y) {
+  const amount = Math.floor(Number(count) || 0);
+  if (amount <= 0 || state.over) return;
+  state.stock += amount;
+  updateBallHud();
+  flyBalls(amount, x, y);
+  persist();
+}
+function takeBalls(cost) {
+  if (spendable() < cost) return false;
+  let need = cost;
+  const fromStock = Math.min(state.stock, need);
+  state.stock -= fromStock;
+  need -= fromStock;
+  if (need) game.takeStored(need);
+  updateBallHud();
+  persist();
+  return true;
+}
 function syncLaunchControls() {
-  const locked = state.secretPending || miniGames.open;
-  $('#launch').disabled = locked;$('#plunger').disabled = locked;$('#power').disabled = locked;
+  const locked = state.secretPending || miniGames.open || state.over;
+  const broke = !locked && spendable() < LAUNCH_COST;
+  $('#launch').disabled = locked || broke;$('#plunger').disabled = locked || broke;$('#power').disabled = locked;
   $('#launch').hidden = state.auto && !locked;$('#auto-power').hidden = !state.auto || locked;
-  if (locked) {
+  if (state.over) {
+    $('#launch-label').textContent = '本局结束';
+    $('#shot-state').textContent = '球数用完了';
+  } else if (locked) {
     $('#launch-label').textContent = state.secretPending ? '等待“秘密出现”' : '小游戏进行中';
     $('#shot-state').textContent = state.secretPending ? '等待弹珠结算 · 秘密即将出现' : '秘密小游戏时间';
-  } else if (!state.charging) $('#launch-label').textContent = '按住蓄力 · 松开发射';
+  } else if (broke) $('#launch-label').textContent = '小球用完了';
+  else if (!state.charging) $('#launch-label').textContent = '按住蓄力 · 松开发射';
 }
 function waitForSecret() {
   if (state.secretPending || miniGames.open) return;
-  state.secretPending = true;game.setEmissionPaused(true);endCharge(false);syncLaunchControls();
+  state.secretPending = true;
+  const refund = game.setEmissionPaused(true);
+  if (refund) grantBalls(refund * LAUNCH_COST, 713, 787);
+  endCharge(false);syncLaunchControls();
 }
 
 
 function surprise(event) {
-  if (event.kind === 'emit' && event.source === 'charged') {
-    state.balls++; $('#ball-count').textContent = state.balls;
-    sound('launch');
-  }
+  if (event.kind === 'emit' && event.source === 'charged') sound('launch');
+  if (event.kind === 'random') grantBalls(DRUM_RANDOM_BALLS, event.x, event.y);
+  if (event.kind === 'enlarge') grantBalls(DRUM_ENLARGE_BALLS, event.x, event.y);
+  if (event.kind === 'clock') grantBalls(DRUM_CLOCK_BALLS, event.x, event.y);
+  if (event.kind === 'slot-result' && SLOT_MACHINE_BALLS > 0) grantBalls(SLOT_MACHINE_BALLS, event.x, event.y);
   if (event.kind.startsWith('slot-')) {
     if (event.kind === 'slot-start') {
       toast('✧ 进洞满 50 次，转一份好运！');
@@ -231,12 +308,11 @@ function surprise(event) {
 }
 
 function addScore(points) {
+  if (state.over || !(points > 0)) return;
   state.score += points; state.best = Math.max(state.best, state.score); persist();
   $('#score').textContent = state.score.toLocaleString(); $('#mobile-score').textContent = state.score.toLocaleString(); $('#best').textContent = state.best.toLocaleString(); $('#mobile-best').textContent = state.best.toLocaleString();
   $('.score-value').classList.remove('score-bump'); void $('.score-value').offsetWidth; $('.score-value').classList.add('score-bump');
   considerSlotUpgrade();
-  considerNamePrompt();
-  if (playerName) leaderboard.submit({ runId, name: playerName, score: state.score }, { remote: false });
 }
 let slotUpgradeTimer = 0;
 function tableBusy() {
@@ -259,19 +335,80 @@ function applySlotUpgrade(next) {
   updateSlotTier();
 }
 function considerSlotUpgrade() {
-  if (state.slotsPinned) return;
+  if (state.slotsPinned || state.over) return;
   const next = nextSlotCount(state.slots, state.score);
   if (next === state.slots) return;
   if (tableBusy()) return;
   applySlotUpgrade(next);
 }
-function considerNamePrompt() {
-  if (namePrompted || playerName || state.score < LEADERBOARD_QUALIFY_SCORE || tableBusy()) return;
-  namePrompted = true;
-  $('#player-name').value = '';
-  $('#name-error').hidden = true;
-  if (!$('#name-entry').open) $('#name-entry').showModal();
-  $('#player-name').focus();
+function settlementQualifies() {
+  return qualifiesForLeaderboard(state.score, [...PRESET_BOARD, ...leaderboard.readSaved()]);
+}
+function showSettlement() {
+  const broken = state.score > state.bestBefore;
+  $('#settle-score').textContent = state.score.toLocaleString();
+  $('#settle-launches').textContent = state.launches.toLocaleString();
+  $('#settle-combo').textContent = state.bestCombo.toLocaleString();
+  $('#settle-slot').textContent = state.bestSlot ? `×${state.bestSlot}` : '—';
+  const record = $('#settle-record');
+  record.textContent = broken ? '新纪录！' : '未打破';
+  record.classList.toggle('is-record', broken);
+  if (!$('#settlement').open) $('#settlement').showModal();
+  if (!state.nameDecided && settlementQualifies() && !$('#name-entry').open) {
+    $('#player-name').value = '';
+    $('#name-error').hidden = true;
+    $('#name-entry').showModal();
+    $('#player-name').focus();
+  }
+}
+function finishRound() {
+  if (state.over) { showSettlement(); return; }
+  state.over = true;
+  state.auto = false;
+  endCharge(false);
+  syncLaunchControls();
+  persist();
+  showSettlement();
+}
+function maybeEndRound() {
+  if (state.over || panelOpen() || miniGames.open) return;
+  if (!roundCanEnd({
+    balls: state.stock,
+    onTable: game.balls.length,
+    stored: game.collector.stored.length,
+    pendingDrops: game.collector.remaining,
+    pendingLaunches: game.pendingLaunches,
+    secretPending: state.secretPending,
+    miniOpen: miniGames.open,
+  })) return;
+  finishRound();
+}
+function restartRound() {
+  state.over = false;
+  state.nameDecided = false;
+  $('#name-entry').close();
+  $('#settlement').close();
+  runId = createRunId();
+  playerName = '';
+  state.score = 0;
+  state.stock = START_BALLS;
+  state.launches = 0;
+  state.combo = 0;
+  state.bestCombo = 0;
+  state.bestSlot = 0;
+  state.bestBefore = state.best;
+  state.slotsPinned = false;
+  state.slots = 5;
+  state.auto = false;
+  game.resetRound();
+  game.setSlots(5);
+  fx.slotGlows = Array(5).fill(0);
+  $('#score').textContent = '0'; $('#mobile-score').textContent = '0';
+  updateBallHud();
+  updateSlotTier();
+  setAuto(false);
+  syncLaunchControls();
+  persist();
 }
 function renderLeaderboard(rows) {
   const list = $('#lb-list');
@@ -303,6 +440,13 @@ function award(result) {
   const points = settlement ? settlement.pay : result.points;
   if (settlement?.retro) addScore(settlement.retro);
   addScore(points);
+  if (result.kind === 'slot' || result.kind === 'jackpot') {
+    state.combo += 1;
+    state.bestCombo = Math.max(state.bestCombo, state.combo);
+    if (result.kind === 'slot') state.bestSlot = Math.max(state.bestSlot, result.multiplier);
+  }
+  if (result.kind === 'slot') grantBalls(result.multiplier + (result.lucky ? LUCKY_BALLS : 0), result.x, result.y);
+  if (result.kind === 'jackpot') grantBalls(SECRET_BALLS, result.x, result.y);
   if (result.collection) updateCollections();
   haptics.score(result);
   const profile = celebrateReward(fx, result, state.calm);
@@ -323,14 +467,19 @@ function rewardSound(profile) {
 }
 
 function launch(power = state.auto ? state.power / 100 : 0, burst = false) {
-  if (panelOpen() || miniGames.open || state.secretPending || document.hidden) return;
+  if (panelOpen() || miniGames.open || state.secretPending || state.over || document.hidden) return;
+  const cost = burst ? BURST_COST : LAUNCH_COST;
+  if (spendable() < cost) { if (!state.auto) toast(burst ? '小球不够，五连发先歇一下' : '小球用完了'); syncLaunchControls(); return; }
   unlockAudio();
   const now = performance.now(); if (now - lastDrop < 250) return;
   const ball = burst ? game.launchBurst() : game.launch(power);
   if (!ball) { if (!state.auto) toast('发射轨道准备中，稍等一下'); return; }
+  if (!takeBalls(cost)) { return; }
+  state.launches += cost;
   lastDrop = now;
-  if (!burst) { state.balls++; $('#ball-count').textContent = state.balls; sound('launch'); }
+  if (!burst) sound('launch');
   $('#shot-state').textContent = burst ? '✦ 彩虹蓄满！五球连发！' : '↗ 弹射出发！';
+  persist();
 }
 function setRenderMode(enabled, save = false) {
   endCharge(false);
@@ -350,7 +499,7 @@ function setAuto(enabled) {
   state.auto = enabled; syncLaunchControls(); $('#power-value').textContent = `${state.power}%`; $('#auto').checked = enabled;
 }
 function beginCharge(source) {
-  if (state.charging || panelOpen() || miniGames.open || state.secretPending || document.hidden) return false;
+  if (state.charging || panelOpen() || miniGames.open || state.secretPending || state.over || spendable() < LAUNCH_COST || document.hidden) return false;
   unlockAudio(); setAuto(false); state.charging = true; chargeSource = source; chargeStart = performance.now(); state.charge = 0; state.chargeElapsed = 0;
   $('#launch').style.setProperty('--charge', '0%'); $('#launch-label').textContent = '蓄力 0% · 松开发射';
   $('#launch').classList.add('charging'); return true;
@@ -427,7 +576,8 @@ function tick(now) {
     } else if (!state.secretPending && now - lastDrop > 1700) $('#shot-state').textContent = game.balls.length ? `${game.balls.length} 颗小快乐在冒险` : '右下角 · 弹珠就位';
     if (state.auto && !state.secretPending && now - lastAuto > 1100) { launch(); lastAuto = now; }
     considerSlotUpgrade();
-    considerNamePrompt();
+    updateBallHud();
+    maybeEndRound();
   }
   if (state.secretPending && !game.balls.length && !miniGames.open && !panelOpen() && !document.hidden) { miniGames.start(randomMiniGame(), 'secret', secretWave.multiplier); syncLaunchControls(); }
   if (miniGames.open) { $('.game-layout').style.removeProperty('transform'); frame = requestAnimationFrame(tick); return; }
@@ -455,7 +605,7 @@ function updateCollections() {
 }
 function updateSlotTier() {
   const tier = $('#slot-tier');
-  if (tier) tier.textContent = `当前 ${state.slots} 槽。快乐积分 ${SLOT_UNLOCK_7.toLocaleString()} 升至 7 槽，${SLOT_UNLOCK_9.toLocaleString()} 升至 9 槽。已解锁的槽位会保存，刷新也不会降回去。`;
+  if (tier) tier.textContent = `当前 ${state.slots} 槽。本局 ${SLOT_UNLOCK_7.toLocaleString()} 分升至 7 槽，${SLOT_UNLOCK_9.toLocaleString()} 分升至 9 槽。再来一局回到 5 槽；刷新会接着这一局。`;
 }
 function updateLayout() {
   updateCollections(); updateSlotTier(); updateTimeFlow(performance.now(), true);
@@ -472,8 +622,9 @@ $('#compact-sound').addEventListener('click', () => $('#sound-button').click());
 $('#compact-settings').addEventListener('click', () => $('#settings-button').click());
 function openPanel(id) {
   if (miniGames.open) return;
+  if (state.over && id !== 'leaderboard') return;
   endCharge(false);
-  for (const panel of panels()) if (panel && panel.id !== id) panel.close();
+  for (const panel of panels()) if (panel && panel.id !== id && panel.id !== 'settlement') panel.close();
   if (id === 'collection-book') updateCollections();
   const panel = $(`#${id}`); if (!panel.open) panel.showModal(); panel.scrollTop = 0;
 }
@@ -488,15 +639,19 @@ $('#name-form').addEventListener('submit', event => {
   const name = sanitizeName($('#player-name').value);
   if (!name) { $('#name-error').hidden = false; $('#player-name').focus(); return; }
   playerName = name;
+  state.nameDecided = true;
   leaderboard.submit({ runId, name, score: state.score });
+  persist();
   $('#name-entry').close();
-  toast('名字已记下，这一局的分数会继续更新');
+  toast('名字已记下');
 });
-$('#name-skip').addEventListener('click', () => $('#name-entry').close());
+$('#name-skip').addEventListener('click', () => { state.nameDecided = true; persist(); $('#name-entry').close(); });
+$('#name-entry').addEventListener('close', () => { if (state.over && !state.nameDecided) { state.nameDecided = true; persist(); } });
+$('#play-again').addEventListener('click', () => restartRound());
 $('#sound-button').addEventListener('click', () => { state.sound = !state.sound; unlockAudio(); updateSound(); persist(); if (state.sound) sound('confirm'); });
 $('#settings-button').addEventListener('click', () => openPanel('settings'));
 $('#close-settings').addEventListener('click', () => $('#settings').close()); $('#done-settings').addEventListener('click', () => $('#settings').close());
-for (const panel of panels()) panel.addEventListener('click', event => { if (event.target === panel) { const r = panel.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) panel.close(); } });
+for (const panel of panels()) panel.addEventListener('click', event => { if (panel.id === 'settlement') return; if (event.target === panel) { const r = panel.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) panel.close(); } });
 $('#volume').addEventListener('input', event => { state.volume = +event.target.value / 100; if (state.volume > 0) state.sound = true; unlockAudio(); updateSound(); persist(); });
 $('#volume').addEventListener('change', () => sound('confirm'));
 $('#music').addEventListener('change', event => { state.music = event.target.checked; unlockAudio(); updateSound(); persist(); });
@@ -504,8 +659,9 @@ $('#music-volume').addEventListener('input', event => { state.musicVolume = +eve
 $('#time-flow').addEventListener('change', event => { state.timeFlow = event.target.checked; if (state.timeFlow) state.timeFlowStartedAt = Date.now(); updateTimeFlow(performance.now(), true); persist(); });
 $('#calm').addEventListener('change', event => { state.calm = event.target.checked; updateCalm(); persist(); });
 $('#vibrate').addEventListener('change', event => { state.vibrate = event.target.checked; haptics.setEnabled(state.vibrate); persist(); });
-$('#best').textContent = state.best.toLocaleString(); $('#mobile-best').textContent = state.best.toLocaleString(); updateLayout(); updateSound(); updateCalm();
+$('#best').textContent = state.best.toLocaleString(); $('#mobile-best').textContent = state.best.toLocaleString(); $('#score').textContent = state.score.toLocaleString(); $('#mobile-score').textContent = state.score.toLocaleString(); updateBallHud(); updateLayout(); updateSound(); updateCalm();
+if (state.over) showSettlement();
 frame = requestAnimationFrame(tick);
-window.addEventListener('pagehide', () => { endCharge(false); if (playerName) leaderboard.submit({ runId, name: playerName, score: state.score }, { keepalive: true }); cancelAnimationFrame(frame); frame = 0; audio?.suspend().catch(()=>{}); });
+window.addEventListener('pagehide', () => { endCharge(false); persist(); cancelAnimationFrame(frame); frame = 0; audio?.suspend().catch(()=>{}); });
 window.addEventListener('pageshow', () => { if (!frame) { last = 0; accumulator = 0; frame = requestAnimationFrame(tick); } syncAudioVisibility(); });
-if (import.meta.env.DEV) Object.defineProperty(window, '__ponpon', { get: () => ({ score: state.score, runId, playerName, collections: structuredClone(state.collections), secretPending: state.secretPending, secretMultiplier: secretWave.multiplier, emissionPaused: game.emissionPaused, gm: state.gm, miniGame: miniGames.snapshot(), render3D: state.render3D, rendering: renderer.snapshot(), star: game.star ? { ...game.star } : null, activeBalls: game.balls.length, slots: state.slots, pins: game.pins.length,  auto: state.auto, charging: state.charging, charge: state.charge, chargeEffects: state.charging ? chargeEffectsAt(state.chargeElapsed) : null, pendingLaunches: game.pendingLaunches, stats: structuredClone(game.stats), rewards: structuredClone(game.rewards), collector: { count: game.collector.stored.length, capacity: game.collector.capacity, remaining: game.collector.remaining, outlets: game.collector.outlets.map(p => ({ ...p })) }, bumpers: game.bumpers.map(b => ({ ...b.position })), timeFlow: { enabled: state.timeFlow, startedAt: state.timeFlowStartedAt, phase: timePalette?.phase.id, position: timePalette?.phase.position, tokens: timeTokens.length }, gameClock: game.clock, slotMachine: structuredClone(game.slotMachine), centerRadius: game.bumpers[2].plugin.radius, canonNotes: canon.count, currentNote: currentNote?.name, positions: game.balls.map(b => ({ ...b.body.position, entered: b.entered, power: b.power, bonus: b.bonus, scoreFactor: b.scoreFactor })), music: backgroundMusic?.status, musicEnabled: state.music, musicVolume: state.musicVolume, audioState: audio?.state, setSlots(count) { state.slotsPinned = true; state.slots = count; game.setSlots(count); fx.slotGlows = Array(state.slots).fill(0); persist(); updateSlotTier(); }, grant(points) { state.slotsPinned = false; addScore(points); }, holdBall() { const ball = game.launch(1); return !!ball; }, releaseWave() { game.setSlots(state.slots); } }) });
+if (import.meta.env.DEV) Object.defineProperty(window, '__ponpon', { get: () => ({ score: state.score, runId, playerName, collections: structuredClone(state.collections), secretPending: state.secretPending, secretMultiplier: secretWave.multiplier, emissionPaused: game.emissionPaused, gm: state.gm, miniGame: miniGames.snapshot(), render3D: state.render3D, rendering: renderer.snapshot(), star: game.star ? { ...game.star } : null, activeBalls: game.balls.length, slots: state.slots, pins: game.pins.length,  auto: state.auto, charging: state.charging, charge: state.charge, chargeEffects: state.charging ? chargeEffectsAt(state.chargeElapsed) : null, pendingLaunches: game.pendingLaunches, stats: structuredClone(game.stats), rewards: structuredClone(game.rewards), collector: { count: game.collector.stored.length, capacity: game.collector.capacity, remaining: game.collector.remaining, outlets: game.collector.outlets.map(p => ({ ...p })) }, bumpers: game.bumpers.map(b => ({ ...b.position })), timeFlow: { enabled: state.timeFlow, startedAt: state.timeFlowStartedAt, phase: timePalette?.phase.id, position: timePalette?.phase.position, tokens: timeTokens.length }, gameClock: game.clock, slotMachine: structuredClone(game.slotMachine), centerRadius: game.bumpers[2].plugin.radius, canonNotes: canon.count, currentNote: currentNote?.name, positions: game.balls.map(b => ({ ...b.body.position, entered: b.entered, power: b.power, bonus: b.bonus, scoreFactor: b.scoreFactor })), music: backgroundMusic?.status, musicEnabled: state.music, musicVolume: state.musicVolume, audioState: audio?.state, setSlots(count) { state.slotsPinned = true; state.slots = count; game.setSlots(count); fx.slotGlows = Array(state.slots).fill(0); persist(); updateSlotTier(); }, grant(points) { state.slotsPinned = false; addScore(points); }, holdBall() { const ball = game.launch(1); return !!ball; }, releaseWave() { game.setSlots(state.slots); }, stock: state.stock, available: availableBalls(), over: state.over, launches: state.launches, bestCombo: state.bestCombo, bestSlot: state.bestSlot, setStock(n) { state.stock = Math.max(0, Math.floor(n)); updateBallHud(); persist(); }, dropSlot(column) { const ball = game.launch(1); if (!ball) return false; ball.entered = true; game.nudge(ball, pocketCenter(state.slots, column), TABLE.scoreLine - 1); game.step(); return true; }, dropDrain() { const drain = slotFrame(state.slots).regions.find(region => region.kind === 'drain'); const ball = game.launch(1); if (!ball || !drain) return false; ball.entered = true; game.nudge(ball, (drain.x0 + drain.x1) / 2, TABLE.scoreLine - 1); game.step(); return true; }, restart() { restartRound(); } }) });

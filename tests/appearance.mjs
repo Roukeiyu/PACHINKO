@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { existsSync } from 'node:fs';
+import { START_BALLS } from '../src/round.js';
 import { mkdir } from 'node:fs/promises';
 
 const executablePath = process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
@@ -40,7 +41,7 @@ for (const autoDark of [false, true]) {
       await page.evaluate(() => { document.querySelector('#plunger').style.visibility = ''; const dialog = document.querySelector('#settings'); dialog.close(); dialog.style.visibility = ''; });
       await page.locator('#plunger').hover();
       await page.mouse.down(); await page.waitForTimeout(350); await page.mouse.up();
-      await page.waitForFunction(() => Number(document.querySelector('#ball-count').textContent) === 1);
+      await page.waitForFunction(expected => Number(document.querySelector('#ball-count').textContent) === expected, START_BALLS - 1);
       assert.deepEqual(errors, []);
       console.log(`PASS: ${key}, auto-dark=${autoDark}: palette, transparent spring, layout and launch.`);
       await page.close();

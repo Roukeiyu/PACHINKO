@@ -67,18 +67,18 @@ for (const slots of [5, 7, 9]) {
   console.log(`PASS: ${slots} mouths absorb 20, emit exactly 40 balanced random drops, and retain stars and queued drops through layout changes.`);
 }
 
-const scores = [], storedIds = [], dropIds = [], returned = [];
-const live = createTable({ random: seeded(42), starRandom: seeded(43), onScore: e => scores.push(e), onReturn: e => returned.push(e.ballId), onSurprise: e => {
+const scores = [], storedIds = [], dropIds = [], returned = [], drained = [];
+const live = createTable({ random: seeded(42), starRandom: seeded(43), onScore: e => scores.push(e), onReturn: e => returned.push(e.ballId), onDrain: e => drained.push(e.ballId), onSurprise: e => {
   if (e.kind === 'store') storedIds.push(e.ballId);
   if (e.kind === 'emit' && e.source === 'storage') dropIds.push(e.ballId);
 } });
 for (let i = 0; i < 20; i++) feed(live);
 for (let i = 0; i < 12000 && (live.balls.length || live.collector.remaining); i++) live.step();
 assert.equal(dropIds.length, 40);
-assert.ok(dropIds.every(id => scores.some(s => s.ballId === id) || storedIds.includes(id) || returned.includes(id)), 'all released balls physically score, enter storage or return');
+assert.ok(dropIds.every(id => scores.some(s => s.ballId === id) || storedIds.includes(id) || returned.includes(id) || drained.includes(id)), 'all released balls physically score, enter storage, drain or return');
 assert.ok(scores.some(s => dropIds.includes(s.ballId)), 'stored rewards can actually reach scoring slots');
 assert.equal(live.balls.length, 0); assert.equal(live.collector.remaining, 0);
-assert.equal(live.stats.launches + live.stats.bonusBalls, live.stats.scored + live.stats.absorbed + live.stats.returns, 'each physical ball settles exactly once');
+assert.equal(live.stats.launches + live.stats.bonusBalls, live.stats.scored + live.stats.absorbed + live.stats.returns + live.stats.drains, 'each physical ball settles exactly once');
 const partial = live.collector.stored.length;
 live.setSlots(9); assert.equal(live.collector.stored.length, partial, 'partial stock survives a layout change');
 console.log('PASS: top drops traverse the real board, resolve without missing balls, and score normally.');
