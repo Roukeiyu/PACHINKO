@@ -17,6 +17,7 @@ try {
     const scoreTop = await page.locator('#mobile-score').boundingBox();
     const stateTop = await page.locator('#shot-state').boundingBox();
     assert.ok(scoreTop.y + scoreTop.height <= stateTop.y + 1, `${width}: the total sits on its own top row`);
+    assert.equal(await page.locator('.score-card').isVisible(), false, `${width}: the sidebar total stays hidden`);
     const base = await hudHeight();
     for (const text of ['0', '50,000', '999,999', '999,999,999']) {
       await page.locator('#mobile-score').evaluate((el, value) => { el.textContent = value; }, text);
@@ -55,8 +56,39 @@ try {
     await page.locator('#done-settings').click();
     await page.waitForFunction(() => document.querySelector('#board')?.dataset.renderer === '2d');
   }
+  async function scorePlaces() {
+    return page.evaluate(() => {
+      const shown = selector => {
+        const el = document.querySelector(selector);
+        if (!el) return false;
+        const style = getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+        const box = el.getBoundingClientRect();
+        return box.width > 0 && box.height > 0;
+      };
+      const local = document.querySelector('.hud-score-row').getBoundingClientRect();
+      const state = document.querySelector('#shot-state').getBoundingClientRect();
+      return { local: shown('.hud-score-row'), card: shown('.score-card'), ownRow: shown('.hud-score-row') && local.bottom <= state.top + 1 };
+    });
+  }
+  for (const viewport of [{ width: 740, height: 800 }, { width: 700, height: 500 }, { width: 1100, height: 420 }]) {
+    await page.setViewportSize(viewport);
+    await page.waitForTimeout(60);
+    const places = await scorePlaces();
+    assert.equal(places.card, false, `${viewport.width}x${viewport.height}: no sidebar total`);
+    assert.equal(places.local, true, `${viewport.width}x${viewport.height}: the board total is shown`);
+    assert.equal(places.ownRow, true, `${viewport.width}x${viewport.height}: the board total keeps its own row`);
+  }
+  await page.setViewportSize({ width: 741, height: 900 });
+  await page.waitForTimeout(60);
+  const wide = await scorePlaces();
+  assert.equal(wide.card, true, 'the sidebar total appears at the same breakpoint as the panel');
+  assert.equal(wide.local, false, 'the board total hides once the sidebar shows it');
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.waitForTimeout(80);
+  const desktopScore = await scorePlaces();
+  assert.equal(desktopScore.card, true);
+  assert.equal(desktopScore.local, false, 'desktop shows the total only in the sidebar');
   const desktopPad = await page.locator('.machine').evaluate(el => parseFloat(getComputedStyle(el).paddingLeft));
   assert.ok(desktopPad > 8, 'desktop card padding stays in place');
   await page.locator('#settings-button').click();
