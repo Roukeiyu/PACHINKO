@@ -34,6 +34,33 @@ try {
   assert.equal(await page.locator('#board').getAttribute('data-renderer'), '2d');
   assert.equal(await page.locator('#three-d').isChecked(), false);
   assert.equal(await page.locator('#camera-angle').count(), 0);
+  assert.equal(await page.locator('#full-window').isChecked(), false, 'full window width starts off');
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.locator('#settings-button').click();
+  await page.locator('#full-window').check();
+  await page.locator('#done-settings').click();
+  await page.waitForFunction(() => document.documentElement.classList.contains('full-window'));
+  const full = await page.evaluate(() => {
+    const shell = document.querySelector('.shell').getBoundingClientRect();
+    const board = document.querySelector('#board').getBoundingClientRect();
+    const score = document.querySelector('#score').getBoundingClientRect();
+    return {
+      saved: JSON.parse(localStorage.getItem('ponpon-settings')).fullWindow === true,
+      shellWidth: shell.width, shellLeft: shell.left,
+      scroll: document.documentElement.scrollWidth <= innerWidth + 1 && document.documentElement.scrollHeight <= innerHeight + 1,
+      aspect: board.width / board.height,
+      score: score.width > 0 && score.height > 0,
+    };
+  });
+  assert.equal(full.saved, true);
+  assert.ok(Math.abs(full.shellWidth - 1280) <= 1 && Math.abs(full.shellLeft) <= 1, 'the production page fills the window');
+  assert.equal(full.scroll, true, 'full window does not scroll');
+  assert.ok(Math.abs(full.aspect - 760 / 900) < 0.03, `board keeps its aspect (${full.aspect})`);
+  assert.equal(full.score, true, 'the score stays visible');
+  await page.locator('#settings-button').click();
+  await page.locator('#full-window').uncheck();
+  await page.locator('#done-settings').click();
+  await page.waitForFunction(() => !document.documentElement.classList.contains('full-window'));
   async function toggleAuto() {
     await page.locator('#settings-button').click();
     await page.locator('#auto').click();

@@ -187,4 +187,26 @@ html:not(.calm) .ball-count.is-low{animation:ball-low 900ms ease-in-out infinite
   .launch-control>.machine-foot{grid-column:1/-1;grid-row:3}
 }
 .mini-result-balls{margin:10px 0 4px;text-align:center;font-size:32px;font-weight:800;letter-spacing:1px;color:#8a5a12}
+.board-stage{display:contents}
+.fullscreen-button{display:block;width:100%;margin:-6px 0 18px;border:1px solid var(--flow-line-b8c7a9,#b8c7a9);background:var(--flow-surface-edf1e5,#edf1e5);color:var(--ink);border-radius:12px;min-height:40px;font-size:12px;font-weight:700}
+@media (min-width: 741px) and (min-height: 501px) {
+  html.full-window, html.full-window body{height:100%;overflow:hidden}
+  html.full-window .shell{max-width:none;width:100%;height:100dvh;margin:0;padding:0;display:flex;flex-direction:column;overflow:hidden}
+  html.full-window header{flex:0 0 48px;height:48px;padding:0 12px}
+  html.full-window .brand-mark{width:32px;height:32px;border-radius:10px}
+  html.full-window .brand-name{font-size:18px}
+  html.full-window .brand-caption, html.full-window .quiet-tag, html.full-window .intro, html.full-window .bottom-info, html.full-window .footer, html.full-window .how-card, html.full-window .little-note, html.full-window .machine-top{display:none}
+  html.full-window .settings-button{height:36px;padding:6px 12px}
+  html.full-window .game-layout, html.full-window .game-layout:has(canvas[data-renderer="webgl"]){flex:1 1 auto;min-height:0;width:100%;max-width:none;margin:0;display:grid;grid-template-columns:minmax(0,1fr) clamp(220px,22vw,320px);justify-content:stretch;align-items:stretch;gap:12px;padding:8px 12px 10px;overflow:hidden}
+  html.full-window .machine{display:grid;grid-template-rows:auto minmax(0,1fr) auto;height:100%;min-width:0;min-height:0;overflow:hidden;padding:8px}
+  html.full-window .mobile-hud{padding-bottom:4px}
+  html.full-window .board-stage{display:grid;place-items:center;align-self:stretch;min-width:0;min-height:0;container-type:size}
+  html.full-window .board-wrap{width:min(100cqw, calc(100cqh * 760 / 900));max-width:100%;height:auto;margin:0;aspect-ratio:760/900}
+  html.full-window .board-wrap:has(canvas[data-renderer="webgl"]){width:min(100cqw, calc(100cqh * 1.24));aspect-ratio:1.24/1}
+  html.full-window .board-wrap canvas, html.full-window .board-wrap canvas[data-renderer="webgl"]{width:100%;max-width:100%;height:auto;max-height:none}
+  html.full-window .launch-control{padding-top:8px}
+  html.full-window .sidebar{width:auto;min-width:220px;max-width:320px;height:100%;min-height:0;overflow:auto;align-content:start;gap:8px}
+  html.full-window .score-card{display:block}
+  html.full-window .score-value{font-size:32px;margin:2px 0}
+}
 .collection-dialog .collection-book{margin:16px 0 0;padding:0;border:0;background:transparent}.collection-dialog .dialog-head{position:sticky;top:0;background:var(--flow-surface-fffdf5,#fffdf5);z-index:1;padding-bottom:8px}.collection-dialog .collection-book>p{margin:0 0 14px}.collection-dialog .collection-note{margin-top:14px}.collection-dialog .icon-button{flex-shrink:0}

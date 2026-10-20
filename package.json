@@ -7,7 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "npm test --prefix worker && npm run test:physics && npm run test:appearance && npm run test:time-flow && npm run test:music && node tests/slot-machine-browser.mjs && node tests/reward-browser.mjs && node tests/smoke.mjs && node tests/touch.mjs && node tests/charge-browser.mjs && npm run test:3d && npm run test:mini-games && node tests/collections-browser.mjs && node tests/slots-browser.mjs && node tests/leaderboard-browser.mjs && node tests/round-browser.mjs && node tests/mobile-layout.mjs",
+    "test": "npm test --prefix worker && npm run test:physics && npm run test:appearance && npm run test:time-flow && npm run test:music && node tests/slot-machine-browser.mjs && node tests/reward-browser.mjs && node tests/smoke.mjs && node tests/touch.mjs && node tests/charge-browser.mjs && npm run test:3d && npm run test:mini-games && node tests/collections-browser.mjs && node tests/slots-browser.mjs && node tests/leaderboard-browser.mjs && node tests/round-browser.mjs && node tests/full-window.mjs && node tests/mobile-layout.mjs",
     "test:worker": "npm test --prefix worker",
     "test:physics": "node tests/physics.mjs && node tests/surprises.mjs && node tests/stars.mjs && node tests/storage.mjs && node tests/reward-effects.mjs && node tests/slot-machine.mjs && node tests/charge.mjs && node tests/collections.mjs && node tests/slots.mjs && node tests/haptics.mjs && node tests/leaderboard.mjs && node tests/round.mjs && node tests/double-ball.mjs",
     "test:appearance": "node tests/appearance.mjs",
