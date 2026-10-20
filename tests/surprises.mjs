@@ -87,6 +87,7 @@ for (let i = 0; i < enlargeSteps - 1; i++) right.step();
 assert.equal(right.bumpers[2].circleRadius, 58.5, 'growth lasts the full ten active seconds'); right.step();
 assert.ok(Math.abs(right.clock - startedAt - ENLARGE_MS) < 1e-6); assert.equal(right.bumpers[2].circleRadius, 39);
 assert.equal(right.rewards.enlargedUntil, 0);
+assert.equal(right.stats.bonusBalls, 0, 'enlarge launches no physical ball');
 console.log('PASS: left bumper grants one real ball every 5 hits; right bumper physically grows the center 1.5× for exactly 10 seconds.');
 
 const events = [], center = createTable({ onSurprise: e => events.push(e) });

@@ -4,8 +4,8 @@ import { createTable, TABLE } from '../src/physics.js';
 import { PRESET_BOARD } from '../src/leaderboard.js';
 import {
   START_BALLS, LOW_BALLS, LAUNCH_COST, BURST_COST, SECRET_BALLS, LUCKY_BALLS, SLOT_MACHINE_BALLS,
-  MINI_BALLS_MIN, MINI_BALLS_MAX, MINI_BALLS_FULL_SCORE, DRAIN_MIN_OPENING, DRAIN_WIDTH_SCALE, DRAIN_WALL, POCKET_WIDTH,
-  slotFrame, classifyBottom, pocketCenter, miniGameBalls, secretHoleBalls, shotCost, roundCanEnd,
+  DRUM_ENLARGE_BALLS, MINI_BALLS_FULL_SCORE, DRAIN_MIN_OPENING, DRAIN_WIDTH_SCALE, DRAIN_WALL, POCKET_WIDTH,
+  slotFrame, classifyBottom, pocketCenter, secretHoleBalls, shotCost, nextBallCost, clampBallCost, chooseSpendFactor, roundCanEnd,
   qualifiesForLeaderboard, freshRound, restoreRun,
 } from '../src/round.js';
 
@@ -16,12 +16,12 @@ assert.equal(BURST_COST, 5);
 assert.equal(LUCKY_BALLS, 0);
 assert.equal(SLOT_MACHINE_BALLS, 0);
 assert.equal(SECRET_BALLS, 10);
+assert.equal(DRUM_ENLARGE_BALLS, 0);
 assert.equal(MINI_BALLS_FULL_SCORE, 5600);
-assert.equal(miniGameBalls(0), MINI_BALLS_MIN);
-assert.equal(miniGameBalls(MINI_BALLS_FULL_SCORE), MINI_BALLS_MAX);
-assert.equal(miniGameBalls(1e9), MINI_BALLS_MAX);
-assert.ok(miniGameBalls(900) > MINI_BALLS_MIN && miniGameBalls(900) < MINI_BALLS_MAX);
-assert.ok(miniGameBalls(840) < miniGameBalls(5600));
+for (const score of [0, 1400, 5600, 1e9]) {
+  assert.equal(secretHoleBalls(score).holeBalls, SECRET_BALLS);
+  assert.equal(secretHoleBalls(score).miniBalls, 0, 'a secret visit pays the hole balls only');
+}
 
 for (const count of [5, 7, 9]) {
   const frame = slotFrame(count);
@@ -71,13 +71,37 @@ assert.equal(restoreRun({ slots: 9, score: 20, balls: 7 }).slots, 9);
 assert.equal(restoreRun({ slots: 9, score: 20, balls: 7 }).score, 20);
 assert.equal(restoreRun({ balls: -3 }).balls, START_BALLS);
 assert.equal(restoreRun({ slots: 5, doubleBall: true }).doubleBall, false, 'double cost stays locked before 7 slots');
+assert.equal(restoreRun({ slots: 5, ballCost: 8 }).ballCost, 1);
 assert.equal(restoreRun({ slots: 7, score: 5000, balls: 40, doubleBall: true }).doubleBall, true);
+assert.equal(restoreRun({ slots: 7, doubleBall: true }).ballCost, 2);
+assert.equal(restoreRun({ slots: 7, ballCost: 8 }).ballCost, 2, '×4 and ×8 clamp back to ×2 before 9 slots');
+assert.equal(restoreRun({ slots: 9, ballCost: 4 }).ballCost, 4);
+assert.equal(restoreRun({ slots: 9, ballCost: 8 }).ballCost, 8);
+assert.equal(restoreRun({ slots: 9, ballCost: 8 }).doubleBall, true);
 assert.equal(restoreRun({ slots: 9, doubleBall: false }).doubleBall, false);
+assert.equal(restoreRun({ slots: 9, doubleBall: false }).ballCost, 1);
 assert.equal(freshRound().doubleBall, false);
+assert.equal(freshRound().ballCost, 1);
+assert.deepEqual([nextBallCost(1, 7), nextBallCost(2, 7)], [2, 1]);
+assert.deepEqual([nextBallCost(1, 9), nextBallCost(2, 9), nextBallCost(4, 9), nextBallCost(8, 9)], [2, 4, 8, 1]);
+assert.equal(clampBallCost(8, 5), 1);
+assert.equal(shotCost(4), 4);
+assert.equal(shotCost(8, true), 40);
+assert.equal(chooseSpendFactor(5, 100, false), 1);
+assert.equal(chooseSpendFactor(7, 10, false), 2);
+assert.equal(chooseSpendFactor(7, 1, false), 1);
+assert.equal(chooseSpendFactor(7, 9, true), 0);
+assert.equal(chooseSpendFactor(7, 10, true), 2);
+assert.equal(chooseSpendFactor(9, 8, false), 8);
+assert.equal(chooseSpendFactor(9, 6, false), 4);
+assert.equal(chooseSpendFactor(9, 3, false), 1);
+assert.equal(chooseSpendFactor(9, 40, true), 8);
+assert.equal(chooseSpendFactor(9, 20, true), 4);
+assert.equal(chooseSpendFactor(9, 19, true), 0);
 assert.equal(shotCost(2), 2);
 assert.equal(shotCost(2, true), 10);
 assert.equal(secretHoleBalls(1400).holeBalls, SECRET_BALLS);
-assert.equal(secretHoleBalls(1400).miniBalls, miniGameBalls(1400));
+assert.equal(secretHoleBalls(1400).miniBalls, 0);
 
 for (const count of [5, 7, 9]) {
   const scored = [], drained = [];

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { existsSync } from 'node:fs';
-import { START_BALLS, BURST_COST, SECRET_BALLS, MINI_BALLS_MIN } from '../src/round.js';
+import { START_BALLS, BURST_COST, SECRET_BALLS } from '../src/round.js';
 import { PAIR_DURATION } from '../src/mini-games.js';
 import { BURST_READY_AT } from '../src/charge.js';
 
@@ -26,6 +26,8 @@ try {
   await page.clock.runFor(40);
   assert.match(await page.locator('#reward-slot-caption').textContent(), /\+1\/\+10\/\+100/);
   assert.equal(await page.locator('#double-ball').isDisabled(), true, 'double cost stays locked at 5 slots');
+  assert.match(await page.locator('#double-ball-note').textContent(), /5000 分解锁 ×2/);
+  assert.match(await page.locator('#double-ball').getAttribute('aria-label'), /20000 分解锁 ×4/);
   assert.equal(await page.locator('#ball-count').textContent(), String(START_BALLS));
   assert.equal(await page.locator('#mobile-balls').textContent(), String(START_BALLS));
   const spent = await page.evaluate(() => {
@@ -120,7 +122,7 @@ try {
   await page.clock.runFor(40);
   assert.equal(await page.locator('#mini-result-balls').textContent(), `+${SECRET_BALLS} 球`);
   const afterSecret = await page.evaluate(() => window.__ponpon.available);
-  assert.ok(afterSecret >= beforeSecret + SECRET_BALLS + MINI_BALLS_MIN, 'a finished secret visit pays its balls');
+  assert.equal(afterSecret, beforeSecret + SECRET_BALLS, 'a finished secret visit pays the hole balls only');
   await page.locator('#mini-return').click();
   await page.clock.runFor(40);
   assert.equal(await page.locator('#toast').textContent(), `+${SECRET_BALLS} 球`);
@@ -143,7 +145,12 @@ try {
   const paid = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   paid.on('pageerror', error => errors.push(error.message));
   await paid.addInitScript(() => {
-    localStorage.setItem('ponpon-settings', JSON.stringify({ sound: false, calm: true, vibrate: false, music: false }));
+    const saved = JSON.parse(localStorage.getItem('ponpon-settings') || '{}');
+    saved.sound = false;
+    saved.calm = true;
+    saved.vibrate = false;
+    saved.music = false;
+    localStorage.setItem('ponpon-settings', JSON.stringify(saved));
   });
   await paid.clock.install({ time: epoch });
   await paid.clock.pauseAt(epoch + 1000);
@@ -165,6 +172,10 @@ try {
   await paid.waitForFunction(() => window.__ponpon.slots >= 7);
   assert.equal(await paid.locator('#double-ball').isDisabled(), false);
   await paid.locator('#double-ball').click();
+  assert.equal(await paid.locator('#double-ball').getAttribute('data-factor'), '2');
+  assert.match(await paid.locator('#double-ball-note').textContent(), /单发 2 · 五连发 10/);
+  assert.match(await paid.locator('#double-ball-note').textContent(), /20000 分解锁 ×4 ×8/);
+  assert.match(await paid.locator('#toast').textContent(), /球消耗 ×2/);
   const shot = await paid.evaluate(() => window.__ponpon.tryLaunch(0.8, false));
   assert.equal(shot.valueFactor, 2);
   assert.equal(shot.doubleBall, true);
@@ -180,7 +191,44 @@ try {
   const blocked = await paid.evaluate(() => window.__ponpon.tryLaunch(1, true));
   assert.equal(blocked.pending, 0);
   assert.equal(blocked.available, 9, 'a short ×2 burst does not fire');
-  assert.match(await paid.locator('#toast').textContent(), /双倍五连发需要 10 颗球/);
+  assert.match(await paid.locator('#toast').textContent(), /×2 五连发需要 10 颗球/);
+  await paid.evaluate(() => window.__ponpon.setSlots(9));
+  await paid.locator('#double-ball').click();
+  assert.equal(await paid.locator('#double-ball').getAttribute('data-factor'), '4');
+  assert.match(await paid.locator('#double-ball-note').textContent(), /单发 4 · 五连发 20/);
+  assert.doesNotMatch(await paid.locator('#double-ball-note').textContent(), /解锁 ×4/);
+  await paid.locator('#double-ball').click();
+  assert.equal(await paid.locator('#double-ball').getAttribute('data-factor'), '8');
+  const beforeEight = await paid.evaluate(() => { window.__ponpon.previewJar(0); window.__ponpon.setStock(40); return window.__ponpon.available; });
+  await paid.clock.runFor(300);
+  const eight = await paid.evaluate(() => window.__ponpon.tryLaunch(0.7, false));
+  assert.equal(eight.valueFactor, 8);
+  assert.equal(eight.ballCost, 8);
+  assert.equal(eight.available, beforeEight - 8, 'an ×8 shot spends eight balls and launches one');
+  await paid.locator('#double-ball').click();
+  await paid.locator('#double-ball').click();
+  await paid.locator('#double-ball').click();
+  assert.equal(await paid.locator('#double-ball').getAttribute('data-factor'), '4');
+  await paid.evaluate(() => { window.__ponpon.previewJar(0); window.__ponpon.setStock(19); });
+  const blockedFour = await paid.evaluate(() => window.__ponpon.tryLaunch(1, true));
+  assert.equal(blockedFour.pending, 0);
+  assert.equal(blockedFour.available, 19);
+  assert.match(await paid.locator('#toast').textContent(), /×4 五连发需要 20 颗球/);
+  await paid.evaluate(() => { window.__ponpon.previewJar(0); window.__ponpon.setStock(3); });
+  await paid.clock.runFor(300);
+  const short = await paid.evaluate(() => window.__ponpon.tryLaunch(0.5, false));
+  assert.equal(short.valueFactor, 1, 'a short ×4 stock still launches one normal ball');
+  assert.match(await paid.locator('#toast').textContent(), /不够 ×4/);
+  await paid.locator('#double-ball').click();
+  assert.equal(await paid.locator('#double-ball').getAttribute('data-factor'), '8');
+  await paid.locator('#settings-button').click();
+  for (let i = 0; i < 3; i++) await paid.locator('#gm-dot').click();
+  await paid.locator('#keep-progress').check();
+  await paid.reload();
+  await paid.clock.runFor(40);
+  assert.equal(await paid.evaluate(() => window.__ponpon.ballCost), 8, 'keep-progress restores the ×8 tier');
+  assert.equal(await paid.evaluate(() => window.__ponpon.slots), 9);
+  assert.equal(await paid.locator('#double-ball').getAttribute('data-factor'), '8');
   assert.deepEqual(errors, []);
-  console.log('PASS: reel ball gifts are +1/+10/+100 and double cost unlocks at 7 slots.');
+  console.log('PASS: reel ball gifts are +1/+10/+100 and cost tiers cycle ×2, then ×4 and ×8 at 9 slots.');
 } finally { await browser.close(); }

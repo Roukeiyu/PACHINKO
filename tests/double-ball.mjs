@@ -3,7 +3,7 @@ import Matter from 'matter-js';
 import { createTable, TABLE, STEP, DRUM_SIDE_HITS } from '../src/physics.js';
 import { BALL_ONE, BALL_PAIR, BALL_JACKPOT, REEL_TOP, SLOT_DISPLAY, ballPayout } from '../src/slot-machine.js';
 import {
-  BALL_COST_MULTIPLIER, SECRET_BALLS, shotCost, tablePoints, secretHoleBalls, miniGameBalls, pocketCenter, restoreRun,
+  BALL_COST_MULTIPLIER, SECRET_BALLS, DRUM_ENLARGE_BALLS, shotCost, tablePoints, secretHoleBalls, pocketCenter, restoreRun,
 } from '../src/round.js';
 
 assert.equal(BALL_COST_MULTIPLIER, 2);
@@ -14,9 +14,11 @@ assert.equal(ballPayout(2), BALL_PAIR);
 assert.equal(ballPayout(3), BALL_JACKPOT);
 assert.deepEqual([BALL_ONE, BALL_PAIR, BALL_JACKPOT], [1, 10, 100]);
 assert.equal(tablePoints(10, 2, 2, 5), 200);
+assert.equal(DRUM_ENLARGE_BALLS, 0);
 assert.equal(secretHoleBalls(0).holeBalls, SECRET_BALLS);
-assert.equal(secretHoleBalls(5600).miniBalls, miniGameBalls(5600));
-assert.notEqual(secretHoleBalls(1400).miniBalls, miniGameBalls(1400) * BALL_COST_MULTIPLIER);
+assert.equal(secretHoleBalls(0).miniBalls, 0);
+assert.equal(secretHoleBalls(5600).miniBalls, 0);
+assert.equal(secretHoleBalls(1400).miniBalls, 0);
 
 const layout = createTable();
 assert.equal(layout.bumpers[2].position.y, 410, 'the center drum moves down into the old reel gap');
@@ -46,6 +48,20 @@ scoreGame.step();
 assert.equal(doubled[0].valueFactor, 2);
 assert.equal(doubled[0].points, doubled[0].basePoints * 2 * 2);
 assert.equal(doubled[0].points, tablePoints(doubled[0].basePoints, 2, 2, 1));
+
+for (const factor of [4, 8]) {
+  const scored = [];
+  const higher = createTable({ slots: 5, onScore: result => scored.push(result) });
+  const ball = higher.launch(1, factor);
+  assert.equal(ball.valueFactor, factor);
+  ball.entered = true;
+  Matter.Body.setPosition(ball.body, { x: pocketCenter(5, 2), y: TABLE.scoreLine - 1 });
+  Matter.Body.setVelocity(ball.body, { x: 0, y: 6 });
+  higher.step();
+  assert.equal(scored[0].valueFactor, factor);
+  assert.equal(scored[0].points, scored[0].basePoints * factor);
+  assert.equal(scored[0].points, tablePoints(scored[0].basePoints, 1, factor, 1));
+}
 
 const burst = createTable();
 assert.ok(burst.launchBurst(2));
@@ -80,6 +96,16 @@ assert.equal(released.length, 20);
 assert.equal(released.filter(ball => ball.scoreFactor === 3).length, 1);
 assert.ok(released.every(ball => ball.valueFactor === 1), 'the jar releases normal balls');
 
+const costlyJar = createTable();
+const paidBall = costlyJar.launch(1, 8);
+paidBall.entered = true;
+paidBall.scoreFactor = 5;
+Matter.Body.setPosition(paidBall.body, { x: costlyJar.collector.x, y: costlyJar.collector.y - 44 });
+Matter.Body.setVelocity(paidBall.body, { x: 0, y: 5 });
+for (let i = 0; i < 30 && costlyJar.balls.includes(paidBall); i++) costlyJar.step();
+assert.equal(costlyJar.collector.stored.length, 1, 'an ×8 ball still counts as one stored ball');
+assert.equal(costlyJar.collector.stored[0], 5, 'the jar keeps the star factor and drops ×8');
+
 const holeScores = [];
 const hole = createTable({ onScore: result => holeScores.push(result) });
 const secret = hole.launch(1, 2);
@@ -94,7 +120,7 @@ assert.equal(holeScores[0].basePoints, 500);
 assert.equal(holeScores[0].points, 1000);
 assert.equal(holeScores[0].valueFactor, 2);
 assert.equal(secretHoleBalls(1400).holeBalls, 10);
-assert.ok(secretHoleBalls(1400).miniBalls >= 5 && secretHoleBalls(1400).miniBalls <= 30);
+assert.equal(secretHoleBalls(1400).miniBalls, 0, 'the mini-game score does not add balls, and ×N does not scale them');
 
 function hit(game, index) {
   const ball = game.launch(1, 2);
@@ -134,6 +160,7 @@ assert.equal(carried.restoreCarried([{ scoreFactor: 4, valueFactor: 2 }, { value
 assert.equal(carried.balls[0].scoreFactor, 4);
 assert.equal(carried.balls[0].valueFactor, 2);
 assert.equal(carried.balls[1].valueFactor, 2);
-assert.deepEqual(restoreRun({ slots: 7, doubleBall: true, balls: 3 }).doubleBall, true);
+assert.equal(restoreRun({ slots: 7, doubleBall: true, balls: 3 }).ballCost, 2);
+assert.equal(restoreRun({ slots: 9, ballCost: 8, balls: 3 }).ballCost, 8);
 
 console.log('PASS: double-cost shots, unscaled ball gifts, jar storage, secret-hole points, and the lowered reels.');

@@ -115,8 +115,9 @@ try {
   assert.match(reelMarkup, /<svg/i, 'the sidebar reels use the astronomy icons');
   assert.doesNotMatch(reelMarkup, /🍒|🍋|🔔|🍀/);
   assert.deepEqual(reward.counts, ['0/5', '0/5', '0/30']);
-  assert.match(reward.timer, /满 5 次放大 10 秒/);
+  assert.match(reward.timer, /满 5 次，只放大中央 10 秒/);
   assert.match(reward.how, /左右鼓满 5 次/);
+  assert.match(reward.how, /右鼓只放大中央 10 秒/);
   assert.match(reward.how, /\+1\/\+10\/\+100/);
   assert.match(await page.locator('#reward-slot-caption').textContent(), /\+1\/\+10\/\+100/);
   assert.equal(reward.slotFirst, true, 'the slot row leads the reward list');

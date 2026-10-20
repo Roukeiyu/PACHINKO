@@ -1,13 +1,15 @@
 // Random-power physics rounds. Duration assumes a shot about every 1.5s, plus
 // one mini-game pause after each secret visit. Not part of npm test.
+// Policy: ×1 below 7 slots, ×2 from 7 slots, and at 9 slots ×8 when that shot
+// can be paid, otherwise ×4. Default is 100 rounds.
 import { createTable, STEP } from '../src/physics.js';
 import { slotsForScore } from '../src/slots.js';
 import {
   START_BALLS, BURST_COST, SECRET_BALLS, DRUM_RANDOM_BALLS, DRUM_ENLARGE_BALLS, DRUM_CLOCK_BALLS,
-  BALL_COST_MULTIPLIER, miniGameBalls, shotCost, MINI_BALLS_FULL_SCORE,
+  chooseSpendFactor, shotCost, MINI_BALLS_FULL_SCORE,
 } from '../src/round.js';
 
-const ROUNDS = Number(process.argv[2] || 40);
+const ROUNDS = Number(process.argv[2] || 100);
 const SHOT_GAP_MS = 1500;
 const MINI_PAUSE_MS = 40000;
 const STEP_CAP = Math.ceil(20 * 60 * 1000 / STEP);
@@ -31,6 +33,7 @@ function playRound(seed) {
   let reelPaid = 0;
   let doubleShots = 0;
   let ballsSpent = 0;
+  const tierShots = { 1: 0, 2: 0, 4: 0, 8: 0 };
   const game = createTable({
     slots,
     random,
@@ -74,7 +77,7 @@ function playRound(seed) {
     }
     if (secretWait && idle && !miniAwarded) {
       const performanceScore = random() * MINI_BALLS_FULL_SCORE;
-      stock += miniGameBalls(performanceScore) + SECRET_BALLS;
+      stock += SECRET_BALLS;
       score += Math.round(performanceScore * 0.35);
       miniMs += MINI_PAUSE_MS;
       miniAwarded = true;
@@ -83,14 +86,9 @@ function playRound(seed) {
     }
     const clock = steps * STEP;
     const spendable = stock + game.collector.stored.length;
-    const factor = slots >= 7 ? BALL_COST_MULTIPLIER : 1;
     const burstWanted = random() < 0.12;
-    let burst = false;
-    let used = 0;
-    if (burstWanted) {
-      if (spendable >= shotCost(factor, true)) { burst = true; used = factor; }
-    } else if (spendable >= shotCost(factor, false)) used = factor;
-    else if (spendable >= 1) used = 1;
+    const used = chooseSpendFactor(slots, spendable, burstWanted);
+    const burst = burstWanted && used > 0;
     const cost = used ? shotCost(used, burst) : 0;
     if (!secretWait && used && clock - lastShot >= 900 && game.balls.length < 10) {
       const ball = burst ? game.launchBurst(used) : game.launch(random(), used);
@@ -100,9 +98,11 @@ function playRound(seed) {
         stock -= fromStock;
         need -= fromStock;
         if (need) game.takeStored(need);
-        launches += burst ? BURST_COST : 1;
+        const fired = burst ? BURST_COST : 1;
+        launches += fired;
         ballsSpent += cost;
-        if (used > 1) doubleShots += burst ? BURST_COST : 1;
+        tierShots[used] += fired;
+        if (used > 1) doubleShots += fired;
         lastShot = clock;
       }
     }
@@ -113,42 +113,88 @@ function playRound(seed) {
     if (stock <= 0 && stored === 0 && pending === 0 && game.pendingLaunches === 0 && game.balls.length === 0 && !secretWait) break;
   }
   const physicsMs = steps * STEP;
-  return { score, launches, ballsSpent, doubleShots, slots, jackpots, bestSlot, physicsMs, playMs: launches * SHOT_GAP_MS + miniMs, capped: steps >= STEP_CAP, ballHits, reelSpins, reelPaid, randomShots: game.stats.randomShots, enlargements: game.stats.enlargements, clockBursts: game.stats.clockBursts };
+  return {
+    score, launches, ballsSpent, doubleShots, tierShots, slots, jackpots, bestSlot, physicsMs,
+    playMs: launches * SHOT_GAP_MS + miniMs, capped: steps >= STEP_CAP, ballHits, reelSpins, reelPaid,
+    randomShots: game.stats.randomShots, enlargements: game.stats.enlargements, clockBursts: game.stats.clockBursts,
+    jarReleases: game.stats.storageBursts, jarBalls: game.stats.storageDrops,
+  };
 }
 
 const results = [];
 const started = Date.now();
 for (let i = 0; i < ROUNDS; i++) results.push(playRound(1000 + i * 97));
-const scores = results.map(r => r.score).sort((a, b) => a - b);
 const mean = list => list.reduce((sum, value) => sum + value, 0) / list.length;
-const pct = p => scores[Math.min(scores.length - 1, Math.floor((scores.length - 1) * p))];
+const sorted = list => list.slice().sort((a, b) => a - b);
+const pick = (list, p) => { const values = sorted(list); return values[Math.min(values.length - 1, Math.floor((values.length - 1) * p))]; };
+const round1 = value => Math.round(value * 10) / 10;
+const round2 = value => Math.round(value * 100) / 100;
+const minutes = list => list.map(value => value / 60000);
+const scores = results.map(row => row.score);
+const play = minutes(results.map(row => row.playMs));
+const physics = minutes(results.map(row => row.physicsMs));
+const spent = results.map(row => row.ballsSpent);
+const reached7 = results.filter(row => row.slots >= 7).length;
+const reached9 = results.filter(row => row.slots >= 9).length;
+const reached50k = scores.filter(score => score >= 50000).length;
+const pct = count => round1(count / ROUNDS * 100);
+const meanTier = factor => round1(mean(results.map(row => row.tierShots[factor])));
+const reelEvents = count => results.reduce((sum, row) => sum + row.ballHits[count], 0);
 const buckets = [0, 1000, 3000, 5000, 10000, 20000, 50000, Infinity];
 const hist = buckets.slice(0, -1).map((lo, i) => {
   const hi = buckets[i + 1];
   return { lo, hi, n: scores.filter(score => score >= lo && score < hi).length };
 });
+const capped = results.filter(row => row.capped);
 console.log(JSON.stringify({
   rounds: ROUNDS,
+  policy: '7槽起用×2；9槽优先×8（这一发付得起时），否则×4',
   elapsedSec: Math.round((Date.now() - started) / 1000),
   startBalls: START_BALLS,
+  playMin: { mean: round2(mean(play)), median: round2(pick(play, 0.5)), p90: round2(pick(play, 0.9)) },
+  physicsMin: { mean: round2(mean(physics)), median: round2(pick(physics, 0.5)), p90: round2(pick(physics, 0.9)) },
+  ballsSpent: { mean: Math.round(mean(spent)), median: pick(spent, 0.5) },
+  giftsPerRound: {
+    leftDrumBalls: round1(mean(results.map(row => row.randomShots))),
+    clockBursts: round1(mean(results.map(row => row.clockBursts))),
+    clockBalls: round1(mean(results.map(row => row.clockBursts * 12))),
+    jarReleases: round1(mean(results.map(row => row.jarReleases))),
+    jarBalls: round1(mean(results.map(row => row.jarBalls))),
+    secretVisits: round1(mean(results.map(row => row.jackpots))),
+    secretBalls: round1(mean(results.map(row => row.jackpots * SECRET_BALLS))),
+    reelPlus1: round1(mean(results.map(row => row.ballHits[1]))),
+    reelPlus10: round1(mean(results.map(row => row.ballHits[2] * 10))),
+    reelPlus100: round1(mean(results.map(row => row.ballHits[3] * 100))),
+    reelBalls: round1(mean(results.map(row => row.ballHits[1] + row.ballHits[2] * 10 + row.ballHits[3] * 100))),
+  },
+  score: { mean: Math.round(mean(scores)), median: pick(scores, 0.5), p90: pick(scores, 0.9), max: Math.max(...scores) },
+  reach: {
+    slots7: { n: reached7, pct: pct(reached7) },
+    slots9: { n: reached9, pct: pct(reached9) },
+    score50k: { n: reached50k, pct: pct(reached50k) },
+  },
+  meanLaunches: Math.round(mean(results.map(row => row.launches))),
+  meanTierShots: { x1: meanTier(1), x2: meanTier(2), x4: meanTier(4), x8: meanTier(8) },
+  cappedRuns: capped.length,
+  capped: capped.map(row => ({ score: row.score, launches: row.launches, slots: row.slots, jackpots: row.jackpots })),
+  compareToPrevious40: { meanPlayMin: 7.99, meanScore: 20643, medianScore: 16902, maxScore: 57581, reached50k: 3, reached9: 8, reached7: 28 },
   meanScore: Math.round(mean(scores)),
-  meanLaunches: Math.round(mean(results.map(r => r.launches))),
-  meanBallsSpent: Math.round(mean(results.map(r => r.ballsSpent))),
-  meanDoubleShots: Math.round(mean(results.map(r => r.doubleShots))),
-  meanPlayMin: +(mean(results.map(r => r.playMs)) / 60000).toFixed(2),
-  meanPhysicsMin: +(mean(results.map(r => r.physicsMs)) / 60000).toFixed(2),
-  p50: pct(0.5), p90: pct(0.9), p95: pct(0.95), max: scores.at(-1),
-  reached50k: scores.filter(score => score >= 50000).length,
-  reached5slotCap: results.filter(r => r.slots >= 7).length,
-  reached9: results.filter(r => r.slots >= 9).length,
-  capped: results.filter(r => r.capped).map(r => ({ score: r.score, launches: r.launches, slots: r.slots, jackpots: r.jackpots })),
-  meanJackpots: +mean(results.map(r => r.jackpots)).toFixed(2),
-  ballOutcomes: [1, 2, 3].map(count => ({ count, n: results.reduce((sum, row) => sum + row.ballHits[count], 0) })),
+  meanBallsSpent: Math.round(mean(spent)),
+  meanDoubleShots: Math.round(mean(results.map(row => row.doubleShots))),
+  meanPlayMin: round2(mean(play)),
+  meanPhysicsMin: round2(mean(physics)),
+  p50: pick(scores, 0.5),
+  p90: pick(scores, 0.9),
+  max: Math.max(...scores),
+  reached50k,
+  reached5slotCap: reached7,
+  reached9,
+  meanJackpots: round2(mean(results.map(row => row.jackpots))),
+  ballOutcomes: [1, 2, 3].map(count => ({ count, n: reelEvents(count) })),
   reelSpins: results.reduce((sum, row) => sum + row.reelSpins, 0),
   reelPaid: results.reduce((sum, row) => sum + row.reelPaid, 0),
   randomShots: results.reduce((sum, row) => sum + row.randomShots, 0),
   enlargements: results.reduce((sum, row) => sum + row.enlargements, 0),
   clockBursts: results.reduce((sum, row) => sum + row.clockBursts, 0),
-  meanReelSpins: +mean(results.map(row => row.reelSpins)).toFixed(2),
   hist,
 }, null, 2));
