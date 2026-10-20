@@ -16,6 +16,13 @@ export const VIEW_DISTANCE = 1600;
 export const VIEW_LOOK_Y = -40;
 export const WALL_HEIGHT = 58;
 export const RAIL_HEIGHT = 36;
+// Portrait phones use a shorter, full-width canvas. These values keep the near
+// edge about 5px inside that canvas while the whole table, including the rail
+// tops, stays on screen. Desktop keeps VIEW_DISTANCE and VIEW_LOOK_Y.
+export const MOBILE_LAYOUT_QUERY = '(max-width: 740px) and (orientation: portrait)';
+export const MOBILE_VIEW_ASPECT = 1.24;
+export const MOBILE_VIEW_DISTANCE = 1150;
+export const MOBILE_VIEW_LOOK_Y = -80;
 
 // The simulation remains on the tabletop. Every solid is built from the same
 // Matter body, then follows its position, angle and size without a second world.
@@ -249,13 +256,28 @@ function create3DRenderer(canvas) {
   // Keep the table fixed. Shake translates the camera parallel to its view so the
   // orientation stays put and the taller rails parallax against the floor.
   const pitch = THREE.MathUtils.degToRad(VIEW_PITCH_DEG);
-  const cameraBase = new THREE.Vector3(0, -Math.sin(pitch) * VIEW_DISTANCE, Math.cos(pitch) * VIEW_DISTANCE);
+  const cameraBase = new THREE.Vector3();
   const lookAt = new THREE.Vector3();
-  camera.position.copy(cameraBase);
-  camera.up.set(0, 1, 0); camera.lookAt(0, VIEW_LOOK_Y, 0); camera.updateMatrixWorld();
+  let viewDistance = VIEW_DISTANCE, viewLookY = VIEW_LOOK_Y;
+  const mobileQuery = window.matchMedia(MOBILE_LAYOUT_QUERY);
   const project = (x, y, z = 0) => { const p = world(x, y, z).applyMatrix4(table.matrixWorld).project(camera); return { x: (p.x + 1) / 2, y: (1 - p.y) / 2 }; };
-  function resize() { const width = canvas.getBoundingClientRect().width; if (width) webgl.setSize(width, width * H / W, false); }
-  const observer = new ResizeObserver(resize); observer.observe(canvas); resize();
+  function resize() {
+    const mobile = mobileQuery.matches;
+    viewDistance = mobile ? MOBILE_VIEW_DISTANCE : VIEW_DISTANCE;
+    viewLookY = mobile ? MOBILE_VIEW_LOOK_Y : VIEW_LOOK_Y;
+    const rect = canvas.getBoundingClientRect();
+    const aspect = rect.width > 0 && rect.height > 0 ? rect.width / rect.height : (mobile ? MOBILE_VIEW_ASPECT : W / H);
+    camera.fov = VIEW_FOV;
+    camera.aspect = aspect;
+    camera.updateProjectionMatrix();
+    cameraBase.set(0, -Math.sin(pitch) * viewDistance, Math.cos(pitch) * viewDistance);
+    camera.position.copy(cameraBase);
+    camera.up.set(0, 1, 0); camera.lookAt(0, viewLookY, 0); camera.updateMatrixWorld();
+    if (rect.width > 0 && rect.height > 0) webgl.setSize(rect.width, rect.height, false);
+  }
+  const observer = new ResizeObserver(resize); observer.observe(canvas);
+  mobileQuery.addEventListener('change', resize);
+  resize();
   let paintedState = '';
   function draw(game, theme, state, fx, palette = null) {
     if (!currentGame) { setup(game); currentGame = game; }
@@ -334,7 +356,7 @@ function create3DRenderer(canvas) {
     motion = sceneMotionAt(game.clock, state, fx);
     const cameraOffset = new THREE.Vector3(-motion.x, motion.y * Math.cos(pitch), motion.y * Math.sin(pitch));
     camera.position.copy(cameraBase).add(cameraOffset);
-    lookAt.set(cameraOffset.x, VIEW_LOOK_Y + cameraOffset.y, cameraOffset.z);
+    lookAt.set(cameraOffset.x, viewLookY + cameraOffset.y, cameraOffset.z);
     camera.up.set(0, 1, 0); camera.lookAt(lookAt);
     camera.updateMatrixWorld();
     table.updateMatrixWorld(true); boardInverse.value.copy(table.matrixWorld).invert();
@@ -342,14 +364,16 @@ function create3DRenderer(canvas) {
   }
   function snapshot() {
     const frame = [[12, 16], [748, 16], [12, 892], [748, 892]].flatMap(([x, y]) => [project(x, y, 0), project(x, y, WALL_HEIGHT)]);
-    return { mode: 'webgl', cameraAngle: 0, tableTransform: { position: table.position.toArray(), rotation: table.rotation.toArray().slice(0,3) }, cameraPosition: camera.position.toArray(), cameraBase: cameraBase.toArray(), cameraQuaternion: camera.quaternion.toArray(), motion: { ...motion }, pitch: VIEW_PITCH_DEG, fov: VIEW_FOV, distance: VIEW_DISTANCE, lookY: VIEW_LOOK_Y, frame, meshes: bodies.size, triangles: webgl.info.render.triangles, contextLost: webgl.getContext().isContextLost(),
+    const nearEdge = [[3, 897, 0], [757, 897, 0], [3, 897, WALL_HEIGHT], [757, 897, WALL_HEIGHT]].map(([x, y, z]) => project(x, y, z));
+    const nearMinX = Math.min(...nearEdge.map(p => p.x)), nearMaxX = Math.max(...nearEdge.map(p => p.x));
+    return { mode: 'webgl', cameraAngle: 0, tableTransform: { position: table.position.toArray(), rotation: table.rotation.toArray().slice(0,3) }, cameraPosition: camera.position.toArray(), cameraBase: cameraBase.toArray(), cameraQuaternion: camera.quaternion.toArray(), motion: { ...motion }, pitch: VIEW_PITCH_DEG, fov: camera.fov, distance: viewDistance, lookY: viewLookY, aspect: camera.aspect, near: { minX: nearMinX, maxX: nearMaxX, width: nearMaxX - nearMinX }, frame, meshes: bodies.size, triangles: webgl.info.render.triangles, contextLost: webgl.getContext().isContextLost(),
       star: currentGame?.star ? project(currentGame.star.x, currentGame.star.y, 18) : null,
       bodies: [...bodies.values()].map(({ body, mesh, height }) => ({ id: body.id, kind: body.label, x: mesh.position.x + W / 2, y: H / 2 - mesh.position.y, angle: -mesh.rotation.z, radius: body.plugin.radius, height, scale: mesh.scale.x, projected: project(body.position.x, body.position.y, height) })),
       balls: [...balls].map(([id, mesh]) => ({ id, x: mesh.position.x + W / 2, y: H / 2 - mesh.position.y, z: mesh.position.z })),
       samples: [[70,200,.8],[23,280,28.8],[150,155,18.8],[350,367,32.8],[350,465,2.8],[615,482,2]].map(([x,y,z]) => project(x,y,z)), readyBall: project(TABLE.launchX, TABLE.launchY, 12), textures: webgl.info.memory.textures, geometries: webgl.info.memory.geometries, alignmentError: Math.max(0, ...[...bodies.values()].map(({body, mesh}) => Math.hypot(mesh.position.x - (body.position.x - W / 2), mesh.position.y - (H / 2 - body.position.y)))) };
   }
   return { draw, resize, project, snapshot, dispose() {
-    observer.disconnect(); painter.dispose(); atlas.dispose(); chargeTexture.dispose(); starMap.dispose(); sparkMap.dispose(); flashMap.dispose(); environment.dispose(); wells.forEach(w => w.texture.dispose());
+    observer.disconnect(); mobileQuery.removeEventListener('change', resize); painter.dispose(); atlas.dispose(); chargeTexture.dispose(); starMap.dispose(); sparkMap.dispose(); flashMap.dispose(); environment.dispose(); wells.forEach(w => w.texture.dispose());
     const geometries = new Set(), materials = new Set(); scene.traverse(object => { if (object.geometry) geometries.add(object.geometry); if (object.material) (Array.isArray(object.material) ? object.material : [object.material]).forEach(m => materials.add(m)); });
     geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); webgl.dispose(); webgl.forceContextLoss();
   } };

@@ -47,8 +47,11 @@ try {
   assert.equal(r.pitch,VIEW_PITCH_DEG);assert.equal(r.fov,VIEW_FOV);assert.equal(r.decor,undefined,'off-board scenery is gone');
   assert.ok(r.bodies.filter(b=>b.kind==='wall').every(b=>b.height===WALL_HEIGHT));
   assert.ok(r.bodies.filter(b=>b.kind==='rail').every(b=>b.height===RAIL_HEIGHT));
-  const fits=frame=>frame.every(p=>p.x>0.02&&p.x<0.98&&p.y>0.02&&p.y<0.98);
+  const fits=frame=>frame.every(p=>p.x>0.004&&p.x<0.996&&p.y>0.004&&p.y<0.996);
   assert.ok(fits(r.frame),'perspective keeps the full table inside the canvas');
+  assert.ok(r.near.width>=0.95,'the near edge fills at least 95% of the mobile canvas');
+  const nearMargin=await page.evaluate(()=>{const w=document.querySelector('#board').getBoundingClientRect().width;return window.__ponpon.rendering.near.minX*w;});
+  assert.ok(nearMargin>=4&&nearMargin<=8,`portrait side margin stays near 4–8px (${nearMargin})`);
   assert.equal(r.bodies.filter(b=>b.kind==='pin').length,28);
   assert.deepEqual(r.bodies.filter(b=>b.kind==='bumper').map(b=>[b.x,b.y]),[[238,236],[462,236],[350,367]]);
   assert.ok(r.bodies.every(b=>b.height>0));
