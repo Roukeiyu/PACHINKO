@@ -180,3 +180,109 @@ Matter.Body.setPosition(ball.body, { x: TABLE.launchX, y: 820 }); Matter.Body.se
 game.step(); assert.equal(scores.length, 0); assert.equal(game.stats.returns, 1, 'falling in shooter lane returns without scoring');
 game.launch(); game.setSlots(9); assert.equal(game.balls.length, 0); assert.equal(game.slots, 9);
 console.log(`PASS: right bonus cup, near misses, lane return and slot changes. ${totals.jackpots}/1080 bonus entries; fixed physics step ${STEP.toFixed(2)}ms.`);
+
+// A ball whose center reaches the cup scores immediately. While the hole is
+// ignoring that ball, the same overlap must not score: the ball is ejected.
+{
+  const scored = [], table = createTable({ slots: 7, onScore: s => scored.push(s) });
+  const h = table.holes[0];
+  const sunk = table.launch(); sunk.entered = true;
+  Matter.Body.setPosition(sunk.body, { x: h.x, y: h.y });
+  Matter.Body.setVelocity(sunk.body, { x: 0, y: 0 });
+  table.step();
+  assert.equal(scored.length, 1); assert.equal(scored[0].kind, 'jackpot'); assert.equal(scored[0].basePoints, 500);
+  const phased = table.launch(); phased.entered = true; phased.ignoreHoleUntil = 1e12;
+  Matter.Body.setPosition(phased.body, { x: h.x, y: h.y });
+  Matter.Body.setVelocity(phased.body, { x: -4, y: .4 });
+  for (let i = 0; i < 30; i++) table.step();
+  assert.equal(scored.length, 1, 'a hole that is not accepting this ball must not score it');
+  assert.ok(table.balls.includes(phased), 'rejection leaves the ball in play');
+  assert.ok(Math.hypot(phased.body.position.x - h.x, phased.body.position.y - h.y) > 40, 'rejection carries the ball out of the cup');
+  assert.equal(phased.body.collisionFilter.group, -2, 'the hole ring stays inactive for the short phase');
+}
+// The right-wall cusp and the top seam used to rattle forever: capture only saw
+// the center inside r=18, and contact kept the old speed timer at zero.
+function release(table, ball) {
+  if (!table.balls.includes(ball)) return;
+  Matter.Composite.remove(table.engine.world, ball.body);
+  table.balls.splice(table.balls.indexOf(ball), 1);
+}
+function stillWedged(table, ball, hole, ms = 2500) {
+  const markAt = Math.round(500 / STEP), doneAt = Math.round(ms / STEP);
+  let mark = null;
+  for (let i = 0; i < doneAt; i++) {
+    table.step();
+    if (!table.balls.includes(ball)) return false;
+    if (i === markAt) mark = { x: ball.body.position.x, y: ball.body.position.y };
+  }
+  const r = Math.hypot(ball.body.position.x - hole.x, ball.body.position.y - hole.y);
+  const drifted = Math.hypot(ball.body.position.x - mark.x, ball.body.position.y - mark.y);
+  return r < 70 && drifted < 14;
+}
+{
+  const samples = [
+    { name: 'right cusp', x: 657, y: 463, vx: 0, vy: 0 },
+    { name: 'top seam', x: 618.5, y: 443, vx: 0, vy: 2 },
+    { name: 'mouth tangent', x: 615, y: 448, vx: -5, vy: 0 },
+  ];
+  const hole = { x: 615, y: 482 };
+  for (let deg = 0; deg < 360; deg += 45) for (const speed of [2, 8]) for (const tangent of [0, 1]) {
+    const a = deg * Math.PI / 180;
+    samples.push({
+      name: `ring ${deg}/${speed}/${tangent ? 'tangent' : 'in'}`,
+      x: hole.x + Math.cos(a) * 42, y: hole.y + Math.sin(a) * 42,
+      vx: Math.cos(a + Math.PI / 2 * tangent + Math.PI * (1 - tangent)) * speed,
+      vy: Math.sin(a + Math.PI / 2 * tangent + Math.PI * (1 - tangent)) * speed,
+    });
+  }
+  for (const dy of [-28, 0, 28]) for (const speed of [2, 7]) {
+    samples.push({ name: `mouth ${dy}/${speed}`, x: hole.x - 52, y: hole.y + dy, vx: speed, vy: dy / 52 * speed });
+  }
+  for (const sample of samples) {
+    const scored = [], table = createTable({ slots: 7, random: () => 0, onScore: s => scored.push(s) });
+    const h = table.holes[0];
+    const ball = table.launch(); ball.entered = true;
+    Matter.Body.setPosition(ball.body, { x: sample.x, y: sample.y });
+    Matter.Body.setVelocity(ball.body, { x: sample.vx, y: sample.vy });
+    assert.equal(stillWedged(table, ball, h), false, `${sample.name} must sink or leave the rim`);
+    assert.ok(scored.filter(s => s.kind === 'jackpot').length <= 1, `${sample.name} scores the hole at most once`);
+    release(table, ball);
+  }
+  const parked = createTable({ slots: 7, random: () => 0 });
+  const wedged = parked.launch(); wedged.entered = true;
+  Matter.Body.setPosition(wedged.body, { x: 657, y: 463 });
+  Matter.Body.setVelocity(wedged.body, { x: 0, y: 0 });
+  parked.step();
+  parked.setSlots(5);
+  assert.equal(parked.balls.length, 0, 'switching slots removes a ball sitting in the cusp');
+  console.log(`PASS: secret-hole rim scan (${samples.length} angles and speeds) sinks or ejects, and slot changes clear a wedged ball.`);
+}
+// A ball balanced away from the hole and the storage cup is the global dwell case.
+{
+  const table = createTable({ slots: 7, random: () => 0 });
+  const ball = table.launch(); ball.entered = true;
+  Matter.Body.setPosition(ball.body, { x: 150, y: 136.9 });
+  Matter.Body.setVelocity(ball.body, { x: 0, y: 0 });
+  let left = false;
+  for (let i = 0; i < Math.round(2200 / STEP); i++) {
+    table.step();
+    if (!table.balls.includes(ball) || Math.hypot(ball.body.position.x - 150, ball.body.position.y - 136.9) > 24) { left = true; break; }
+  }
+  assert.ok(left, 'a ball that dwells for 1.5s away from storage receives a freeing shove');
+  const cup = table.launch(); cup.entered = true;
+  Matter.Body.setPosition(cup.body, { x: table.collector.x + 20, y: table.collector.y });
+  Matter.Body.setVelocity(cup.body, { x: 0, y: 0 });
+  table.step();
+  assert.equal(table.stats.absorbed, 1, 'a center already inside the storage cup is stored, not nudged downward');
+  for (const slots of [5, 7, 9]) {
+    const drops = createTable({ slots, random: () => .5 });
+    for (const outlet of drops.collector.outlets) {
+      const dropped = drops.launch(); dropped.entered = true;
+      Matter.Body.setPosition(dropped.body, { x: outlet.x, y: outlet.y + 21 });
+      Matter.Body.setVelocity(dropped.body, { x: 0, y: .8 });
+      assert.equal(stillWedged(drops, dropped, { x: outlet.x, y: outlet.y }, 2200), false, `${slots} slots outlet ${outlet.column} must not trap a drop`);
+      release(drops, dropped);
+    }
+  }
+  console.log('PASS: dwell nudge frees a resting ball, storage keeps its cup, and drop outlets do not trap.');
+}

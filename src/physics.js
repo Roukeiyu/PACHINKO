@@ -11,6 +11,12 @@ export const TABLE = Object.freeze({ width: 760, height: 900, left: 39, right: 6
 export const LAUNCH_SQUASH = 22;
 export const STEP = 1000 / 120;
 const FILTER = { world: 1, ascending: 2, playing: 4, returnRamp: 8, launchDoor: 16 };
+// The cup's inner wall sits near r=28. A center that reaches the sink has passed
+// that lip, so the rim can no longer push it back out between checks.
+const HOLE_SINK = 30, HOLE_RIM = 56, HOLE_IGNORE = 200, HOLE_GROUP = -2;
+const DWELL_RADIUS = 12, DWELL_LIMIT = 1500, COLLECTOR_HOLD = 48;
+// Same negative group: a phased ball skips the secret-hole ring only.
+// Collector guards stay on group 0, so storage is never phased open.
 
 // Physics is independent of rendering, so trajectory and scoring can be tested at
 // the same fixed time step used on desktop and mobile (including fast launches).
@@ -23,7 +29,7 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   let clock = 0, nextId = 1;
   const pendingShots = [], pendingDrops = [], pendingLaunches = [];
   let emissionPaused = false;
-  const collector = { x: 100, y: 650, radius: 18, capacity: 20, stored: [], remaining: 0, glow: 0, outlets: [] };
+  const collector = { x: 100, y: 650, radius: 26, capacity: 20, stored: [], remaining: 0, glow: 0, outlets: [] };
   const rewards = { hits: [0, 0, 0], goals: [10, 10, 30], enlargedUntil: 0, burstUntil: 0, burstStep: -1, gateGlow: 0, ordinaryStars: 0 };
   const slotMachine = createSlotMachine({ random: slotRandom, onEvent: event => onSurprise({ ...event, x: SLOT_DISPLAY.x, y: SLOT_DISPLAY.y }) });
   const stats = { launches: 0, entered: 0, scored: 0, jackpots: 0, returns: 0, timeouts: 0, redirected: 0, bonusBalls: 0, randomShots: 0, clockBursts: 0, enlargements: 0, absorbed: 0, storageBursts: 0, storageDrops: 0, impacts: 0, hits: { pin: 0, kicker: 0, bumper: 0, rail: 0, spinner: 0, diamond: 0, wall: 0, deflector: 0 } };
@@ -77,7 +83,9 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     for (let i = 0; i < 12; i++) {
       const a = hole.facing + .55 + i * (Math.PI * 2 - 1.1) / 12;
       const b = hole.facing + .55 + (i + 1) * (Math.PI * 2 - 1.1) / 12;
-      segment(hole.x + Math.cos(a) * 32, hole.y + Math.sin(a) * 32, hole.x + Math.cos(b) * 32, hole.y + Math.sin(b) * 32, 8, guards, 'guard');
+      const guard = segment(hole.x + Math.cos(a) * 32, hole.y + Math.sin(a) * 32, hole.x + Math.cos(b) * 32, hole.y + Math.sin(b) * 32, 8, guards, 'guard');
+      guard.plugin.hole = true;
+      guard.collisionFilter.group = HOLE_GROUP;
     }
   }
   // A real upward-facing cup receives balls through a wide mouth in the lower-left gap.
@@ -145,7 +153,7 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   function spawn(x, y, vx, vy, { power = 0, bonus = false, kind = 'launch' } = {}) {
     const body = Bodies.circle(x, y, 11, { label: 'ball', density: .009, restitution: .65, friction: .001, frictionAir: .001, collisionFilter: { category: bonus ? FILTER.playing : FILTER.ascending, mask: 0xffffffff, group: 0 } });
     Body.setVelocity(body, { x: vx, y: vy });
-    const ball = { id: nextId++, body, power, entered: bonus, bonus, kind, scoreFactor: 1, redirected: false, trail: [], born: clock, stuck: 0, lastKick: -1000, lastBumperHits: [-1000, -1000, -1000], collisions: 0 };
+    const ball = { id: nextId++, body, power, entered: bonus, bonus, kind, scoreFactor: 1, redirected: false, trail: [], born: clock, stuck: 0, ignoreHoleUntil: 0, anchorX: x, anchorY: y, lastKick: -1000, lastBumperHits: [-1000, -1000, -1000], collisions: 0 };
     Composite.add(engine.world, body); balls.push(ball);
     if (bonus) stats.bonusBalls++;
     return ball;
@@ -296,6 +304,18 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
       points: result.basePoints * ball.scoreFactor * globalMultiplier, ballId: ball.id });
     slotMachine.recordEntry(clock);
   }
+  function pushOut(ball, hole) {
+    const { body } = ball;
+    let dx = body.position.x - hole.x, dy = body.position.y - hole.y;
+    const d = Math.hypot(dx, dy);
+    if (d < 1) { dx = Math.cos(hole.facing); dy = Math.sin(hole.facing); }
+    else { dx /= d; dy /= d; }
+    Body.setPosition(body, { x: hole.x + dx * (HOLE_RIM - 8), y: hole.y + dy * (HOLE_RIM - 8) });
+    Body.setVelocity(body, { x: dx * 4, y: dy * 4 });
+    ball.ignoreHoleUntil = clock + HOLE_IGNORE;
+    body.collisionFilter.group = HOLE_GROUP;
+    ball.stuck = 0; ball.anchorX = body.position.x; ball.anchorY = body.position.y;
+  }
   function step(dt = STEP) {
     clock += dt;
     // Freeze earned bonus/drop schedules while existing balls drain, including
@@ -331,6 +351,9 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
       const { body } = ball;
       ball.pickupFrom = { ...body.position };
       if (ball.entered || body.velocity.y > 0) body.collisionFilter.category = FILTER.playing;
+      // A ball told to leave a hole keeps that ring switched off until it is clear.
+      if (ball.ignoreHoleUntil > clock) body.collisionFilter.group = HOLE_GROUP;
+      else { body.collisionFilter.group = 0; ball.ignoreHoleUntil = 0; }
     }
     Body.setAngle(spinner, Math.sin(clock / 1350) * .85, true);
     for (const rail of rails) {
@@ -376,15 +399,20 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
         }
       }
       if (body.speed > 32) Body.setVelocity(body, { x: body.velocity.x * 32 / body.speed, y: body.velocity.y * 32 / body.speed });
-      if (ball.entered) {
+      const swept = (cx, cy, radius) => {
         const from = ball.pickupFrom, dx = x - from.x, dy = y - from.y;
-        const along = Math.max(0, Math.min(1, ((collector.x - from.x) * dx + (collector.y - from.y) * dy) / (dx * dx + dy * dy || 1)));
-        if (Math.hypot(collector.x - from.x - along * dx, collector.y - from.y - along * dy) < collector.radius) {
-          remove(ball, i); storeBall(ball); continue;
-        }
+        const along = Math.max(0, Math.min(1, ((cx - from.x) * dx + (cy - from.y) * dy) / (dx * dx + dy * dy || 1)));
+        return Math.hypot(cx - from.x - along * dx, cy - from.y - along * dy) < radius;
+      };
+      if (ball.entered && swept(collector.x, collector.y, collector.radius)) { remove(ball, i); storeBall(ball); continue; }
+      const hole = holes.find(h => swept(h.x, h.y, HOLE_SINK));
+      if (hole) {
+        // Phasing through the ring is an escape, not a second chance to score.
+        // A ball that is not in play yet is pushed back out instead of trapped on the lip.
+        if (ball.ignoreHoleUntil > clock) continue;
+        if (!ball.entered) { pushOut(ball, hole); continue; }
+        hole.glow = 1; stats.jackpots++; remove(ball, i); settleScore({ kind: 'jackpot', basePoints: 500, x: hole.x, y: hole.y }, ball); continue;
       }
-      const hole = ball.entered && holes.find(h => Math.hypot(x - h.x, y - h.y) < 18);
-      if (hole) { hole.glow = 1; stats.jackpots++; remove(ball, i); settleScore({ kind: 'jackpot', basePoints: 500, x: hole.x, y: hole.y }, ball); continue; }
       if (ball.entered && x < 666 && y >= TABLE.scoreLine) {
         const column = Math.max(0, Math.min(slots - 1, Math.floor((x - TABLE.left) / ((TABLE.right - TABLE.left) / slots))));
         const multiplier = slotMultipliers(slots)[column];
@@ -400,8 +428,20 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
         onReturn({ ballId: ball.id, reason: timedOut ? 'timeout' : y > 960 ? 'out' : 'weak' });
         continue;
       }
-      if (body.speed < .18) ball.stuck += dt; else ball.stuck = 0;
-      if (ball.stuck > 1000) { Body.setVelocity(body, { x: random() > .5 ? .9 : -.9, y: -.5 }); ball.stuck = 0; }
+      // High-frequency contact keeps speed well above a "stopped" threshold, so
+      // dwell follows the anchor instead of instantaneous speed. The storage cup
+      // is meant to hold a ball and is excluded; everywhere else a 1.5s pause
+      // gets a downward shove with a random sideways component.
+      const held = Math.hypot(x - collector.x, y - collector.y) < COLLECTOR_HOLD;
+      const adx = x - ball.anchorX, ady = y - ball.anchorY;
+      if (held || adx * adx + ady * ady > DWELL_RADIUS * DWELL_RADIUS) { ball.anchorX = x; ball.anchorY = y; ball.stuck = 0; }
+      else ball.stuck += dt;
+      if (ball.stuck > DWELL_LIMIT) {
+        const rim = holes.find(h => Math.hypot(x - h.x, y - h.y) < HOLE_RIM);
+        if (rim) { ball.ignoreHoleUntil = clock + HOLE_IGNORE; body.collisionFilter.group = HOLE_GROUP; }
+        Body.setVelocity(body, { x: (random() - .5) * 3, y: 5 });
+        ball.stuck = 0; ball.anchorX = x; ball.anchorY = y;
+      }
     }
   }
   return { engine, balls, walls, pins, kickers, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, collector, slotMachine: slotMachine.state, stats, rewards, launch, launchBurst, setEmissionPaused, get emissionPaused() { return emissionPaused; }, get pendingLaunches() { return pendingLaunches.length; }, step, setSlots, get star() { return activeStar; }, get clock() { return clock; }, get slots() { return slots; } };
