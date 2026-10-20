@@ -1,6 +1,11 @@
 import { PAIR_ICON_LIST } from './pair-icons.js';
 
 export { PAIR_ICON_LIST };
+// Sixteen of the existing icons. Each suit is dealt four times, so any two of
+// the same suit match and each suit clears as two pairs.
+export const PAIR_SUIT_COUNT = 16;
+export const PAIR_COPIES = 4;
+export const PAIR_SUITS = Object.freeze(PAIR_ICON_LIST.slice(0, PAIR_SUIT_COUNT));
 export const MINI_DURATION = 30000;
 // 消消乐 ends at this many cleared blocks, or when the 30 second timer runs out.
 // The last clear that crosses the line only scores the blocks that fit.
@@ -18,14 +23,14 @@ export const BLOCK_GROUP_LIMIT = 12;
 // Light hit shake, the same 1.5 step used for light reward shakes. Charge camera shake stays separate.
 export const MINI_HIT_SHAKE = 1.5;
 export const MINI_HIT_MS = 160;
-// 8×8 is 32 unique pairs. The round ends when every pair is gone, or at 30 seconds.
+// 8×8 is 16 suits × 4 cards. Any two of one suit match, so the board is still 32 pairs.
 // Base 20 with the shared combo makes a perfect 32-streak worth 5600, plus the clear bonus.
 export const PAIR_POINT = 20;
 export const PAIR_TARGET = 32;
 export const PAIR_DURATION = 30000;
 export const PAIR_CLEAR_BONUS = 200;
 export const MINI_GAMES = Object.freeze({
-  pairs: { title: '对对碰', rule: `64 张牌排成 8×8，32 种图案都摊开。点中相同的两张就会消除。配完全部 ${PAIR_TARGET} 对，或玩满 ${PAIR_DURATION / 1000} 秒，先到先结算。每对 ${PAIR_POINT} 分。连续配对会累加连击，点错则连击重置。${PAIR_DURATION / 1000} 秒内配完，额外 +${PAIR_CLEAR_BONUS}。`, columns: 8, rows: 8 },
+  pairs: { title: '对对碰', rule: `64 张牌排成 8×8，16 种图案，每种 4 张，同花色任意两张都能配对。配完全部 ${PAIR_TARGET} 对，或玩满 ${PAIR_DURATION / 1000} 秒，先到先结算。每对 ${PAIR_POINT} 分。连续配对会累加连击，点错则连击重置。${PAIR_DURATION / 1000} 秒内配完，额外 +${PAIR_CLEAR_BONUS}。`, columns: 8, rows: 8 },
   blocks: { title: '消消乐', rule: `点击上下左右相连的同色方块，至少 3 块才能消除。每块 ${BLOCK_POINT} 分。只有自己点掉的块计入 ${BLOCK_CLEAR_TARGET} 块；掉落连锁照样加基础分，但不计入这 ${BLOCK_CLEAR_TARGET} 块，也不会因此结束。开局同色相连不超过 ${BLOCK_GROUP_LIMIT} 块。点掉的块累计到 ${BLOCK_CLEAR_TARGET}，或玩满 ${MINI_DURATION / 1000} 秒，先到先结算。一次点击超过剩余块数时，只把点掉的块算到 ${BLOCK_CLEAR_TARGET}。${COMBO_WINDOW_MS / 1000} 秒内再点出消除，连击 +1；超过 ${COMBO_WINDOW_MS / 1000} 秒，或点了消不掉的地方，连击归零。连击和倍率没有上限。掉落连锁不加连击。结束时按本局最高连击一次性乘算。`, columns: 10, rows: 10 },
   moles: { title: '打地鼠', rule: '点击地鼠，白菜留着！每只 25 分，共 10 轮、40 只；每轮最多 3 秒，打完提前换轮。不是地鼠的格子都是白菜。连续打中会累加连击；打到白菜，或这一轮有地鼠漏掉，连击重置。', columns: 4, rows: 4 },
 });
@@ -84,7 +89,7 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
     state.board = shuffle([...Array(count).fill('mole'), ...Array(16 - count).fill('cabbage')], random).map(type => ({ id: nextId++, type, hit: false }));
     state.waveUntil = at + 3000; state.revision++;
   }
-  if (kind === 'pairs') state.board = shuffle(PAIR_ICON_LIST.flatMap((icon, pair) => [{ id: nextId++, pair, icon: icon.id, name: icon.name }, { id: nextId++, pair, icon: icon.id, name: icon.name }]), random);
+  if (kind === 'pairs') state.board = shuffle(PAIR_SUITS.flatMap((icon, suit) => Array.from({ length: PAIR_COPIES }, () => ({ id: nextId++, pair: suit, icon: icon.id, name: icon.name }))), random);
   function largestGroup() {
     let best = 0; const seen = new Set();
     for (let i = 0; i < state.board.length; i++) {

@@ -2,7 +2,8 @@ import { chargeEffectsAt } from './charge.js';
 import { sceneMotionAt, project2DMotion } from './scene-motion.js';
 import { TABLE, slotMultipliers, LAUNCH_SQUASH } from './physics.js';
 import { slotFrame } from './round.js';
-import { SLOT_DISPLAY, SLOT_SYMBOLS, BALL_SYMBOL, REEL_WEIGHTS, reelBox, PROGRESS_TOP, PROGRESS_HEIGHT, slotBonusLabel } from './slot-machine.js';
+import { SLOT_DISPLAY, BALL_SYMBOL, REEL_WEIGHTS, reelBox, PROGRESS_TOP, PROGRESS_HEIGHT, slotBonusLabel } from './slot-machine.js';
+import { drawReelSymbol } from './reel-icons.js';
 import { rewardProfile, activeRewardScenes, rewardSceneAt, marqueePoint } from './reward-effects.js';
 import { slotIcon, slotColorIndex } from './slot-icons.js';
 
@@ -171,8 +172,8 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; circle(x + Math.cos(a) * (r + 10), y + Math.sin(a) * (r + 10), 2.2, Math.sin(t * 3 + i) > 0 ? '#ecd5a4' : '#ffffff90'); }
       const index=bumper.plugin.index,goal=game.rewards.goals[index],count=game.rewards.hits[index]%goal;
       ctx.beginPath();ctx.arc(x,y,r+14,-Math.PI/2,-Math.PI/2+Math.PI*2*(count/goal));ctx.strokeStyle = paintColor('#c59450', 'line');ctx.lineWidth=3;ctx.stroke();
-      // The center counter sits inside its drum, reserving the gap above the
-      // swinging bar for the three reels even while the drum is enlarged.
+      // The center counter sits inside its drum. The reels are down by the
+      // center pocket, so this label no longer has to reserve that gap.
       if (index === 2) {
         const enlarged = game.rewards.enlargedUntil > game.clock;
         box(x-28,y+10,56,17,8,'#fff9e9ee','#ddd3b6');text(`${count} / ${goal}`,x,y+19,10,'#997747','bold');
@@ -195,7 +196,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
         paintingBall = false;
         return;
       }
-      text(SLOT_SYMBOLS[symbol] ?? '·', x, y, size, '#52664c');
+      if (!drawReelSymbol(ctx, symbol, x, y, size)) text('·', x, y, size, '#52664c');
     };
     for (let reel = 0; reel < 3; reel++) {
       const spot = reelBox(reel), moving = bonus.spinning && !bonus.stopped[reel];
@@ -470,6 +471,14 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       if (b.scoreFactor > 1) {
         circle(b.body.position.x, b.body.position.y, 18, null, '#e8b446b0', 1.5);
         text(`×${b.scoreFactor}`, b.body.position.x, b.body.position.y - 25, 13, '#a87535', 'bold');
+      }
+      if (b.valueFactor > 1) {
+        ctx.save();
+        ctx.shadowColor = '#e2ae48';
+        ctx.shadowBlur = state.calm ? 0 : 14;
+        circle(b.body.position.x, b.body.position.y, 16, null, '#e2ae48cc', 2.4);
+        ctx.restore();
+        text(`×${b.valueFactor}`, b.body.position.x, b.body.position.y + 24, 12, '#a87535', 'bold');
       }
     }
     ctx.restore();

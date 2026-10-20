@@ -1,6 +1,8 @@
-// Five classic symbols stay equally likely with each other. The ball is rarer:
+import { REEL_ICONS } from './reel-icons.js';
+export { REEL_ICONS };
+// Five astronomy symbols stay equally likely with each other. The ball is rarer:
 // 18 each and 10 for the ball, so one reel shows a ball about one time in ten.
-export const SLOT_SYMBOLS = Object.freeze(['🍒', '🍋', '🔔', '⭐', '🍀']);
+export const SLOT_SYMBOLS = Object.freeze(REEL_ICONS.map(icon => icon.name));
 export const BALL_SYMBOL = 5;
 export const CLASSIC_REEL_WEIGHT = 18;
 export const BALL_REEL_WEIGHT = 10;
@@ -8,17 +10,17 @@ export const REEL_WEIGHTS = Object.freeze([
   CLASSIC_REEL_WEIGHT, CLASSIC_REEL_WEIGHT, CLASSIC_REEL_WEIGHT,
   CLASSIC_REEL_WEIGHT, CLASSIC_REEL_WEIGHT, BALL_REEL_WEIGHT,
 ]);
-export const BALL_ONE = 10;
-export const BALL_PAIR = 25;
+export const BALL_ONE = 1;
+export const BALL_PAIR = 10;
 export const BALL_JACKPOT = 100;
 export const SINGLE_REEL_MS = 900;
 export const SPIN_GAP_MS = 700;
-// Three separate squares sit in the gap under the enlarged center drum and
-// above the swinging bar. The progress bar is the only caption.
+// Three separate squares sit low on the board, centered over the middle
+// LUCKY pocket and just above the scoring row. They do not collide.
 export const REEL_SIZE = 30;
 export const REEL_GAP = 8;
 export const REEL_STRIDE = REEL_SIZE + REEL_GAP;
-export const REEL_TOP = 446;
+export const REEL_TOP = 724;
 export const REEL_Y = REEL_TOP + REEL_SIZE / 2;
 export const PROGRESS_GAP = 4;
 export const PROGRESS_HEIGHT = 6;
@@ -35,6 +37,7 @@ export function reelBox(index) {
 const REEL_TOTAL = REEL_WEIGHTS.reduce((sum, weight) => sum + weight, 0);
 const PAIR_MS = 180000;
 const TRIPLE_MS = 60000;
+// Reel ball gifts are a fixed ball count. A ball's paid ×N never scales them.
 export function ballPayout(count) {
   if (count >= 3) return BALL_JACKPOT;
   if (count === 2) return BALL_PAIR;

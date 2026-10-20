@@ -5,6 +5,32 @@ export const START_BALLS = 100;
 export const LOW_BALLS = 10;
 export const LAUNCH_COST = 1;
 export const BURST_COST = 5;
+// 双倍球消耗 spends this many balls per physical ball. Higher factors can be
+// stored on a ball later; the toggle only assigns this value for now.
+export const BALL_COST_MULTIPLIER = 2;
+
+export function ballValue(raw) {
+  const value = Math.floor(Number(raw));
+  if (!Number.isSafeInteger(value) || value < 1) return 1;
+  return value;
+}
+
+export function shotCost(valueFactor = 1, burst = false) {
+  return (burst ? BURST_COST : LAUNCH_COST) * ballValue(valueFactor);
+}
+
+// Points scored on the table (slots and the secret hole's 500). The paid
+// multiplier stacks with the star factor and the reel multiplier.
+export function tablePoints(basePoints, scoreFactor = 1, valueFactor = 1, globalMultiplier = 1) {
+  return basePoints * scoreFactor * ballValue(valueFactor) * globalMultiplier;
+}
+
+// Ball gifts ignore the paid multiplier. Reel icons pay +1 / +10 / +100,
+// a secret visit still pays SECRET_BALLS, and the mini-game still pays its
+// own 5–30 from the mini-game score alone. None of those scale with ×N.
+export function secretHoleBalls(miniScore) {
+  return { holeBalls: SECRET_BALLS, miniBalls: miniGameBalls(miniScore) };
+}
 
 // Scoring slots pay happiness points only. They do not put balls back.
 // Stars and a pair/triple on the reels change those points only.
@@ -104,6 +130,7 @@ export function freshRound(best = 0) {
     bestBefore: Number.isFinite(best) ? best : 0,
     over: false,
     nameDecided: false,
+    doubleBall: false,
   };
 }
 
@@ -122,5 +149,6 @@ export function restoreRun(saved, best = 0) {
     bestBefore: Number.isFinite(Number(saved.bestBefore)) ? Number(saved.bestBefore) : fresh.bestBefore,
     over: saved.over === true,
     nameDecided: saved.nameDecided === true,
+    doubleBall: slots >= 7 && saved.doubleBall === true,
   };
 }

@@ -188,6 +188,9 @@ function create3DRenderer(canvas) {
   }
   const sphere = new THREE.SphereGeometry(11, 24, 16);
   const ballMaterial = new THREE.MeshStandardMaterial({ color: '#ffedb0', metalness: .6, roughness: .2, envMapIntensity: 1.4 });
+  const valueRingGeometry = new THREE.RingGeometry(13.2, 15.6, 48);
+  const valueRingMaterial = new THREE.MeshBasicMaterial({ color: '#f0c14a', side: THREE.DoubleSide, transparent: true, opacity: .95, depthWrite: false });
+  const valueRings = new Map();
   const readyBall = new THREE.Mesh(sphere, ballMaterial); readyBall.castShadow = true; table.add(readyBall);
   const springPoints = Array.from({ length: 193 }, (_, i) => { const t = i / 192, a = t * Math.PI * 12; return new THREE.Vector3(Math.cos(a) * 9, t * 52, 9 + Math.sin(a) * 5); });
   const spring = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(springPoints), 192, 1.7, 6, false), material('#a4ac93', 'object', { metalness: .7, roughness: .3 }));
@@ -354,12 +357,20 @@ function create3DRenderer(canvas) {
       }
     }
     const activeIds = new Set(game.balls.map(b => b.id));
-    for (const [id, mesh] of balls) if (!activeIds.has(id)) { table.remove(mesh); balls.delete(id); }
+    for (const [id, mesh] of balls) if (!activeIds.has(id)) {
+      table.remove(mesh); balls.delete(id);
+      const ring = valueRings.get(id);
+      if (ring) { table.remove(ring); valueRings.delete(id); }
+    }
     for (const ball of game.balls) {
       let mesh = balls.get(ball.id);
       if (!mesh) { mesh = new THREE.Mesh(sphere, ballMaterial); mesh.castShadow = true; table.add(mesh); balls.set(ball.id, mesh); }
       mesh.position.copy(world(ball.body.position.x, ball.body.position.y, 12));
       mesh.rotation.set(ball.body.position.y / 11, ball.body.position.x / 11, ball.body.angle);
+      const valued = ball.valueFactor > 1;
+      let ring = valueRings.get(ball.id);
+      if (valued && !ring) { ring = new THREE.Mesh(valueRingGeometry, valueRingMaterial); table.add(ring); valueRings.set(ball.id, ring); }
+      if (ring) { ring.visible = valued; if (valued) ring.position.copy(mesh.position); }
     }
     const compression = state.charging ? state.charge * LAUNCH_SQUASH : 0;
     readyBall.position.copy(world(TABLE.launchX, TABLE.launchY + compression, 12));
@@ -420,7 +431,7 @@ function create3DRenderer(canvas) {
       star: currentGame?.star ? project(currentGame.star.x, currentGame.star.y, 18) : null,
       bodies: [...bodies.values()].map(({ body, mesh, height }) => ({ id: body.id, kind: body.label, x: mesh.position.x + W / 2, y: H / 2 - mesh.position.y, angle: -mesh.rotation.z, radius: body.plugin.radius, height, scale: mesh.scale.x, projected: project(body.position.x, body.position.y, height) })),
       balls: [...balls].map(([id, mesh]) => ({ id, x: mesh.position.x + W / 2, y: H / 2 - mesh.position.y, z: mesh.position.z })),
-      samples: [[70,200,.8],[23,280,28.8],[150,155,18.8],[350,367,32.8],[350,465,2.8],[615,482,2]].map(([x,y,z]) => project(x,y,z)), readyBall: project(TABLE.launchX, TABLE.launchY, 12), textures: webgl.info.memory.textures, geometries: webgl.info.memory.geometries, alignmentError: Math.max(0, ...[...bodies.values()].map(({body, mesh}) => Math.hypot(mesh.position.x - (body.position.x - W / 2), mesh.position.y - (H / 2 - body.position.y)))) };
+      samples: [[70,200,.8],[23,280,28.8],[150,155,18.8],[350,410,32.8],[350,739,6],[615,482,2]].map(([x,y,z]) => project(x,y,z)), readyBall: project(TABLE.launchX, TABLE.launchY, 12), textures: webgl.info.memory.textures, geometries: webgl.info.memory.geometries, alignmentError: Math.max(0, ...[...bodies.values()].map(({body, mesh}) => Math.hypot(mesh.position.x - (body.position.x - W / 2), mesh.position.y - (H / 2 - body.position.y)))) };
   }
   return { draw, resize, project, snapshot, dispose() {
     observer.disconnect(); mobileQuery.removeEventListener('change', resize); painter.dispose(); atlas.dispose(); chargeTexture.dispose(); starMap.dispose(); sparkMap.dispose(); flashMap.dispose(); environment.dispose(); wells.forEach(w => w.texture.dispose());

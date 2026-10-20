@@ -53,7 +53,7 @@ try {
   const nearMargin=await page.evaluate(()=>{const w=document.querySelector('#board').getBoundingClientRect().width;return window.__ponpon.rendering.near.minX*w;});
   assert.ok(nearMargin>=4&&nearMargin<=8,`portrait side margin stays near 4–8px (${nearMargin})`);
   assert.equal(r.bodies.filter(b=>b.kind==='pin').length,28);
-  assert.deepEqual(r.bodies.filter(b=>b.kind==='bumper').map(b=>[b.x,b.y]),[[238,236],[462,236],[350,367]]);
+  assert.deepEqual(r.bodies.filter(b=>b.kind==='bumper').map(b=>[b.x,b.y]),[[238,236],[462,236],[350,410]]);
   assert.ok(r.bodies.every(b=>b.height>0));
   const geometryCount=r.geometries, cameraQuaternion=r.cameraQuaternion;
   for(let i=0;i<3;i++) {

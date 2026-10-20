@@ -1,12 +1,19 @@
 import assert from 'node:assert/strict';
 import Matter from 'matter-js';
-import { createSlotMachine, SLOT_SYMBOLS, SLOT_DISPLAY, slotBonusLabel, reelUnit, sampleReel, BALL_SYMBOL, ballPayout, REEL_WEIGHTS, BALL_ONE, BALL_PAIR, BALL_JACKPOT, luckyReelPay, pickReel, SINGLE_REEL_MS, SPIN_GAP_MS } from '../src/slot-machine.js';
+import { createSlotMachine, SLOT_SYMBOLS, REEL_ICONS, SLOT_DISPLAY, slotBonusLabel, reelUnit, sampleReel, BALL_SYMBOL, ballPayout, REEL_WEIGHTS, BALL_ONE, BALL_PAIR, BALL_JACKPOT, luckyReelPay, pickReel, SINGLE_REEL_MS, SPIN_GAP_MS } from '../src/slot-machine.js';
+import { reelIconSvg } from '../src/reel-icons.js';
 import { createTable, STEP, TABLE } from '../src/physics.js';
 import { pocketCenter } from '../src/round.js';
 const choices = values => { let index = 0; return () => reelUnit(values[index++ % values.length]); };
 function enter(machine, count, clock = 0) { for (let i = 0; i < count; i++) machine.recordEntry(clock); }
 const outcomes = { 1: 0, 2: 0, 5: 0 };
-assert.equal(new Set(SLOT_SYMBOLS).size, 5);
+assert.deepEqual(SLOT_SYMBOLS, ['星星', '弯月', '太阳', '行星', '彗星']);
+assert.equal(new Set(REEL_ICONS.map(icon => icon.id)).size, 5);
+for (const icon of REEL_ICONS) {
+  const markup = reelIconSvg(REEL_ICONS.indexOf(icon));
+  assert.match(markup, /<svg/i);
+  assert.doesNotMatch(markup, /🍒|🍋|🔔|🍀|🍊|🍇|🍍|🍉/);
+}
 for (let a = 0; a < 5; a++) for (let b = 0; b < 5; b++) for (let c = 0; c < 5; c++) {
   const events = [], machine = createSlotMachine({ random: choices([a,b,c]), onEvent: e => events.push(e) });
   enter(machine, 49); assert.equal(machine.state.spins, 0); assert.equal(machine.state.progress, 49);
@@ -29,9 +36,9 @@ for (let a = 0; a < 5; a++) for (let b = 0; b < 5; b++) for (let c = 0; c < 5; c
   }
 }
 assert.deepEqual(outcomes, { 1: 60, 2: 60, 5: 5 });
-assert.equal(BALL_ONE, 10); assert.equal(BALL_PAIR, 25); assert.equal(BALL_JACKPOT, 100);
+assert.equal(BALL_ONE, 1); assert.equal(BALL_PAIR, 10); assert.equal(BALL_JACKPOT, 100);
 assert.equal(REEL_WEIGHTS[BALL_SYMBOL], 10); assert.equal(REEL_WEIGHTS.slice(0, 5).every(weight => weight === 18), true);
-for (const [reels, balls, payout, multiplier] of [[[5, 0, 1], 1, 10, 1], [[5, 5, 0], 2, 25, 2], [[5, 5, 5], 3, 100, 5], [[0, 0, 0], 0, 0, 5], [[0, 0, 5], 1, 10, 2]]) {
+for (const [reels, balls, payout, multiplier] of [[[5, 0, 1], 1, 1, 1], [[5, 5, 0], 2, 10, 2], [[5, 5, 5], 3, 100, 5], [[0, 0, 0], 0, 0, 5], [[0, 0, 5], 1, 1, 2]]) {
   const events = [], machine = createSlotMachine({ random: choices(reels), onEvent: e => events.push(e) });
   enter(machine, 50); machine.advance(1700);
   const result = events.find(e => e.kind === 'slot-result');
@@ -48,9 +55,9 @@ for (const [before, after, reel, multiplier, balls, payout] of [
   [[0, 0, 0], [0, 0, 0], 0, 1, 0, 0],
   [[0, 0, 1], [0, 0, 2], 2, 1, 0, 0],
   [[0, 1, 2], [0, 1, 0], 2, 2, 0, 0],
-  [[5, 0, 1], [5, 5, 1], 1, 2, 2, 25],
+  [[5, 0, 1], [5, 5, 1], 1, 2, 2, 10],
   [[5, 5, 5], [5, 5, 5], 0, 1, 0, 0],
-  [[0, 1, 2], [0, 1, 5], 2, 1, 1, 10],
+  [[0, 1, 2], [0, 1, 5], 2, 1, 1, 1],
   [[5, 5, 0], [5, 5, 5], 2, 5, 3, 100],
 ]) {
   const pay = luckyReelPay(before, after, reel);
@@ -136,11 +143,14 @@ excluded.step(); assert.equal(excluded.stats.returns, 1); assert.equal(excluded.
 const miss = excluded.launch(); put(miss, 615 - 48, 482 - 48, 3, 0);
 for (let i = 0; i < 15; i++) excluded.step();
 assert.equal(excluded.slotMachine.entries, 0, 'near misses and impacts cannot grant slot progress');
-// Display stays clear of the enlarged center drum and the swinging physical bar.
+// The reels sit below the enlarged drum and the swinging bar, above the pockets.
 const top = SLOT_DISPLAY.y - SLOT_DISPLAY.height / 2, bottom = SLOT_DISPLAY.y + SLOT_DISPLAY.height / 2;
-assert.ok(top > excluded.bumpers[2].position.y + excluded.bumpers[2].plugin.baseRadius * 1.5 + 18);
+const drum = excluded.bumpers[2];
+assert.ok(top > drum.position.y + drum.plugin.baseRadius * 1.5 + 11, 'reels stay a ball radius below the enlarged center drum');
+assert.ok(bottom < TABLE.slotTop, 'reels stay above the scoring row');
 for (let n = 0; n < 1100; n++) {
-  excluded.step(); assert.ok(Math.min(...excluded.spinners[0].vertices.map(v => v.y)) > bottom);
+  excluded.step();
+  assert.ok(Math.max(...excluded.spinners[0].vertices.map(v => v.y)) < top, 'the swinging bar stays above the reels');
   if (excluded.star) assert.ok(Math.abs(excluded.star.x - SLOT_DISPLAY.x) >= SLOT_DISPLAY.width/2 + 26 || Math.abs(excluded.star.y - SLOT_DISPLAY.y) >= SLOT_DISPLAY.height/2 + 26, 'stars never hide behind the cabinet');
 }
 console.log('PASS: storage, returns, near misses and impacts give no progress; the fixed reel display clears the drum, bar and collectible stars.');

@@ -4,7 +4,7 @@ import { createTable, STEP } from '../src/physics.js';
 import { slotsForScore } from '../src/slots.js';
 import {
   START_BALLS, BURST_COST, SECRET_BALLS, DRUM_RANDOM_BALLS, DRUM_ENLARGE_BALLS, DRUM_CLOCK_BALLS,
-  miniGameBalls, MINI_BALLS_FULL_SCORE,
+  BALL_COST_MULTIPLIER, miniGameBalls, shotCost, MINI_BALLS_FULL_SCORE,
 } from '../src/round.js';
 
 const ROUNDS = Number(process.argv[2] || 40);
@@ -29,6 +29,8 @@ function playRound(seed) {
   const ballHits = { 1: 0, 2: 0, 3: 0 };
   let reelSpins = 0;
   let reelPaid = 0;
+  let doubleShots = 0;
+  let ballsSpent = 0;
   const game = createTable({
     slots,
     random,
@@ -81,17 +83,26 @@ function playRound(seed) {
     }
     const clock = steps * STEP;
     const spendable = stock + game.collector.stored.length;
-    const burst = random() < 0.12 && spendable >= BURST_COST;
-    const cost = burst ? BURST_COST : 1;
-    if (!secretWait && spendable >= cost && clock - lastShot >= 900 && game.balls.length < 10) {
-      const ball = burst ? game.launchBurst() : game.launch(random());
+    const factor = slots >= 7 ? BALL_COST_MULTIPLIER : 1;
+    const burstWanted = random() < 0.12;
+    let burst = false;
+    let used = 0;
+    if (burstWanted) {
+      if (spendable >= shotCost(factor, true)) { burst = true; used = factor; }
+    } else if (spendable >= shotCost(factor, false)) used = factor;
+    else if (spendable >= 1) used = 1;
+    const cost = used ? shotCost(used, burst) : 0;
+    if (!secretWait && used && clock - lastShot >= 900 && game.balls.length < 10) {
+      const ball = burst ? game.launchBurst(used) : game.launch(random(), used);
       if (ball) {
         let need = cost;
         const fromStock = Math.min(stock, need);
         stock -= fromStock;
         need -= fromStock;
         if (need) game.takeStored(need);
-        launches += cost;
+        launches += burst ? BURST_COST : 1;
+        ballsSpent += cost;
+        if (used > 1) doubleShots += burst ? BURST_COST : 1;
         lastShot = clock;
       }
     }
@@ -102,7 +113,7 @@ function playRound(seed) {
     if (stock <= 0 && stored === 0 && pending === 0 && game.pendingLaunches === 0 && game.balls.length === 0 && !secretWait) break;
   }
   const physicsMs = steps * STEP;
-  return { score, launches, slots, jackpots, bestSlot, physicsMs, playMs: launches * SHOT_GAP_MS + miniMs, capped: steps >= STEP_CAP, ballHits, reelSpins, reelPaid, randomShots: game.stats.randomShots, enlargements: game.stats.enlargements, clockBursts: game.stats.clockBursts };
+  return { score, launches, ballsSpent, doubleShots, slots, jackpots, bestSlot, physicsMs, playMs: launches * SHOT_GAP_MS + miniMs, capped: steps >= STEP_CAP, ballHits, reelSpins, reelPaid, randomShots: game.stats.randomShots, enlargements: game.stats.enlargements, clockBursts: game.stats.clockBursts };
 }
 
 const results = [];
@@ -122,6 +133,8 @@ console.log(JSON.stringify({
   startBalls: START_BALLS,
   meanScore: Math.round(mean(scores)),
   meanLaunches: Math.round(mean(results.map(r => r.launches))),
+  meanBallsSpent: Math.round(mean(results.map(r => r.ballsSpent))),
+  meanDoubleShots: Math.round(mean(results.map(r => r.doubleShots))),
   meanPlayMin: +(mean(results.map(r => r.playMs)) / 60000).toFixed(2),
   meanPhysicsMin: +(mean(results.map(r => r.physicsMs)) / 60000).toFixed(2),
   p50: pct(0.5), p90: pct(0.9), p95: pct(0.95), max: scores.at(-1),

@@ -57,14 +57,18 @@ try {
  assert.ok(dialogBox.width>=370&&dialogBox.x<=2,`pairs dialog is ${dialogBox.width}px at x ${dialogBox.x}`);
  await page.setViewportSize({width:390,height:844});
  let initial=await score(),pairs=await mini();const groups=Object.groupBy(pairs.board.map((c,i)=>({...c,index:i})),c=>c.pair);
- assert.equal(Object.keys(groups).length,32);
+ assert.equal(Object.keys(groups).length,16);
+ assert.ok(Object.values(groups).every(group=>group.length===4&&new Set(group.map(card=>card.icon)).size===1));
+ await page.screenshot({path:'test-results/mini-pairs-board.png'});
  const first=Object.values(groups)[0];await page.locator(`[data-cell="${first[0].index}"]`).click();await page.clock.runFor(250);await cell(first[1].index);
  assert.equal((await mini()).score,PAIR_POINT);assert.equal((await mini()).combo,1);assert.equal(await page.locator('#mini-combo').textContent(),`1 连击 ${formatComboMultiplier(1)}`);
  assert.equal(await page.locator('#mini-round').textContent(),`1/${PAIR_TARGET} 对`);
  assert.equal(await page.locator('.mini-removed').count(),2);assert.ok(await page.locator('.mini-float').count()>=1);
  assert.equal(await page.locator('.mini-ghost svg').count(),2);
+ await cell(first[2].index);await cell(first[3].index);
+ assert.equal((await mini()).combo,2);assert.equal(await page.locator('#mini-round').textContent(),`2/${PAIR_TARGET} 对`);
  await page.screenshot({path:'test-results/mini-pairs-night-mobile.png'});await page.screenshot({path:'test-results/mini-pairs-preview.jpg',type:'jpeg',quality:55});
- for(const group of Object.values(groups).slice(1,PAIR_TARGET)){await cell(group[0].index);await cell(group[1].index);}
+ for(const group of Object.values(groups).slice(1)){await cell(group[0].index);await cell(group[1].index);await cell(group[2].index);await cell(group[3].index);}
  const pairTotal=Array.from({length:PAIR_TARGET},(_,i)=>comboPoints(PAIR_POINT,i+1)).reduce((a,b)=>a+b);
  const pairScore=pairTotal+PAIR_CLEAR_BONUS;
  assert.equal((await mini()).status,'complete');assert.equal((await mini()).score,pairScore);assert.equal((await mini()).clearBonus,PAIR_CLEAR_BONUS);assert.ok(pairTotal>1000);assert.equal(await score(),initial+pairScore);
@@ -145,7 +149,7 @@ try {
   const board=(await mini()).board;
   if(kind==='pairs'){
    const open=board.flatMap((cell,index)=>cell?[{...cell,index}]:[]);
-   const pair=Object.values(Object.groupBy(open,cell=>cell.pair)).find(group=>group.length===2);
+   const pair=Object.values(Object.groupBy(open,cell=>cell.pair)).find(group=>group.length>=2);
    if(!pair) break;
    await cell(pair[0].index);await cell(pair[1].index);
   }else if(kind==='blocks'){

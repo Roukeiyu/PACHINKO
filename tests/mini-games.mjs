@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_POINT, BLOCK_GROUP_LIMIT, COMBO_WINDOW_MS, COMBO_MULTIPLIER_STEP, comboMultiplier, comboPoints, connectedBlocks, randomMiniGame, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS, PAIR_ICON_LIST } from '../src/mini-games.js';
+import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_POINT, BLOCK_GROUP_LIMIT, COMBO_WINDOW_MS, COMBO_MULTIPLIER_STEP, comboMultiplier, comboPoints, connectedBlocks, randomMiniGame, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS, PAIR_ICON_LIST, PAIR_SUITS, PAIR_SUIT_COUNT, PAIR_COPIES } from '../src/mini-games.js';
 import { secretPayout } from '../src/secret-wave.js';
 assert.equal(COMBO_MULTIPLIER_STEP,.5);
 assert.deepEqual([0,1,2,3,4].map(comboMultiplier),[1,1,1.5,2,2.5]);
@@ -8,6 +8,8 @@ const seeded = seed => () => { seed=(Math.imul(seed,1664525)+1013904223)>>>0;ret
 assert.equal(MINI_DURATION,30000);
 assert.equal(PAIR_POINT,20);assert.equal(PAIR_TARGET,32);assert.equal(PAIR_DURATION,30000);assert.equal(PAIR_CLEAR_BONUS,200);assert.equal(BLOCK_GROUP_LIMIT,12);
 assert.equal(PAIR_ICON_LIST.length,32);assert.equal(new Set(PAIR_ICON_LIST.map(icon=>icon.id)).size,32);
+assert.equal(PAIR_SUIT_COUNT,16);assert.equal(PAIR_COPIES,4);assert.equal(PAIR_SUITS.length,16);
+assert.equal(new Set(PAIR_SUITS.map(icon=>icon.id)).size,16);assert.ok(PAIR_SUITS.every(icon=>PAIR_ICON_LIST.includes(icon)));
 assert.deepEqual(Object.values(MINI_GAMES).map(d=>[d.columns,d.rows]),[[8,8],[10,10],[4,4]]);
 assert.deepEqual([0,.4,.9].map(r=>randomMiniGame(()=>r)),['pairs','blocks','moles']);
 assert.throws(()=>createMiniGame('other'),RangeError);
@@ -16,19 +18,21 @@ for(let seed=0;seed<25;seed++) {
   assert.equal(pairs.state.board.length,64);
   assert.equal(pairs.state.deadline,100+PAIR_DURATION);
   const groups=Object.groupBy(pairs.state.board.map((c,i)=>({...c,index:i})),c=>c.pair);
-  assert.equal(Object.keys(groups).length,32);assert.ok(Object.values(groups).every(g=>g.length===2));
-  assert.equal(new Set(pairs.state.board.map(cell=>cell.icon)).size,32);
+  assert.equal(Object.keys(groups).length,PAIR_SUIT_COUNT);assert.ok(Object.values(groups).every(g=>g.length===PAIR_COPIES&&new Set(g.map(c=>c.icon)).size===1));
+  assert.equal(new Set(pairs.state.board.map(cell=>cell.icon)).size,PAIR_SUIT_COUNT);
   const mismatch=Object.values(groups).slice(0,2).map(g=>g[0].index);
   pairs.select(mismatch[0],101);pairs.select(mismatch[1],102);assert.equal(pairs.state.score,0);
   pairs.select(mismatch[1],103);assert.equal(pairs.state.selected,null);
   let streak=0;
-  const ordered=Object.values(groups);
-  for(const group of ordered.slice(0,PAIR_TARGET)) {
-    assert.equal(pairs.select(group[0].index,1000),0);
-    streak+=1;
-    assert.equal(pairs.select(group[1].index,1000),comboPoints(PAIR_POINT,streak));
-    assert.equal(pairs.state.combo,streak);
-    assert.equal(pairs.state.board[group[0].index],null);
+  for(const group of Object.values(groups)) {
+    for(let copy=0;copy<PAIR_COPIES;copy+=2) {
+      assert.equal(pairs.select(group[copy].index,1000),0);
+      streak+=1;
+      assert.equal(pairs.select(group[copy+1].index,1000),comboPoints(PAIR_POINT,streak),'the two cards left after a suit’s first pair still match');
+      assert.equal(pairs.state.combo,streak);
+      assert.equal(pairs.state.board[group[copy].index],null);
+      assert.equal(pairs.state.board[group[copy+1].index],null);
+    }
   }
   const pairTotal=Array.from({length:PAIR_TARGET},(_,i)=>comboPoints(PAIR_POINT,i+1)).reduce((a,b)=>a+b);
   assert.equal(pairTotal,5600);
@@ -208,6 +212,15 @@ assert.equal(flood.state.removed, clicked, 'only the clicked blocks count toward
 assert.ok(gained > clicked * BLOCK_POINT, 'the cascade still adds base score');
 assert.equal(flood.state.combo, 1);
 assert.equal(MINI_GAMES.moles.rule.includes('空洞'), false);
-assert.equal(MINI_GAMES.pairs.rule.includes('32'), true);
+assert.equal(MINI_GAMES.pairs.rule.includes('16 种图案，每种 4 张，同花色任意两张都能配对'), true);
+assert.equal(MINI_GAMES.pairs.rule.includes(String(PAIR_TARGET)), true);
+const sameSuit=createMiniGame('pairs',{random:seeded(3),now:0});
+const suit=Object.values(Object.groupBy(sameSuit.state.board.map((cell,index)=>({...cell,index})),cell=>cell.icon))[0];
+assert.equal(suit.length,PAIR_COPIES);assert.equal(new Set(suit.map(cell=>cell.pair)).size,1);
+sameSuit.select(suit[0].index,1);
+assert.equal(sameSuit.select(suit[2].index,2),PAIR_POINT,'any two cards of the same suit match');
+assert.equal(sameSuit.state.board[suit[1].index].icon,sameSuit.state.board[suit[3].index].icon);
+sameSuit.select(suit[1].index,3);
+assert.equal(sameSuit.select(suit[3].index,4),comboPoints(PAIR_POINT,2),'after the first pair, the remaining two still match');
 assert.equal(MINI_GAMES.blocks.rule.includes('掉落连锁照样加基础分'), true);
 console.log('PASS: combo multipliers, broken streaks, a 50-block cap, timer finish, drop chains, gravity, and secret ×2 on the full total.');

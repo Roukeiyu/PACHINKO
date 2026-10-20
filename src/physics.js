@@ -3,7 +3,7 @@ import { collectSlot } from './collections.js';
 import { slotMultipliers } from './slots.js';
 export { slotMultipliers };
 import { createSlotMachine, SLOT_DISPLAY } from './slot-machine.js';
-import { SLOT_ROW_LEFT, SLOT_ROW_RIGHT, DRAIN_WALL, DRAIN_FLOOR, slotFrame, classifyBottom } from './round.js';
+import { SLOT_ROW_LEFT, SLOT_ROW_RIGHT, DRAIN_WALL, DRAIN_FLOOR, slotFrame, classifyBottom, ballValue, tablePoints } from './round.js';
 export { slotFrame, classifyBottom };
 
 const { Engine, Bodies, Body, Composite, Events } = Matter;
@@ -63,7 +63,9 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   // clearance around the triangle for its full-circle launches.
   segment(28, 370, 87, 396, 13, walls);
 
-  [[238, 236, 32], [462, 236, 32], [350, 367, 39]].forEach(([x, y, r], i) => {
+  // The center drum drops into the gap the reels left. Its enlarged rim stays
+  // about a ball clear of the spinner's highest swing.
+  [[238, 236, 32], [462, 236, 32], [350, 410, 39]].forEach(([x, y, r], i) => {
     add(Bodies.circle(x, y, r, { isStatic: true, label: 'bumper', restitution: 1.05, friction: 0 }), bumpers, { index: i, radius: r, baseRadius: r, lastKick: -1000 });
   });
   // Permanent spring studs at the two marked positions on the center axis.
@@ -108,7 +110,8 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   // Coordinates leave space for moving rails, enlarged bumpers and the hole.
   const pinAnchors = [[150, 155], [280, 155], [110, 235], [320, 270],
     [250, 325], [95, 350], [190, 420], [250, 500], [250, 600],
-    [185, 640], [310, 640], [120, 730], [200, 730], [310, 730]];
+    // The lower-center pair now sits just above the outer reel squares.
+    [185, 640], [310, 640], [120, 730], [200, 730], [310, 704]];
   const pinPositions = pinAnchors.flatMap(([x, y]) => [[x, y], [700 - x, y]]);
   pinPositions.forEach(([x, y], index) => {
     add(Bodies.circle(x, y, 7.5, { isStatic: true, label: 'pin', restitution: .85, friction: 0 }), pins, { index });
@@ -168,16 +171,18 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   function spawn(x, y, vx, vy, { power = 0, bonus = false, kind = 'launch' } = {}) {
     const body = Bodies.circle(x, y, 11, { label: 'ball', density: .009, restitution: .65, friction: .001, frictionAir: .001, collisionFilter: { category: bonus ? FILTER.playing : FILTER.ascending, mask: 0xffffffff, group: 0 } });
     Body.setVelocity(body, { x: vx, y: vy });
-    const ball = { id: nextId++, body, power, entered: bonus, bonus, kind, scoreFactor: 1, redirected: false, trail: [], born: clock, stuck: 0, ignoreHoleUntil: 0, anchorX: x, anchorY: y, lastKick: -1000, lastBumperHits: [-1000, -1000, -1000], collisions: 0 };
+    const ball = { id: nextId++, body, power, entered: bonus, bonus, kind, scoreFactor: 1, valueFactor: 1, redirected: false, trail: [], born: clock, stuck: 0, ignoreHoleUntil: 0, anchorX: x, anchorY: y, lastKick: -1000, lastBumperHits: [-1000, -1000, -1000], collisions: 0 };
     Composite.add(engine.world, body); balls.push(ball);
     if (bonus) stats.bonusBalls++;
     return ball;
   }
   const laneOccupied = () => balls.some(ball => !ball.entered && ball.body.position.x > 688 && ball.body.position.y > 675);
-  function launch(power = .65) {
+  function launch(power = .65, valueFactor = 1) {
     if (emissionPaused) return null;
     if (balls.length >= 24 || pendingLaunches.length || laneOccupied()) return null;
-    return launchBall(power, 'launch', true);
+    const ball = launchBall(power, 'launch', true);
+    ball.valueFactor = ballValue(valueFactor);
+    return ball;
   }
   function launchBall(power, kind = 'launch', seated = false) {
     power = Math.max(0, Math.min(1, power));
@@ -194,13 +199,16 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     onSurprise({ kind: 'emit', source: 'charged', ordinal, angle: -Math.PI / 2, x: TABLE.launchX, y: ball.body.position.y, ballId: ball.id, at: clock });
     return ball;
   }
-  function launchBurst() {
+  function launchBurst(valueFactor = 1) {
     if (emissionPaused) return null;
     // Reserve the entire burst before firing. At 90ms spacing each preceding
     // full-power ball clears the spring before the next real impulse is applied.
     if (balls.length + 5 > 24 || pendingLaunches.length || laneOccupied()) return null;
-    for (let i = 1; i < 5; i++) pendingLaunches.push({ due: clock + i * 90, ordinal: i });
-    return emitCharged(0, true);
+    const factor = ballValue(valueFactor);
+    for (let i = 1; i < 5; i++) pendingLaunches.push({ due: clock + i * 90, ordinal: i, valueFactor: factor });
+    const ball = emitCharged(0, true);
+    ball.valueFactor = factor;
+    return ball;
   }
   function setEmissionPaused(paused) {
     if (emissionPaused === paused) return 0;
@@ -208,9 +216,10 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     if (!paused) return 0;
     // Stop the un-fired part of a charged burst as soon as a secret opens.
     // The caller refunds these shots; they were already paid for.
-    const dropped = pendingLaunches.length;
+    // Each pending shot refunds the balls it already cost, not a flat 1.
+    const refund = pendingLaunches.reduce((sum, shot) => sum + ballValue(shot.valueFactor), 0);
     pendingLaunches.length = 0;
-    return dropped;
+    return refund;
   }
   function takeStored(count) {
     const n = Math.max(0, Math.min(collector.stored.length, Math.floor(count) || 0));
@@ -249,6 +258,8 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     return columns;
   }
   function storeBall(ball) {
+    // One stored ball per capture. Star multipliers stay. The paid ×N does not:
+    // the release drops that many normal balls, not ×N balls.
     collector.stored.push(ball.scoreFactor); stats.absorbed++; collector.glow = 1;
     onSurprise({ kind: 'store', x: collector.x, y: collector.y, count: collector.stored.length, capacity: collector.capacity, ballId: ball.id, scoreFactor: ball.scoreFactor });
     if (collector.stored.length < collector.capacity) return;
@@ -272,6 +283,7 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     // A gentle downward velocity lets gravity and the full board decide the outcome.
     const ball = spawn(x, outlet.y + 21, (random() - .5) * .7, .6 + random() * .8, { bonus: true, kind: 'storage' });
     ball.scoreFactor = drop.scoreFactor;
+    ball.valueFactor = 1;
     outlet.glow = 1; stats.storageDrops++;
     onSurprise({ kind: 'emit', source: 'storage', angle: Math.PI / 2, x, y: outlet.y, column: drop.column, ballId: ball.id, scoreFactor: ball.scoreFactor, at: clock });
   }
@@ -338,8 +350,9 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     // The entry that earns a spin is scored before its future result activates.
     // Fruit counts are recorded here and do not change the points.
     const collection = collections ? collectSlot(collections, result) : null;
-    onScore({ ...result, scoreFactor: ball.scoreFactor, globalMultiplier, collection,
-      points: result.basePoints * ball.scoreFactor * globalMultiplier, ballId: ball.id });
+    const valueFactor = ballValue(ball.valueFactor);
+    onScore({ ...result, scoreFactor: ball.scoreFactor, valueFactor, globalMultiplier, collection,
+      points: tablePoints(result.basePoints, ball.scoreFactor, valueFactor, globalMultiplier), ballId: ball.id });
     slotMachine.recordEntry(clock);
   }
   function pushOut(ball, hole) {
@@ -377,7 +390,11 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     for (const outlet of collector.outlets) outlet.glow = Math.max(0, outlet.glow - dt / 320);
     while (!emissionPaused && pendingDrops.length && pendingDrops[0].due <= clock + 1e-6) emitDrop(pendingDrops.shift());
     collector.remaining = pendingDrops.length;
-    while (!emissionPaused && pendingLaunches.length && pendingLaunches[0].due <= clock + 1e-6) emitCharged(pendingLaunches.shift().ordinal);
+    while (!emissionPaused && pendingLaunches.length && pendingLaunches[0].due <= clock + 1e-6) {
+      const shot = pendingLaunches.shift();
+      const ball = emitCharged(shot.ordinal);
+      ball.valueFactor = ballValue(shot.valueFactor);
+    }
     // Use the same simulation clock for countdowns and clock-burst scheduling;
     // opening settings or backgrounding the tab pauses all gameplay together.
     for (let i = 0; !emissionPaused && i < pendingShots.length;) {
@@ -498,5 +515,17 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     Body.setPosition(ball.body, { x, y });
     Body.setVelocity(ball.body, { x: 0, y: vy });
   }
-  return { engine, balls, walls, pins, kickers, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, collector, slotMachine: slotMachine.state, stats, rewards, launch, launchBurst, setEmissionPaused, takeStored, resetRound, nudge, get emissionPaused() { return emissionPaused; }, get pendingLaunches() { return pendingLaunches.length; }, step, setSlots, get star() { return activeStar; }, get clock() { return clock; }, get slots() { return slots; } };
+  function restoreCarried(list) {
+    if (!Array.isArray(list)) return 0;
+    const items = list.slice(0, 24);
+    items.forEach((item, index) => {
+      const outlet = collector.outlets[index % collector.outlets.length];
+      const ball = spawn(outlet.x + (index % 3 - 1) * 6, outlet.y + 21, 0, 0.8, { bonus: true, kind: 'restored' });
+      const factor = Math.floor(Number(item?.scoreFactor));
+      ball.scoreFactor = Number.isInteger(factor) && factor > 0 ? factor : 1;
+      ball.valueFactor = ballValue(item?.valueFactor);
+    });
+    return items.length;
+  }
+  return { engine, balls, walls, pins, kickers, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, collector, slotMachine: slotMachine.state, stats, rewards, launch, launchBurst, setEmissionPaused, takeStored, resetRound, restoreCarried, nudge, get emissionPaused() { return emissionPaused; }, get pendingLaunches() { return pendingLaunches.length; }, get carriedBalls() { return [...balls.map(ball => ({ scoreFactor: ball.scoreFactor, valueFactor: ballValue(ball.valueFactor) })), ...pendingLaunches.map(shot => ({ scoreFactor: 1, valueFactor: ballValue(shot.valueFactor) }))]; }, step, setSlots, get star() { return activeStar; }, get clock() { return clock; }, get slots() { return slots; } };
 }

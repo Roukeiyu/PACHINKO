@@ -24,6 +24,8 @@ try {
   await page.clock.pauseAt(epoch + 1000);
   await page.goto(process.env.TEST_URL || 'http://127.0.0.1:5173');
   await page.clock.runFor(40);
+  assert.match(await page.locator('#reward-slot-caption').textContent(), /\+1\/\+10\/\+100/);
+  assert.equal(await page.locator('#double-ball').isDisabled(), true, 'double cost stays locked at 5 slots');
   assert.equal(await page.locator('#ball-count').textContent(), String(START_BALLS));
   assert.equal(await page.locator('#mobile-balls').textContent(), String(START_BALLS));
   const spent = await page.evaluate(() => {
@@ -137,4 +139,48 @@ try {
   assert.equal(await page.locator('#settlement').evaluate(el => el.open), false);
   assert.deepEqual(errors, []);
   console.log('PASS: ball spend and return, drains, blocked game over, restart, and keep-progress refresh.');
+
+  const paid = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  paid.on('pageerror', error => errors.push(error.message));
+  await paid.addInitScript(() => {
+    localStorage.setItem('ponpon-settings', JSON.stringify({ sound: false, calm: true, vibrate: false, music: false }));
+  });
+  await paid.clock.install({ time: epoch });
+  await paid.clock.pauseAt(epoch + 1000);
+  await paid.goto(process.env.TEST_URL || 'http://127.0.0.1:5173');
+  await paid.clock.runFor(40);
+  await paid.evaluate(() => window.__ponpon.presentSlot([5, 0, 1]));
+  await paid.clock.runFor(20);
+  assert.match(await paid.locator('#toast').textContent(), /\+1 球/);
+  assert.equal(await paid.evaluate(() => window.__ponpon.available), START_BALLS + 1);
+  await paid.evaluate(() => window.__ponpon.presentSlot([5, 5, 0]));
+  await paid.clock.runFor(20);
+  assert.match(await paid.locator('#toast').textContent(), /\+10 球/);
+  assert.equal(await paid.evaluate(() => window.__ponpon.available), START_BALLS + 11);
+  await paid.evaluate(() => window.__ponpon.presentSlot([5, 5, 5]));
+  await paid.clock.runFor(20);
+  assert.match(await paid.locator('#toast').textContent(), /大奖 \+100 球/);
+  assert.equal(await paid.evaluate(() => window.__ponpon.available), START_BALLS + 111);
+  await paid.evaluate(() => window.__ponpon.grant(5000));
+  await paid.waitForFunction(() => window.__ponpon.slots >= 7);
+  assert.equal(await paid.locator('#double-ball').isDisabled(), false);
+  await paid.locator('#double-ball').click();
+  const shot = await paid.evaluate(() => window.__ponpon.tryLaunch(0.8, false));
+  assert.equal(shot.valueFactor, 2);
+  assert.equal(shot.doubleBall, true);
+  assert.equal(shot.available, START_BALLS + 111 - 2);
+  await paid.clock.runFor(40);
+  assert.match(await paid.locator('#global-multiplier-time').textContent(), /球 ×2/);
+  await paid.clock.runFor(3000);
+  await paid.evaluate(() => window.__ponpon.setStock(1));
+  const last = await paid.evaluate(() => window.__ponpon.tryLaunch(0.4, false));
+  assert.equal(last.valueFactor, 1, 'the last ball launches at normal cost');
+  assert.match(await paid.locator('#toast').textContent(), /只剩 1 颗/);
+  await paid.evaluate(() => window.__ponpon.setStock(9));
+  const blocked = await paid.evaluate(() => window.__ponpon.tryLaunch(1, true));
+  assert.equal(blocked.pending, 0);
+  assert.equal(blocked.available, 9, 'a short ×2 burst does not fire');
+  assert.match(await paid.locator('#toast').textContent(), /双倍五连发需要 10 颗球/);
+  assert.deepEqual(errors, []);
+  console.log('PASS: reel ball gifts are +1/+10/+100 and double cost unlocks at 7 slots.');
 } finally { await browser.close(); }

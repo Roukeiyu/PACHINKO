@@ -5,7 +5,7 @@ import { PRESET_BOARD } from '../src/leaderboard.js';
 import {
   START_BALLS, LOW_BALLS, LAUNCH_COST, BURST_COST, SECRET_BALLS, LUCKY_BALLS, SLOT_MACHINE_BALLS,
   MINI_BALLS_MIN, MINI_BALLS_MAX, MINI_BALLS_FULL_SCORE, DRAIN_MIN_OPENING, DRAIN_WIDTH_SCALE, DRAIN_WALL, POCKET_WIDTH,
-  slotFrame, classifyBottom, pocketCenter, miniGameBalls, roundCanEnd,
+  slotFrame, classifyBottom, pocketCenter, miniGameBalls, secretHoleBalls, shotCost, roundCanEnd,
   qualifiesForLeaderboard, freshRound, restoreRun,
 } from '../src/round.js';
 
@@ -70,6 +70,14 @@ assert.equal(restoreRun(undefined, 10).slots, 5, 'an old save without a round st
 assert.equal(restoreRun({ slots: 9, score: 20, balls: 7 }).slots, 9);
 assert.equal(restoreRun({ slots: 9, score: 20, balls: 7 }).score, 20);
 assert.equal(restoreRun({ balls: -3 }).balls, START_BALLS);
+assert.equal(restoreRun({ slots: 5, doubleBall: true }).doubleBall, false, 'double cost stays locked before 7 slots');
+assert.equal(restoreRun({ slots: 7, score: 5000, balls: 40, doubleBall: true }).doubleBall, true);
+assert.equal(restoreRun({ slots: 9, doubleBall: false }).doubleBall, false);
+assert.equal(freshRound().doubleBall, false);
+assert.equal(shotCost(2), 2);
+assert.equal(shotCost(2, true), 10);
+assert.equal(secretHoleBalls(1400).holeBalls, SECRET_BALLS);
+assert.equal(secretHoleBalls(1400).miniBalls, miniGameBalls(1400));
 
 for (const count of [5, 7, 9]) {
   const scored = [], drained = [];

@@ -96,25 +96,36 @@ try {
   await page.waitForFunction(() => window.__ponpon.star);
   const reward = await page.evaluate(() => {
     const star = window.__ponpon.star;
-    const label = document.querySelector('#reward-star-label').textContent;
+    const dashboard = document.querySelector('.reward-dashboard');
     return {
       goals: window.__ponpon.rewards.goals,
       counts: [0, 1, 2].map(i => document.querySelector(`#reward-${i}`).textContent),
       timer: document.querySelector('#reward-timer').textContent,
       how: document.querySelector('.how-card').textContent,
-      starVisible: !document.querySelector('#reward-star').hidden,
-      starLabel: label,
+      slotFirst: dashboard.firstElementChild.classList.contains('reward-slot'),
+      noStarRow: !document.querySelector('#reward-star'),
+      noHoleRow: !document.querySelector('#reward-hole'),
+      multiplier: document.querySelector('#global-multiplier-value').textContent,
+      multiplierTime: document.querySelector('#global-multiplier-time').textContent,
       starMultiplier: star.multiplier,
     };
   });
   assert.deepEqual(reward.goals, [5, 5, 30]);
+  const reelMarkup = await page.locator('.reward-reels').innerHTML();
+  assert.match(reelMarkup, /<svg/i, 'the sidebar reels use the astronomy icons');
+  assert.doesNotMatch(reelMarkup, /🍒|🍋|🔔|🍀/);
   assert.deepEqual(reward.counts, ['0/5', '0/5', '0/30']);
   assert.match(reward.timer, /满 5 次放大 10 秒/);
   assert.match(reward.how, /左右鼓满 5 次/);
-  assert.equal(reward.starVisible, true, 'the live star row is shown');
-  assert.match(reward.starLabel, new RegExp(`^×${reward.starMultiplier} · \\d+s$`));
+  assert.match(reward.how, /\+1\/\+10\/\+100/);
+  assert.match(await page.locator('#reward-slot-caption').textContent(), /\+1\/\+10\/\+100/);
+  assert.equal(reward.slotFirst, true, 'the slot row leads the reward list');
+  assert.equal(reward.noStarRow, true);
+  assert.equal(reward.noHoleRow, true);
+  assert.equal(reward.multiplier, `×${reward.starMultiplier}`);
+  assert.match(reward.multiplierTime, /^星 \d+s$/);
   await page.evaluate(() => window.__ponpon.previewReels([5, 1, 2], 17));
-  await page.waitForFunction(() => document.querySelector('#reward-slot-count').textContent.startsWith('17/50'));
+  await page.waitForFunction(() => document.querySelector('#reward-slot-count').textContent === '17/50');
   assert.equal(await page.locator('.reward-reels i.is-ball').count(), 1, 'the sidebar reel mirrors the ball icon');
   await page.evaluate(() => window.__ponpon.previewReelSpin([0, 1, 2], 1, 'spin', 5));
   await page.waitForFunction(() => document.querySelector('.reward-reels i[data-reel="1"]').classList.contains('is-spinning'));
@@ -122,7 +133,9 @@ try {
   await page.evaluate(() => window.__ponpon.previewJar(7));
   await page.waitForFunction(() => document.querySelector('#reward-jar').textContent === '7/20');
   await page.evaluate(() => window.__ponpon.setSlotMultiplier(2));
-  await page.waitForFunction(() => document.querySelector('#reward-hole').textContent === '+1000 分');
+  await page.waitForFunction(expected => document.querySelector('#global-multiplier-value').textContent === expected, `×${reward.starMultiplier * 2}`);
+  assert.match(await page.locator('#reward-slot-caption').textContent(), /^\d{2}:\d{2}$/);
+  assert.equal(await page.locator('#global-multiplier').evaluate(el => el.classList.contains('is-changed')), true);
   assert.equal(await page.locator('#hole-points').textContent(), '+1000');
   await page.locator('#settings-button').click();
   await page.locator('#three-d').check();

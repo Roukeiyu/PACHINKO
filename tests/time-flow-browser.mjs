@@ -102,7 +102,7 @@ try {
   await page.evaluate(() => {document.querySelector('#settings').close();document.querySelector('#settings').show();document.querySelector('#settings').style.visibility='hidden';});
   const samples = () => page.evaluate(() => {
     const c=document.querySelector('#board'),copy=document.createElement('canvas');copy.width=c.width;copy.height=c.height;const ctx=copy.getContext('2d');ctx.drawImage(c,0,0);
-    const points=window.__ponpon.rendering.samples ?? [[70,200],[23,280],[150,155],[380,367],[325,460],[615,482]].map(([x,y])=>({x:x/760,y:y/900}));
+    const points=window.__ponpon.rendering.samples ?? [[70,200],[23,280],[150,155],[380,410],[350,739],[615,482]].map(([x,y])=>({x:x/760,y:y/900}));
     return points.map(({x,y})=>[...ctx.getImageData(Math.round(x*c.width),Math.round(y*c.height),1,1).data]);
   });
   const canvasDay=await samples();

@@ -93,7 +93,7 @@ try {
   await page.locator('[data-mini="pairs"]').click();
   assert.equal(await page.locator('#mini-grid button').count(),64);
   const iconCount=await page.locator('#mini-grid button').evaluateAll(buttons=>new Set(buttons.map(button=>button.dataset.icon)).size);
-  assert.equal(iconCount,32);
+  assert.equal(iconCount,16, '16 suits, four copies each');
   await page.evaluate(target=>{
     const pairs=new Map();
     for(const button of document.querySelectorAll('#mini-grid button')) {const group=pairs.get(button.dataset.icon)||[];group.push(button);pairs.set(button.dataset.icon,group);}
