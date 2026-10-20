@@ -1,8 +1,12 @@
-export const CHARGE_DURATION = 1000;
-export const OVERCHARGE_DURATION = 2000;
+// Tune these two holds. Everything else (UI copy, glow, shake, tests) follows them.
+// CHARGE_DURATION: press time until launch power snaps to 100%.
+// OVERCHARGE_DURATION: extra hold after that before the five-ball burst unlocks.
+export const CHARGE_DURATION = 600;
+export const OVERCHARGE_DURATION = 900;
 export const BURST_READY_AT = CHARGE_DURATION + OVERCHARGE_DURATION;
 
-// Reach the 99.9% snap threshold in exactly one second.
+// The curve reaches 99.9% at CHARGE_DURATION, then snaps to full power.
+// Math.log(1000) is that 99.9% threshold, not the length of the hold.
 // Share this calculation between animation and release, independent of FPS.
 export function chargeAt(elapsedMs) {
   if (elapsedMs >= CHARGE_DURATION) return 1;
@@ -13,7 +17,7 @@ export function chargeAt(elapsedMs) {
 // Do not round an unfinished charge up to 100% in the label or progress bar.
 export const chargePercent = charge => Math.floor(charge * 1000) / 10;
 
-// Full charge takes one second; the next two seconds build the five-ball shot.
+// After full power, OVERCHARGE_DURATION of extra hold builds the five-ball shot.
 export function overchargeAt(elapsedMs) {
   const progress = Math.max(0, Math.min(1, (elapsedMs - CHARGE_DURATION) / OVERCHARGE_DURATION));
   return progress * progress * (3 - 2 * progress);

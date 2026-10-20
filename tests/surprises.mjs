@@ -2,19 +2,19 @@ import assert from 'node:assert/strict';
 import Matter from 'matter-js';
 import { createTable, TABLE, STEP, LAUNCH_SQUASH } from '../src/physics.js';
 import { CANON_NOTES, createCanon, noteFrequency } from '../src/canon.js';
-import { chargeAt, chargePercent } from '../src/charge.js';
+import { chargeAt, chargePercent, CHARGE_DURATION } from '../src/charge.js';
 
 assert.equal(chargeAt(0), 0); assert.equal(chargeAt(-1), 0);
-assert.ok(chargeAt(250) > .82 && chargeAt(250) < .83);
-assert.ok(chargeAt(750) > .994 && chargeAt(750) < .995);
+assert.ok(chargeAt(CHARGE_DURATION * .25) > .82 && chargeAt(CHARGE_DURATION * .25) < .83);
+assert.ok(chargeAt(CHARGE_DURATION * .75) > .994 && chargeAt(CHARGE_DURATION * .75) < .995);
 let previous = 0, previousGain = Infinity;
-for (let ms = 50; ms <= 950; ms += 50) {
-  const charge = chargeAt(ms), gain = charge - previous;
+for (let step = 1; step <= 19; step++) {
+  const charge = chargeAt(CHARGE_DURATION * step / 20), gain = charge - previous;
   assert.ok(gain > 0 && gain < previousGain, 'charge rises with progressively smaller increments');
   assert.ok(chargePercent(charge) < 100, 'unfinished charge never displays 100%');
   previous = charge; previousGain = gain;
 }
-const fullAt = 1000;
+const fullAt = CHARGE_DURATION;
 assert.ok(chargeAt(fullAt - .1) < .999, 'remaining charge above 0.1% must not snap');
 assert.equal(chargeAt(fullAt), 1, '99.9% snaps to exactly full power');
 assert.equal(chargeAt(fullAt + 60000), 1);

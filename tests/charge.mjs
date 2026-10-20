@@ -1,23 +1,25 @@
 import assert from 'node:assert/strict';
 import Matter from 'matter-js';
-import { chargeAt, overchargeAt, chargeEffectsAt } from '../src/charge.js';
+import { chargeAt, overchargeAt, chargeEffectsAt, CHARGE_DURATION, OVERCHARGE_DURATION, BURST_READY_AT } from '../src/charge.js';
 import { createTable, STEP, TABLE, LAUNCH_SQUASH } from '../src/physics.js';
 
-assert.ok(chargeAt(999)<1, 'full charge is not reached before one second');
-assert.equal(chargeAt(1000), 1);
-assert.equal(chargeEffectsAt(1000).goldRadius,0);
-assert.equal(chargeEffectsAt(1000).coronaRadius,22);
-assert.equal(chargeEffectsAt(3000).coronaRadius,62);
-assert.equal(overchargeAt(1000), 0);
-assert.ok(overchargeAt(2999) < 1, 'no five-ball reward before the entire extra two seconds');
-assert.equal(overchargeAt(3000), 1);
+assert.ok(chargeAt(CHARGE_DURATION - 1) < 1, 'full charge is not reached before CHARGE_DURATION');
+assert.equal(chargeAt(CHARGE_DURATION), 1);
+assert.equal(chargeEffectsAt(CHARGE_DURATION).goldRadius, 0);
+assert.equal(chargeEffectsAt(CHARGE_DURATION).coronaRadius, 22);
+assert.equal(chargeEffectsAt(BURST_READY_AT).coronaRadius, 62);
+assert.equal(overchargeAt(CHARGE_DURATION), 0);
+assert.ok(overchargeAt(BURST_READY_AT - 1) < 1, 'no five-ball reward before the extra hold finishes');
+assert.equal(overchargeAt(BURST_READY_AT), 1);
 assert.equal(overchargeAt(20000), 1);
-for (let ms = 0; ms < 3000; ms += 10) {
+// Smoothstep slope peaks at 1.5, so a 10ms corona step cannot exceed this.
+const maxCoronaStep = 40 * 1.5 * (10 / OVERCHARGE_DURATION) + 1e-6;
+for (let ms = 0; ms < BURST_READY_AT; ms += 10) {
   const before = chargeEffectsAt(ms), after = chargeEffectsAt(ms + 10);
   assert.ok(after.goldRadius <= before.goldRadius, 'gold ring continuously converges');
-  if (ms >= 1000) {
+  if (ms >= CHARGE_DURATION) {
     assert.ok(after.coronaRadius >= before.coronaRadius && after.coronaAlpha >= before.coronaAlpha, 'corona grows gradually in both size and intensity');
-    assert.ok(after.coronaRadius - before.coronaRadius < .31, 'no late snap to the maximum');
+    assert.ok(after.coronaRadius - before.coronaRadius <= maxCoronaStep, 'no late snap to the maximum');
   }
 }
 const seeded = initial => { let seed = initial; return () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32); };

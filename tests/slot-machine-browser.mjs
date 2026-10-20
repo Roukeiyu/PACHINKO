@@ -20,7 +20,7 @@ try {
   });
   // Test-only access to the real game's launcher and Matter bodies. Every entry
   // still follows the production physics, score callback and UI update path.
-  await page.route('**/src/physics.js', async route => {
+  await page.route('**/src/physics.js*', async route => {
     const response = await route.fetch(); let body = await response.text();
     assert.ok(body.includes('slotRandom = Math.random') && body.includes('return { engine, balls'));
     body = body.replace('slotRandom = Math.random', 'slotRandom = () => window.__testSlotRandom()');

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
+import { CHARGE_DURATION, BURST_READY_AT } from '../src/charge.js';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 const executablePath = process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
@@ -27,7 +28,7 @@ try {
   assert.equal(await page.locator('#three-d').isChecked(),false);
   assert.equal(await page.locator('#camera-angle').count(),0,'settings only offer a display-mode switch');
   assert.ok(!(await page.locator('#board').getAttribute('aria-label')).includes('拖动'));
-  await page.locator('#launch').focus(); await page.keyboard.down('Space');await page.clock.fastForward(700);await page.keyboard.up('Space');await page.clock.runFor(50);
+  await page.locator('#launch').focus(); await page.keyboard.down('Space');await page.clock.fastForward(CHARGE_DURATION);await page.keyboard.up('Space');await page.clock.runFor(50);
   assert.equal(await page.evaluate(()=>window.__ponpon.stats.launches),1);
   await page.screenshot({path:'test-results/mode-default-2d.png',fullPage:true});
   await page.evaluate(()=>{window.__originalBoard=document.querySelector('#board');document.querySelector('#settings-button').click();});
@@ -70,7 +71,7 @@ try {
   r=await page.evaluate(()=>window.__ponpon.rendering);
   assert.equal(r.bodies.find(b=>b.kind==='bumper'&&b.x===350).radius,58.5);
   assert.ok(r.bodies.find(b=>b.kind==='bumper'&&b.x===350).scale>1.3);
-  await page.locator('#launch').focus();await page.keyboard.down('Space');await page.clock.fastForward(3100);await page.clock.runFor(100);
+  await page.locator('#launch').focus();await page.keyboard.down('Space');await page.clock.fastForward(BURST_READY_AT + 100);await page.clock.runFor(100);
   r=await page.evaluate(()=>window.__ponpon.rendering);
   assert.equal(r.motion.intensity,1);assert.equal(r.motion.rotation,0);
   assert.ok(r.cameraQuaternion.every((v,i)=>Math.abs(v-cameraQuaternion[i])<1e-12),'full charge preserves actual camera orientation');
