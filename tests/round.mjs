@@ -4,7 +4,7 @@ import { createTable, TABLE } from '../src/physics.js';
 import { PRESET_BOARD } from '../src/leaderboard.js';
 import {
   START_BALLS, LOW_BALLS, LAUNCH_COST, BURST_COST, SECRET_BALLS, LUCKY_BALLS, SLOT_MACHINE_BALLS,
-  MINI_BALLS_MIN, MINI_BALLS_MAX, DRAIN_MIN_OPENING, DRAIN_WALL, POCKET_WIDTH,
+  MINI_BALLS_MIN, MINI_BALLS_MAX, DRAIN_MIN_OPENING, DRAIN_WIDTH_SCALE, DRAIN_WALL, POCKET_WIDTH,
   slotFrame, classifyBottom, pocketCenter, miniGameBalls, roundCanEnd,
   qualifiesForLeaderboard, freshRound, restoreRun,
 } from '../src/round.js';
@@ -24,7 +24,12 @@ for (const count of [5, 7, 9]) {
   const frame = slotFrame(count);
   assert.equal(frame.regions[0].x0, TABLE.left);
   assert.equal(frame.regions.at(-1).x1, TABLE.right);
-  assert.ok(frame.opening + 1e-6 >= DRAIN_MIN_OPENING);
+  const mouths = count + 1;
+  const natural = (TABLE.right - TABLE.left - count * POCKET_WIDTH) / mouths;
+  const baseline = Math.max(natural, DRAIN_MIN_OPENING);
+  assert.ok(Math.abs(frame.opening - baseline * DRAIN_WIDTH_SCALE) < 1e-6, `${count} drain mouths are half of the previous width`);
+  assert.ok(Math.abs(frame.pocket * count + frame.opening * mouths - (TABLE.right - TABLE.left)) < 1e-6, `${count} slots still fill the row`);
+  assert.ok(frame.pocket > POCKET_WIDTH, `${count} slots receive the reclaimed drain width`);
   assert.ok(frame.pocket - DRAIN_WALL * 2 >= 24, `${count} slots leave room for a ball`);
   const slots = frame.regions.filter(region => region.kind === 'slot');
   const drains = frame.regions.filter(region => region.kind === 'drain');

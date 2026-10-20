@@ -77,7 +77,8 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
         ctx.strokeStyle = paintColor('#e7b8a2', 'line'); ctx.lineWidth = 1.5; ctx.globalAlpha = .55;
         for (let y = TABLE.slotTop - 6; y < TABLE.slotTop + 98; y += 8) { ctx.beginPath(); ctx.moveTo(region.x0, y); ctx.lineTo(region.x1, y + 7); ctx.stroke(); }
         ctx.restore();
-        if (width >= 22) text('漏', (region.x0 + region.x1) / 2, TABLE.slotTop + 78, width >= 36 ? 13 : 10, '#f6d7c8', 'bold');
+        const labelSize = width >= 36 ? 13 : 10;
+        if (width >= 12) text('漏', (region.x0 + region.x1) / 2, TABLE.slotTop + 78, labelSize, '#f6d7c8', 'bold');
         continue;
       }
       const i = region.column, glow = fx.slotGlows[i] || 0;

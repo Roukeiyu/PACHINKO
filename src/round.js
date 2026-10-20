@@ -26,14 +26,14 @@ export const DRUM_ENLARGE_BALLS = 4;
 export const DRUM_CLOCK_BALLS = 0;
 
 // Bottom geometry. The slot row is TABLE.left … TABLE.right (616px).
-// Pockets stay just wider than a ball. Everything else is a drain mouth:
-// one past each end and one in every gap. Nine slots cannot give both a wide
-// pocket and a wide mouth, so the mouth never shrinks below DRAIN_MIN_OPENING
-// and the pocket gives up the difference.
+// The mouth budget starts from POCKET_WIDTH pockets and never begins below
+// DRAIN_MIN_OPENING. DRAIN_WIDTH_SCALE then halves every mouth and returns
+// that width to the scoring slots, so the row still fills the span.
 export const SLOT_ROW_LEFT = 39;
 export const SLOT_ROW_RIGHT = 655;
 export const POCKET_WIDTH = 36;
 export const DRAIN_MIN_OPENING = 28;
+export const DRAIN_WIDTH_SCALE = 0.5;
 export const DRAIN_WALL = 6;
 export const DRAIN_FLOOR = 894;
 
@@ -41,12 +41,10 @@ export function slotFrame(count) {
   if (count !== 5 && count !== 7 && count !== 9) throw new RangeError('Slots must be 5, 7, or 9');
   const span = SLOT_ROW_RIGHT - SLOT_ROW_LEFT;
   const mouths = count + 1;
-  let pocket = POCKET_WIDTH;
-  let opening = (span - count * pocket) / mouths;
-  if (opening < DRAIN_MIN_OPENING) {
-    opening = DRAIN_MIN_OPENING;
-    pocket = (span - mouths * opening) / count;
-  }
+  let opening = (span - count * POCKET_WIDTH) / mouths;
+  if (opening < DRAIN_MIN_OPENING) opening = DRAIN_MIN_OPENING;
+  opening *= DRAIN_WIDTH_SCALE;
+  const pocket = (span - mouths * opening) / count;
   const regions = [];
   let x = SLOT_ROW_LEFT;
   for (let column = 0; column < count; column++) {
