@@ -28,7 +28,7 @@ try {
         for (let i = 0; i < count; i++) {
           const ball = launch(); ball.entered = true;
           if (withStar) { Body.setPosition(ball.body, {x: activeStar.x, y: activeStar.y}); Body.setVelocity(ball.body, {x:0,y:0}); step(); }
-          Body.setPosition(ball.body, {x:347,y:TABLE.scoreLine-1}); Body.setVelocity(ball.body, {x:0,y:6}); step();
+          Body.setPosition(ball.body, {x:90,y:TABLE.scoreLine-1}); Body.setVelocity(ball.body, {x:0,y:6}); step();
         }
       }, advanceTo(deadline) { while (clock + 1e-6 < deadline) step(Math.min(STEP, deadline - clock)); }
     }; return { engine, balls`);
@@ -42,7 +42,7 @@ try {
       const snap = await page.evaluate(({ left, right }) => {
         const pon = window.__ponpon;
         if (!pon?.slotMachine) return null;
-        const column = Math.max(0, Math.min(pon.slots - 1, Math.floor((347 - left) / ((right - left) / pon.slots))));
+        const column = Math.max(0, Math.min(pon.slots - 1, Math.floor((90 - left) / ((right - left) / pon.slots))));
         return { slots: pon.slots, column, collections: pon.collections, global: pon.slotMachine.multiplier, labels: window.__canvasLabels || [] };
       }, { left: TABLE.left, right: TABLE.right });
       if (snap) {
@@ -77,7 +77,7 @@ try {
   assert.match(await page.locator('#slot-status').textContent(), /持续 1 分钟/);
   const scored = await page.evaluate(({ left, right }) => {
     const pon = window.__ponpon;
-    const column = Math.max(0, Math.min(pon.slots - 1, Math.floor((347 - left) / ((right - left) / pon.slots))));
+    const column = Math.max(0, Math.min(pon.slots - 1, Math.floor((90 - left) / ((right - left) / pon.slots))));
     return { score: pon.score, slots: pon.slots, column, collections: pon.collections, global: pon.slotMachine.multiplier, star: pon.star.multiplier };
   }, { left: TABLE.left, right: TABLE.right });
   const fruit = slotMultipliers(scored.slots)[scored.column];

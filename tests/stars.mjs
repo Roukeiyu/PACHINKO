@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import Matter from 'matter-js';
-import { createTable, STEP } from '../src/physics.js';
+import { createTable, STEP, TABLE } from '../src/physics.js';
+import { pocketCenter } from '../src/round.js';
 
 function put(ball, x, y, vx = 0, vy = 0) {
   ball.entered = true;
@@ -16,7 +17,7 @@ function collect(game, ball) {
   return star;
 }
 function scoreSlot(game, ball) {
-  put(ball, 347, 864, 0, 6);
+  put(ball, pocketCenter(game.slots, 0), TABLE.scoreLine - 1, 0, 6);
   for (let i = 0; i < 10 && game.balls.includes(ball); i++) game.step();
   assert.ok(!game.balls.includes(ball));
 }

@@ -2,7 +2,7 @@ import { chargeEffectsAt } from './charge.js';
 import { sceneMotionAt, project2DMotion } from './scene-motion.js';
 import { TABLE, slotMultipliers, LAUNCH_SQUASH } from './physics.js';
 import { slotFrame } from './round.js';
-import { SLOT_DISPLAY, SLOT_SYMBOLS, slotBonusLabel } from './slot-machine.js';
+import { SLOT_DISPLAY, SLOT_SYMBOLS, BALL_SYMBOL, REEL_WEIGHTS, reelBox, PROGRESS_TOP, PROGRESS_HEIGHT, slotBonusLabel } from './slot-machine.js';
 import { rewardProfile, activeRewardScenes, rewardSceneAt, marqueePoint } from './reward-effects.js';
 import { slotIcon, slotColorIndex } from './slot-icons.js';
 
@@ -111,7 +111,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     circle(storage.x, storage.y, 21, cup, storage.glow ? '#f3cf7b' : '#eae0f3', 2);
     text(`${storage.stored.length}/20`, storage.x, storage.y + 3, 11, '#fff9e9', 'bold');
     text('蓄球罐', storage.x, storage.y - 49, 12, '#8b769f', 'bold');
-    text(storage.remaining ? `落球中 · 余 ${storage.remaining}` : '存 20 · 落 40', storage.x, storage.y + 48, 11, '#8b769f');
+    text(storage.remaining ? `落球中 · 余 ${storage.remaining}` : '存 20 · 落 20', storage.x, storage.y + 48, 11, '#8b769f');
     // Every bottom slot has a corresponding mouth at the top of the board.
     for (const outlet of storage.outlets) {
       box(outlet.x - 26, outlet.y - 9, 52, 17, 8, outlet.glow ? '#f6daa0' : '#d8d0e3', '#fff8ef');
@@ -182,24 +182,47 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
         for(let i=0;i<12;i++){const angle=-Math.PI/2+i*Math.PI/6;circle(x+Math.cos(angle)*(r+27),y+Math.sin(angle)*(r+27),i===game.rewards.burstStep?5:3,i<=game.rewards.burstStep?'#dbaa45':'#e3d8b8');}
       }
     }
-    // Painted display: balls remain free to pass in front of it.
-    const cabinet = SLOT_DISPLAY, left = cabinet.x - cabinet.width / 2, top = cabinet.y - cabinet.height / 2;
-    box(left, top + 2, cabinet.width, cabinet.height, 9, '#887a6830');
-    box(left, top, cabinet.width, cabinet.height, 9, '#e8d7b7', bonus.multiplier === 5 ? '#a78ac9' : '#c8ae7e');
-    text(bonusLabel || 'L U C K Y  P O N', cabinet.x, top + 6, 8, bonus.multiplier === 5 ? '#7856a3' : '#856842', 'bold');
+    // Three separate squares. Balls stay free to pass in front of them.
+    const reelCount = REEL_WEIGHTS.length;
+    const drawReelIcon = (symbol, x, y, size) => {
+      if (symbol === BALL_SYMBOL) {
+        paintingBall = true;
+        const r = size * 0.38;
+        circle(x, y, r + 1.1, '#a4425d');
+        const shine = ctx.createRadialGradient(x - r * 0.28, y - r * 0.34, 0, x, y, r);
+        shine.addColorStop(0, '#ffffff'); shine.addColorStop(0.55, '#fffde8'); shine.addColorStop(1, '#ffdb76');
+        circle(x, y, r, shine); circle(x - r * 0.28, y - r * 0.32, r * 0.26, '#fff');
+        paintingBall = false;
+        return;
+      }
+      text(SLOT_SYMBOLS[symbol] ?? '·', x, y, size, '#52664c');
+    };
     for (let reel = 0; reel < 3; reel++) {
-      const x = cabinet.x + (reel - 1) * 70, moving = bonus.spinning && !bonus.stopped[reel];
-      box(x - 32, top + 11, 64, 25, 4, '#fffaf0', moving ? '#b59ac8' : '#d0bd98');
-      ctx.save(); ctx.beginPath(); ctx.rect(x - 31, top + 12, 62, 23); ctx.clip();
+      const spot = reelBox(reel), moving = bonus.spinning && !bonus.stopped[reel];
+      const left = spot.x - spot.size / 2, top = spot.y - spot.size / 2;
+      box(left, top, spot.size, spot.size, 4, moving ? '#f4ecff' : '#fffaf0', moving ? '#6d4cb5' : '#d0bd98');
+      ctx.save(); ctx.beginPath(); ctx.rect(left + 2, top + 2, spot.size - 4, spot.size - 4); ctx.clip();
       if (moving && !state.calm) {
-        const phase = (game.clock - bonus.startedAt) / (70 + reel * 15), index = Math.floor(phase) % SLOT_SYMBOLS.length, offset = (phase % 1) * 25;
-        text(SLOT_SYMBOLS[index], x, top + 24 + offset, 24, '#52664c');
-        text(SLOT_SYMBOLS[(index + 1) % SLOT_SYMBOLS.length], x, top - 1 + offset, 24, '#52664c');
-      } else text(moving ? '·' : SLOT_SYMBOLS[bonus.reels[reel]], x, top + 24, 24, '#52664c');
+        const phase = (game.clock - bonus.startedAt) / (70 + reel * 15), index = Math.floor(phase) % reelCount, offset = (phase % 1) * (spot.size * 0.8);
+        drawReelIcon(index, spot.x, spot.y + offset, 18);
+        drawReelIcon((index + 1) % reelCount, spot.x, spot.y - spot.size * 0.8 + offset, 18);
+      } else drawReelIcon(moving ? -1 : bonus.reels[reel], spot.x, spot.y, 18);
       ctx.restore();
+      if (moving) {
+        ctx.save();
+        ctx.lineWidth = 3; ctx.strokeStyle = paintColor('#6d4cb5', 'line');
+        ctx.beginPath(); ctx.roundRect(left - 3, top - 3, spot.size + 6, spot.size + 6, 6); ctx.stroke();
+        ctx.fillStyle = paintColor('#6d4cb5', 'object');
+        ctx.beginPath(); ctx.moveTo(spot.x - 5, top - 8); ctx.lineTo(spot.x + 5, top - 8); ctx.lineTo(spot.x, top - 1); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
     }
-    const reelStatus = bonus.spinning ? `转动中${bonus.queued ? ` · 排队 ${bonus.queued}` : ''}` : `${bonus.progress}/${bonus.goal} · 进洞蓄好运${bonus.queued ? ` · 排队 ${bonus.queued}` : ''}`;
-    text(reelStatus, cabinet.x, top + 40, 8, '#856842');
+    const barLeft = SLOT_DISPLAY.x - SLOT_DISPLAY.width / 2;
+    const barWidth = SLOT_DISPLAY.width - 28;
+    box(barLeft, PROGRESS_TOP, barWidth, PROGRESS_HEIGHT, 3, '#efe6d4', '#d0bd98');
+    const filled = barWidth * (bonus.goal ? bonus.progress / bonus.goal : 0);
+    if (filled > 0) box(barLeft, PROGRESS_TOP, Math.min(barWidth, Math.max(PROGRESS_HEIGHT, filled)), PROGRESS_HEIGHT, 3, '#c59450');
+    text(`${bonus.progress}/${bonus.goal}`, barLeft + barWidth + 14, PROGRESS_TOP + PROGRESS_HEIGHT / 2, 9, '#6d5430', 'bold');
     // The spring compresses while held. A ready ball remains visually separate
     // from any live ball travelling along the lane.
     const compression = state.charging ? state.charge * LAUNCH_SQUASH : 0;

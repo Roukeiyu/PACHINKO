@@ -7,17 +7,19 @@ const profiles = {
   20: { tier: 4, name: '金色礼花', color: '#dab05b', shape: 'ribbon', count: 22, waves: 3, radius: 140, duration: 4000, speed: 8.2, notes: [587, 740, 880, 1175, 1480, 1760, 2349] },
   jackpot: { tier: 5, name: '秘密宝藏', color: '#d4a44c', shape: 'star', count: 20, waves: 4, radius: 150, duration: 5500, waveInterval: 700, speed: 8.5, notes: [587, 740, 880, 1175, 1480, 1760, 2349, 2960] },
   clock: { tier: 6, name: '30 次碰撞 · 十二时钟盛典', color: '#e2ae48', shape: 'star', count: 28, waves: 5, radius: 270, duration: 3000, speed: 10, notes: [294, 440, 587, 740, 880, 1175, 1480, 1760, 2349, 2960, 3520, 4699] },
+  'ball-jackpot': { tier: 6, name: '弹珠大奖', color: '#f0c14a', shape: 'star', count: 36, waves: 6, radius: 210, duration: 4200, waveInterval: 280, speed: 11, notes: [523, 659, 784, 1047, 1319, 1568, 2093, 2637] },
 };
 for (const p of Object.values(profiles)) { Object.freeze(p.notes); Object.freeze(p); }
 export function rewardProfile(result) {
-  return profiles[result.kind === 'clock' || result.kind === 'jackpot' ? result.kind : result.multiplier] || profiles[2];
+  if (result.kind === 'clock' || result.kind === 'jackpot' || result.kind === 'ball-jackpot') return profiles[result.kind];
+  return profiles[result.multiplier] || profiles[2];
 }
 function wave(fx, burst, random) {
   const { profile: p, x, y, calm, nextWave } = burst;
   const count = calm ? 2 + p.tier : p.count;
   const colors = [p.color, '#f1c774', '#eaa1b1', '#a7c8aa', '#b4a0d8'];
   for (let i = 0; i < count; i++) {
-    const radial = burst.kind === 'clock' || burst.kind === 'jackpot';
+    const radial = burst.kind === 'clock' || burst.kind === 'jackpot' || burst.kind === 'ball-jackpot';
     const angle = radial ? i / count * Math.PI * 2 + nextWave * .2 : -Math.PI / 2 + (random() - .5) * 1.6;
     const speed = (calm ? 1 : p.speed) * (.5 + random() * .5);
     fx.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,

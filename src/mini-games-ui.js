@@ -1,4 +1,4 @@
-import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_COLORS, BLOCK_SYMBOLS, MINI_HIT_SHAKE, MINI_HIT_MS, comboMultiplier, formatComboMultiplier, PAIR_DURATION, PAIR_TARGET } from './mini-games.js';
+import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_COLORS, BLOCK_SYMBOLS, MINI_HIT_SHAKE, MINI_HIT_MS, comboMultiplier, formatComboMultiplier, PAIR_DURATION, PAIR_TARGET, PAIR_CLEAR_BONUS } from './mini-games.js';
 import { PAIR_SVG } from './pair-icons.js';
 import { secretPayout } from './secret-wave.js';
 import { SECRET_BALLS } from './round.js';
@@ -106,10 +106,10 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
           if(cell.fall && previousTile!==String(cell.id) && !document.documentElement.classList.contains('calm')) {button.style.setProperty('--fall',String(cell.fall));button.animate([{transform:`translateY(${-Math.min(cell.fall,3)*110}%)`,opacity:.4},{transform:'translateY(0)',opacity:1}],{duration:250,easing:'ease-out'});}
         }
         if (s.kind==='moles') {
-          button.classList.add('mini-hole');button.classList.toggle('mini-hit',cell.hit);
-          button.textContent=cell.hit?'✧':cell.type==='mole'?'🐹':cell.type==='cabbage'?'🥬':'';
-          button.disabled ||= cell.hit || cell.type==='empty';
-          button.setAttribute('aria-label',cell.hit?'已打中':cell.type==='mole'?'地鼠':cell.type==='cabbage'?'白菜':'空洞');
+          button.classList.add('mini-hole');button.classList.toggle('mini-hit',cell.hit);button.classList.toggle('mini-mole',cell.type==='mole'&&!cell.hit);
+          button.textContent=cell.hit?'✧':cell.type==='mole'?'🐹':'🥬';
+          button.disabled ||= cell.hit;
+          button.setAttribute('aria-label',cell.hit?'已打中':cell.type==='mole'?'地鼠':'白菜');
         }
       });
     }
@@ -123,6 +123,10 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
         const peak = comboMultiplier(s.bestCombo);
         const peakText = Number.isInteger(peak) ? String(peak) : peak.toFixed(1);
         math.textContent=`${s.baseScore.toLocaleString()} × ${peakText} = ${s.score.toLocaleString()}`;
+        math.classList.remove('is-on'); void math.offsetWidth; math.classList.add('is-on');
+      } else if (s.kind==='pairs' && s.clearBonus) {
+        math.hidden=false;
+        math.textContent=`全部配对 +${PAIR_CLEAR_BONUS}`;
         math.classList.remove('is-on'); void math.offsetWidth; math.classList.add('is-on');
       } else { math.hidden=true; math.textContent=''; math.classList.remove('is-on'); }
       const paid=secretPayout(s.score, scoreMultiplier);

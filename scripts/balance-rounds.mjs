@@ -26,6 +26,9 @@ function playRound(seed) {
   let bestSlot = 0;
   let secretWait = false;
   let miniAwarded = false;
+  const ballHits = { 1: 0, 2: 0, 3: 0 };
+  let reelSpins = 0;
+  let reelPaid = 0;
   const game = createTable({
     slots,
     random,
@@ -45,6 +48,16 @@ function playRound(seed) {
       if (event.kind === 'random') stock += DRUM_RANDOM_BALLS;
       if (event.kind === 'enlarge') stock += DRUM_ENLARGE_BALLS;
       if (event.kind === 'clock') stock += DRUM_CLOCK_BALLS;
+      if (event.kind === 'slot-result') {
+        if (event.mode === 'reel') {
+          reelSpins += 1;
+          if (event.paid) reelPaid += 1;
+        }
+        if (event.ballPayout) {
+          stock += event.ballPayout;
+          if (event.balls >= 1 && event.balls <= 3) ballHits[event.balls] += 1;
+        }
+      }
     },
   });
   let steps = 0;
@@ -89,7 +102,7 @@ function playRound(seed) {
     if (stock <= 0 && stored === 0 && pending === 0 && game.pendingLaunches === 0 && game.balls.length === 0 && !secretWait) break;
   }
   const physicsMs = steps * STEP;
-  return { score, launches, slots, jackpots, bestSlot, physicsMs, playMs: launches * SHOT_GAP_MS + miniMs, capped: steps >= STEP_CAP };
+  return { score, launches, slots, jackpots, bestSlot, physicsMs, playMs: launches * SHOT_GAP_MS + miniMs, capped: steps >= STEP_CAP, ballHits, reelSpins, reelPaid };
 }
 
 const results = [];
@@ -117,5 +130,9 @@ console.log(JSON.stringify({
   reached9: results.filter(r => r.slots >= 9).length,
   capped: results.filter(r => r.capped).map(r => ({ score: r.score, launches: r.launches, slots: r.slots, jackpots: r.jackpots })),
   meanJackpots: +mean(results.map(r => r.jackpots)).toFixed(2),
+  ballOutcomes: [1, 2, 3].map(count => ({ count, n: results.reduce((sum, row) => sum + row.ballHits[count], 0) })),
+  reelSpins: results.reduce((sum, row) => sum + row.reelSpins, 0),
+  reelPaid: results.reduce((sum, row) => sum + row.reelPaid, 0),
+  meanReelSpins: +mean(results.map(row => row.reelSpins)).toFixed(2),
   hist,
 }, null, 2));

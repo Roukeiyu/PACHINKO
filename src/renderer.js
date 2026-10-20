@@ -3,7 +3,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createRenderer as createCanvasRenderer } from './renderer-2d.js';
 import { TABLE, LAUNCH_SQUASH } from './physics.js';
 import { slotFrame } from './round.js';
-import { SLOT_DISPLAY } from './slot-machine.js';
+import { reelBox } from './slot-machine.js';
 import { chargeEffectsAt } from './charge.js';
 import { sceneMotionAt } from './scene-motion.js';
 
@@ -163,8 +163,11 @@ function create3DRenderer(canvas) {
     bodyModel(game.gates[1], goldSide, 7);
     for (const h of game.holes) makeWell(h.x, h.y, false);
     makeWell(game.collector.x, game.collector.y, true);
-    // Recess the painted reel assembly so moving balls can cross its display.
-    box(SLOT_DISPLAY.x, SLOT_DISPLAY.y, SLOT_DISPLAY.width, SLOT_DISPLAY.height, 3, goldSide, -1, 8);
+    // Three small squares, with no outer housing. The progress bar stays on the floor decal.
+    for (let reel = 0; reel < 3; reel++) {
+      const spot = reelBox(reel);
+      box(spot.x, spot.y, spot.size, spot.size, 3, goldSide, -1, 4);
+    }
     for (const spinner of game.spinners) disc(spinner.position.x, spinner.position.y, 15, 5, goldSide, 12);
   }
   let slotCount = 0, dividerKey = '';

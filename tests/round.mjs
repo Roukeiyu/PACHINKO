@@ -4,7 +4,7 @@ import { createTable, TABLE } from '../src/physics.js';
 import { PRESET_BOARD } from '../src/leaderboard.js';
 import {
   START_BALLS, LOW_BALLS, LAUNCH_COST, BURST_COST, SECRET_BALLS, LUCKY_BALLS, SLOT_MACHINE_BALLS,
-  MINI_BALLS_MIN, MINI_BALLS_MAX, DRAIN_MIN_OPENING, DRAIN_WIDTH_SCALE, DRAIN_WALL, POCKET_WIDTH,
+  MINI_BALLS_MIN, MINI_BALLS_MAX, MINI_BALLS_FULL_SCORE, DRAIN_MIN_OPENING, DRAIN_WIDTH_SCALE, DRAIN_WALL, POCKET_WIDTH,
   slotFrame, classifyBottom, pocketCenter, miniGameBalls, roundCanEnd,
   qualifiesForLeaderboard, freshRound, restoreRun,
 } from '../src/round.js';
@@ -16,9 +16,12 @@ assert.equal(BURST_COST, 5);
 assert.equal(LUCKY_BALLS, 0);
 assert.equal(SLOT_MACHINE_BALLS, 0);
 assert.equal(SECRET_BALLS, 10);
+assert.equal(MINI_BALLS_FULL_SCORE, 5600);
 assert.equal(miniGameBalls(0), MINI_BALLS_MIN);
+assert.equal(miniGameBalls(MINI_BALLS_FULL_SCORE), MINI_BALLS_MAX);
 assert.equal(miniGameBalls(1e9), MINI_BALLS_MAX);
 assert.ok(miniGameBalls(900) > MINI_BALLS_MIN && miniGameBalls(900) < MINI_BALLS_MAX);
+assert.ok(miniGameBalls(840) < miniGameBalls(5600));
 
 for (const count of [5, 7, 9]) {
   const frame = slotFrame(count);

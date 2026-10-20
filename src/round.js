@@ -7,7 +7,8 @@ export const LAUNCH_COST = 1;
 export const BURST_COST = 5;
 
 // Scoring slots pay happiness points only. They do not put balls back.
-// Stars and the reel multiplier change those points only.
+// Stars and a pair/triple on the reels change those points only.
+// Ball icons on the reels pay balls separately (see slot-machine.js).
 export const SLOT_MACHINE_BALLS = 0;
 export const LUCKY_BALLS = 0;
 // One payment when a secret-hole visit finishes, after its mini-game.
@@ -15,7 +16,9 @@ export const SECRET_BALLS = 10;
 
 export const MINI_BALLS_MIN = 5;
 export const MINI_BALLS_MAX = 30;
-export const MINI_BALLS_FULL_SCORE = 1800;
+// Top of the 5–30 curve: a perfect 32-pair clear (10×(1+2+…+33) = 5600).
+// A clean full board reaches 30 balls; shorter clears stay lower on the same line.
+export const MINI_BALLS_FULL_SCORE = 5600;
 
 // Drums. The left drum and the clock already launch real balls; those balls
 // are their ball reward. Enlarge launches nothing, so it pays stock directly.

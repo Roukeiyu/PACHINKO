@@ -48,23 +48,23 @@ for (const slots of [5, 7, 9]) {
   assert.equal(game.collector.remaining, 0); assert.equal(scores.length, 0, 'storing does not award points');
   feed(game);
   assert.equal(game.collector.stored.length, 0); assert.equal(game.stats.storageBursts, 1);
-  assert.equal(game.collector.remaining, 40); assert.equal(game.stats.absorbed, 20);
+  assert.equal(game.collector.remaining, 20); assert.equal(game.stats.absorbed, 20);
   // Layout changes retain both stock and queued rewards, with updated mouths.
-  game.setSlots(slots === 5 ? 9 : 5); assert.equal(game.collector.remaining, 40);
+  game.setSlots(slots === 5 ? 9 : 5); assert.equal(game.collector.remaining, 20);
   game.setSlots(slots); assert.equal(game.collector.outlets.length, slots);
   for (let i = 0; i < 800 && game.collector.remaining; i++) game.step();
   const drops = events.filter(e => e.kind === 'emit' && e.source === 'storage');
-  assert.equal(drops.length, 40); assert.equal(game.stats.storageDrops, 40);
+  assert.equal(drops.length, 20); assert.equal(game.stats.storageDrops, 20);
   assert.equal(game.collector.remaining, 0);
-  assert.equal(new Set(drops.map(d => d.ballId)).size, 40);
-  assert.equal(drops.filter(d => d.scoreFactor === 4).length, 2, 'each stored star multiplier is copied to exactly two drops');
+  assert.equal(new Set(drops.map(d => d.ballId)).size, 20);
+  assert.equal(drops.filter(d => d.scoreFactor === 4).length, 1, 'each stored star multiplier is released once');
   const counts = Array.from({ length: slots }, (_, column) => drops.filter(d => d.column === column).length);
   assert.ok(Math.max(...counts) - Math.min(...counts) <= 1, 'all mouths receive balanced quantities');
   for (let i = 0; i < drops.length; i += slots) assert.equal(new Set(drops.slice(i, i + slots).map(d => d.column)).size, Math.min(slots, drops.length - i), 'each shuffled round visits every mouth once');
-  assert.ok(new Set(drops.map(d => d.x)).size > 30, 'mouth positions have random variation');
+  assert.ok(new Set(drops.map(d => d.x)).size > 12, 'mouth positions have random variation');
   for (let i = 1; i < drops.length; i++) assert.ok(drops[i].at - drops[i - 1].at >= 80 - STEP && drops[i].at - drops[i - 1].at <= 140 + STEP);
-  assert.ok(drops.at(-1).at - drops[0].at > 3000, '40 balls emerge gradually');
-  console.log(`PASS: ${slots} mouths absorb 20, emit exactly 40 balanced random drops, and retain stars and queued drops through layout changes.`);
+  assert.ok(drops.at(-1).at - drops[0].at > 1400, '20 balls emerge gradually');
+  console.log(`PASS: ${slots} mouths absorb 20, emit exactly 20 balanced random drops, and retain stars and queued drops through layout changes.`);
 }
 
 const scores = [], storedIds = [], dropIds = [], returned = [], drained = [];
@@ -74,7 +74,7 @@ const live = createTable({ random: seeded(42), starRandom: seeded(43), onScore: 
 } });
 for (let i = 0; i < 20; i++) feed(live);
 for (let i = 0; i < 12000 && (live.balls.length || live.collector.remaining); i++) live.step();
-assert.equal(dropIds.length, 40);
+assert.equal(dropIds.length, 20);
 assert.ok(dropIds.every(id => scores.some(s => s.ballId === id) || storedIds.includes(id) || returned.includes(id) || drained.includes(id)), 'all released balls physically score, enter storage, drain or return');
 assert.ok(scores.some(s => dropIds.includes(s.ballId)), 'stored rewards can actually reach scoring slots');
 assert.equal(live.balls.length, 0); assert.equal(live.collector.remaining, 0);

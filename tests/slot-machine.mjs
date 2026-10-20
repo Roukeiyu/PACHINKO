@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import Matter from 'matter-js';
-import { createSlotMachine, SLOT_SYMBOLS, SLOT_DISPLAY, slotBonusLabel } from '../src/slot-machine.js';
+import { createSlotMachine, SLOT_SYMBOLS, SLOT_DISPLAY, slotBonusLabel, reelUnit, sampleReel, BALL_SYMBOL, ballPayout, REEL_WEIGHTS, BALL_ONE, BALL_PAIR, BALL_JACKPOT, luckyReelPay, pickReel, SINGLE_REEL_MS, SPIN_GAP_MS } from '../src/slot-machine.js';
 import { createTable, STEP, TABLE } from '../src/physics.js';
-const choices = values => { let index = 0; return () => (values[index++ % values.length] + .5) / 5; };
+import { pocketCenter } from '../src/round.js';
+const choices = values => { let index = 0; return () => reelUnit(values[index++ % values.length]); };
 function enter(machine, count, clock = 0) { for (let i = 0; i < count; i++) machine.recordEntry(clock); }
 const outcomes = { 1: 0, 2: 0, 5: 0 };
 assert.equal(new Set(SLOT_SYMBOLS).size, 5);
@@ -28,6 +29,36 @@ for (let a = 0; a < 5; a++) for (let b = 0; b < 5; b++) for (let c = 0; c < 5; c
   }
 }
 assert.deepEqual(outcomes, { 1: 60, 2: 60, 5: 5 });
+assert.equal(BALL_ONE, 10); assert.equal(BALL_PAIR, 25); assert.equal(BALL_JACKPOT, 100);
+assert.equal(REEL_WEIGHTS[BALL_SYMBOL], 10); assert.equal(REEL_WEIGHTS.slice(0, 5).every(weight => weight === 18), true);
+for (const [reels, balls, payout, multiplier] of [[[5, 0, 1], 1, 10, 1], [[5, 5, 0], 2, 25, 2], [[5, 5, 5], 3, 100, 5], [[0, 0, 0], 0, 0, 5], [[0, 0, 5], 1, 10, 2]]) {
+  const events = [], machine = createSlotMachine({ random: choices(reels), onEvent: e => events.push(e) });
+  enter(machine, 50); machine.advance(1700);
+  const result = events.find(e => e.kind === 'slot-result');
+  assert.deepEqual(result.reels, reels);
+  assert.equal(result.balls, balls); assert.equal(result.ballPayout, payout); assert.equal(ballPayout(balls), payout);
+  assert.equal(result.multiplier, multiplier); assert.equal(machine.state.multiplier, multiplier);
+}
+let seed = 1, ballReels = 0;
+const roll = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 32; };
+for (let i = 0; i < 8000; i++) if (sampleReel(roll) === BALL_SYMBOL) ballReels++;
+assert.ok(Math.abs(ballReels / 8000 - 0.1) < 0.02, `ball rate ${ballReels / 8000}`);
+for (const [before, after, reel, multiplier, balls, payout] of [
+  [[0, 0, 1], [0, 0, 0], 2, 5, 0, 0],
+  [[0, 0, 0], [0, 0, 0], 0, 1, 0, 0],
+  [[0, 0, 1], [0, 0, 2], 2, 1, 0, 0],
+  [[0, 1, 2], [0, 1, 0], 2, 2, 0, 0],
+  [[5, 0, 1], [5, 5, 1], 1, 2, 2, 25],
+  [[5, 5, 5], [5, 5, 5], 0, 1, 0, 0],
+  [[0, 1, 2], [0, 1, 5], 2, 1, 1, 10],
+  [[5, 5, 0], [5, 5, 5], 2, 5, 3, 100],
+]) {
+  const pay = luckyReelPay(before, after, reel);
+  assert.equal(pay.multiplier, multiplier, `${before} reel ${reel}`);
+  assert.equal(pay.balls, balls);
+  assert.equal(pay.ballPayout, payout);
+  assert.equal(pay.paid, multiplier > 1 || payout > 0);
+}
 console.log('PASS: all 125 independent five-symbol outcomes, exact 50-entry trigger, staggered stops and precise 3/1-minute deadlines.');
 
 const queued = createSlotMachine({ random: choices([0,0,0,1,1,2,2,3,4]) });
@@ -55,7 +86,8 @@ function put(ball, x, y, vx = 0, vy = 0) {
   Matter.Body.setPosition(ball.body, { x, y }); Matter.Body.setVelocity(ball.body, { x: vx, y: vy });
 }
 function slot(game, ball = game.launch()) {
-  put(ball, 347, TABLE.scoreLine - 1, 0, 6);
+  // Column 0 is a scoring pocket on every layout and is never the center LUCKY slot.
+  put(ball, pocketCenter(game.slots, 0), TABLE.scoreLine - 1, 0, 6);
   for (let n = 0; n < 10 && game.balls.includes(ball); n++) game.step();
   assert.ok(!game.balls.includes(ball));
 }
@@ -112,3 +144,86 @@ for (let n = 0; n < 1100; n++) {
   if (excluded.star) assert.ok(Math.abs(excluded.star.x - SLOT_DISPLAY.x) >= SLOT_DISPLAY.width/2 + 26 || Math.abs(excluded.star.y - SLOT_DISPLAY.y) >= SLOT_DISPLAY.height/2 + 26, 'stars never hide behind the cabinet');
 }
 console.log('PASS: storage, returns, near misses and impacts give no progress; the fixed reel display clears the drum, bar and collectible stars.');
+
+const queuedLucky = createSlotMachine({ random: () => 0.1 });
+queuedLucky.recordLucky(0);
+queuedLucky.recordLucky(0);
+queuedLucky.recordLucky(0);
+assert.equal(queuedLucky.state.spins, 1, 'a spinning reel is not replaced by the next LUCKY hit');
+assert.equal(queuedLucky.state.luckyQueued, 2);
+assert.equal(queuedLucky.state.stopped.filter(stopped => !stopped).length, 1);
+queuedLucky.advance(SINGLE_REEL_MS - 1);
+assert.equal(queuedLucky.state.spins, 1);
+queuedLucky.advance(SINGLE_REEL_MS);
+assert.equal(queuedLucky.state.spinning, false);
+queuedLucky.advance(SINGLE_REEL_MS + SPIN_GAP_MS - 1);
+assert.equal(queuedLucky.state.spins, 1, 'the queue waits out the same gap as a full spin');
+queuedLucky.advance(SINGLE_REEL_MS + SPIN_GAP_MS);
+assert.equal(queuedLucky.state.spins, 2);
+assert.equal(queuedLucky.state.luckyQueued, 1);
+console.log('PASS: LUCKY hits that arrive during a spin wait in order and do not interrupt it.');
+
+const fullFirstDraws = [];
+const fullFirstScript = [reelUnit(0), reelUnit(0), reelUnit(1), 0.9, reelUnit(0)];
+let fullFirstIndex = 0;
+const fullFirst = createSlotMachine({
+  random: () => { const value = fullFirstScript[fullFirstIndex++]; fullFirstDraws.push(value); return value; },
+  onEvent: () => {},
+});
+enter(fullFirst, 50);
+fullFirst.recordLucky(0);
+assert.equal(fullFirstDraws.length, 3, 'a full spin still consumes exactly three samples');
+assert.equal(fullFirst.state.queued, 0);
+assert.equal(fullFirst.state.luckyQueued, 1);
+assert.equal(fullFirst.state.spinMode, 'all');
+fullFirst.advance(1700);
+assert.deepEqual(fullFirst.state.reels, [0, 0, 1]);
+assert.equal(fullFirstDraws.length, 3, 'the waiting LUCKY spin does not draw until it starts');
+fullFirst.advance(1700 + SPIN_GAP_MS);
+assert.equal(fullFirst.state.spinMode, 'reel');
+assert.equal(fullFirst.state.activeReel, pickReel(0.9));
+assert.deepEqual(fullFirst.state.stopped, [true, true, false]);
+assert.equal(fullFirstDraws.length, 5);
+console.log('PASS: the 50-entry spin stays ahead of a LUCKY spin and still draws three symbols.');
+
+function dropColumn(game, column) {
+  const ball = game.launch();
+  put(ball, pocketCenter(game.slots, column), TABLE.scoreLine - 1, 0, 6);
+  for (let n = 0; n < 10 && game.balls.includes(ball); n++) game.step();
+  assert.ok(!game.balls.includes(ball));
+  return ball;
+}
+const centerScores = [];
+const centerGame = createTable({ slots: 7, slotRandom: () => 0.9, onScore: event => centerScores.push(event) });
+dropColumn(centerGame, 0);
+assert.equal(centerGame.slotMachine.spins, 0, 'a side pocket does not turn a reel');
+dropColumn(centerGame, 3);
+assert.equal(centerScores.at(-1).globalMultiplier, 1, 'the LUCKY ball itself is scored before its reel stops');
+assert.equal(centerGame.slotMachine.spins, 1);
+assert.equal(centerGame.slotMachine.stopped.filter(stopped => !stopped).length, 1);
+assert.equal(centerGame.slotMachine.activeReel, pickReel(0.9));
+while (centerGame.slotMachine.spinning) centerGame.step();
+assert.equal(centerGame.slotMachine.multiplier, 1, 'a reel that matches nothing does not change the score multiplier');
+const nine = createTable({ slots: 9, slotRandom: () => 0.2 });
+dropColumn(nine, 3);
+dropColumn(nine, 5);
+assert.equal(nine.slotMachine.spins, 0, 'the ×10 pockets beside center are labeled LUCKY but do not spin a reel');
+dropColumn(nine, 4);
+assert.equal(nine.slotMachine.spins, 1);
+assert.equal(nine.slotMachine.stopped.filter(stopped => !stopped).length, 1);
+const paying = [];
+const payingGame = createTable({
+  slots: 7,
+  slotRandom() {
+    const value = [0.9, reelUnit(0)][paying.length];
+    paying.push(value);
+    return value;
+  },
+});
+dropColumn(payingGame, 3);
+while (payingGame.slotMachine.spinning) payingGame.step();
+assert.deepEqual(payingGame.slotMachine.reels, [0, 1, 0]);
+assert.equal(payingGame.slotMachine.multiplier, 2);
+dropColumn(payingGame, 0);
+assert.equal(payingGame.slotMachine.spins, 1, 'the side pocket still does not queue another reel');
+console.log('PASS: only the center LUCKY pocket turns one reel, and a changed matching symbol pays.');

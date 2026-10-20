@@ -14,8 +14,8 @@ for(let n=0;n<20;n++){
  const ball=storage.launch();ball.entered=true;Matter.Body.setPosition(ball.body,{x:100,y:606});Matter.Body.setVelocity(ball.body,{x:0,y:5});
  for(let i=0;i<30&&storage.balls.includes(ball);i++)storage.step();
 }
-assert.equal(storage.collector.remaining,40);storage.setEmissionPaused(true);
-for(let i=0;i<600;i++)storage.step();assert.equal(storage.stats.storageDrops,0);assert.equal(storage.collector.remaining,40,'earned drops remain stored during the secret wait');
+assert.equal(storage.collector.remaining,20);storage.setEmissionPaused(true);
+for(let i=0;i<600;i++)storage.step();assert.equal(storage.stats.storageDrops,0);assert.equal(storage.collector.remaining,20,'earned drops remain stored during the secret wait');
 storage.setEmissionPaused(false);
 for(let i=0;i<40;i++)storage.step();assert.ok(storage.stats.storageDrops>0&&storage.stats.storageDrops<4,'earned drops resume their original spacing');
 const held=createTable({random:()=>.5});

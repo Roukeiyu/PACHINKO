@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { connectedBlocks, BLOCK_CLEAR_TARGET, comboPoints, formatComboMultiplier, PAIR_POINT, PAIR_TARGET, PAIR_DURATION } from '../src/mini-games.js';
+import { connectedBlocks, BLOCK_CLEAR_TARGET, comboPoints, formatComboMultiplier, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS } from '../src/mini-games.js';
 const executablePath=process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined);
 const browser=await chromium.launch({executablePath,args:process.platform==='linux'?['--no-sandbox']:[]});
 await mkdir('test-results',{recursive:true});
@@ -16,7 +16,7 @@ try {
   body=body.replace('return { engine, balls',`window.__secretFixture={
    enter(waiting=1){for(let i=0;i<waiting;i++){const ball=launch(.6);ball.entered=true;ball.scoreFactor=1;Body.setPosition(ball.body,{x:350,y:700-i*30});Body.setVelocity(ball.body,{x:0,y:0});}const secret=launch();secret.entered=true;secret.scoreFactor=1;Body.setPosition(secret.body,holes[0]);Body.setVelocity(secret.body,{x:0,y:0});step();},
    holeNext(){const ball=balls[0];ball.entered=true;ball.scoreFactor=1;Body.setPosition(ball.body,holes[0]);Body.setVelocity(ball.body,{x:0,y:0});step();},
-   drain(){for(const ball of [...balls]){ball.entered=true;Body.setPosition(ball.body,{x:347,y:TABLE.scoreLine-1});Body.setVelocity(ball.body,{x:0,y:6});}step();}
+   drain(){for(const ball of [...balls]){ball.entered=true;Body.setPosition(ball.body,{x:90,y:TABLE.scoreLine-1});Body.setVelocity(ball.body,{x:0,y:6});}step();}
   };return { engine, balls`);await route.fulfill({response,body});
  });
  await page.goto(process.env.TEST_URL||'http://127.0.0.1:5173');await page.clock.runFor(50);
@@ -66,7 +66,11 @@ try {
  await page.screenshot({path:'test-results/mini-pairs-night-mobile.png'});await page.screenshot({path:'test-results/mini-pairs-preview.jpg',type:'jpeg',quality:55});
  for(const group of Object.values(groups).slice(1,PAIR_TARGET)){await cell(group[0].index);await cell(group[1].index);}
  const pairTotal=Array.from({length:PAIR_TARGET},(_,i)=>comboPoints(PAIR_POINT,i+1)).reduce((a,b)=>a+b);
- assert.equal((await mini()).status,'complete');assert.equal((await mini()).score,pairTotal);assert.ok(pairTotal>1000);assert.equal(await score(),initial+pairTotal);await back();
+ const pairScore=pairTotal+PAIR_CLEAR_BONUS;
+ assert.equal((await mini()).status,'complete');assert.equal((await mini()).score,pairScore);assert.equal((await mini()).clearBonus,PAIR_CLEAR_BONUS);assert.ok(pairTotal>1000);assert.equal(await score(),initial+pairScore);
+ assert.equal(await page.locator('#mini-round').textContent(),`${PAIR_TARGET}/${PAIR_TARGET} 对`);
+ assert.equal(await page.locator('#mini-result-math').textContent(),`全部配对 +${PAIR_CLEAR_BONUS}`);
+ await back();
  await start('blocks');assert.equal(await page.locator('#mini-grid button').count(),100);initial=await score();
  const colors=await page.evaluate(()=>[0,1,2,3].map(i=>{const el=document.querySelector(`.mini-color-${i}`),c=document.createElement('canvas').getContext('2d');c.fillStyle=getComputedStyle(el).backgroundColor;c.fillRect(0,0,1,1);return [...c.getImageData(0,0,1,1).data].slice(0,3);}));
  for(let i=0;i<4;i++)for(let j=i+1;j<4;j++)assert.ok(Math.max(...colors[i].map((v,k)=>Math.abs(v-colors[j][k])))>=10,'night puzzle colors remain visually distinct');
@@ -76,7 +80,7 @@ try {
  const blocks=await mini();
  assert.equal(blocks.status,'complete','50 cleared blocks end 消消乐');
  assert.equal(blocks.removed,BLOCK_CLEAR_TARGET);
- assert.equal(blocks.baseScore,BLOCK_CLEAR_TARGET*10);
+ assert.ok(blocks.baseScore>=BLOCK_CLEAR_TARGET*10);
  assert.equal(blocks.score,Math.round(blocks.baseScore*blocks.bestMultiplier));
  assert.equal(await page.locator('#mini-round').textContent(),`已消除 ${BLOCK_CLEAR_TARGET}/${BLOCK_CLEAR_TARGET}`);
  assert.equal(await score(),initial+blocks.score);
@@ -156,7 +160,7 @@ try {
  }
  const mid=await mini();
  const raw=mid.score;
- if(kind==='blocks'){assert.equal(mid.status,'complete');assert.equal(mid.removed,BLOCK_CLEAR_TARGET);assert.equal(mid.baseScore,500);}
+ if(kind==='blocks'){assert.equal(mid.status,'complete');assert.equal(mid.removed,BLOCK_CLEAR_TARGET);assert.ok(mid.baseScore>=500);}
  else assert.ok(raw>=1000,'pairs and moles can still pass 1000');
  assert.equal(await page.locator('#mini-score').textContent(),await page.evaluate(n=>n.toLocaleString(),raw));
  const alreadyPaid=mid.status!=='playing';

@@ -12,18 +12,22 @@ export const COMBO_WINDOW_MS = 500;
 export const COMBO_MULTIPLIER_STEP = 0.5;
 // Cascade loop guard only. It is not a combo cap.
 export const MAX_BLOCK_CHAINS = 8;
+// Opening boards never contain a connected region this large. A fresh tap
+// therefore cannot reach the 50-block cap by itself.
+export const BLOCK_GROUP_LIMIT = 12;
 // Light hit shake, the same 1.5 step used for light reward shakes. Charge camera shake stays separate.
 export const MINI_HIT_SHAKE = 1.5;
 export const MINI_HIT_MS = 160;
-// 8×8 is 32 unique pairs. The round ends at 20 matches or 50 seconds.
-// Base 20 with the shared combo makes a perfect 20-streak worth 2300.
+// 8×8 is 32 unique pairs. The round ends when every pair is gone, or at 30 seconds.
+// Base 20 with the shared combo makes a perfect 32-streak worth 5600, plus the clear bonus.
 export const PAIR_POINT = 20;
-export const PAIR_TARGET = 20;
-export const PAIR_DURATION = 50000;
+export const PAIR_TARGET = 32;
+export const PAIR_DURATION = 30000;
+export const PAIR_CLEAR_BONUS = 200;
 export const MINI_GAMES = Object.freeze({
-  pairs: { title: '对对碰', rule: `64 张牌排成 8×8，32 种图案都摊开。点中相同的两张就会消除。配成 ${PAIR_TARGET} 对，或玩满 ${PAIR_DURATION / 1000} 秒，先到先结算。每对 ${PAIR_POINT} 分。连续配对会累加连击，点错则连击重置。`, columns: 8, rows: 8 },
-  blocks: { title: '消消乐', rule: `点击上下左右相连的同色方块，至少 3 块才能消除。每块 ${BLOCK_POINT} 分。累计消除 ${BLOCK_CLEAR_TARGET} 块，或玩满 ${MINI_DURATION / 1000} 秒，先到先结算。最后一次超过 ${BLOCK_CLEAR_TARGET} 块时只算到 ${BLOCK_CLEAR_TARGET} 块，基础分最多 ${BLOCK_CLEAR_TARGET * BLOCK_POINT}。${COMBO_WINDOW_MS / 1000} 秒内再点出消除，连击 +1；超过 ${COMBO_WINDOW_MS / 1000} 秒，或点了消不掉的地方，连击归零。连击和倍率没有上限。掉落连锁只加基础分，不增加连击。结束时按本局最高连击一次性乘算。`, columns: 10, rows: 10 },
-  moles: { title: '打地鼠', rule: '点击地鼠，白菜留着！每只 25 分，共 10 轮、40 只；每轮最多 3 秒，打完提前换轮。连续打中会累加连击；打到白菜、空洞，或这一轮有地鼠漏掉，连击重置。', columns: 4, rows: 4 },
+  pairs: { title: '对对碰', rule: `64 张牌排成 8×8，32 种图案都摊开。点中相同的两张就会消除。配完全部 ${PAIR_TARGET} 对，或玩满 ${PAIR_DURATION / 1000} 秒，先到先结算。每对 ${PAIR_POINT} 分。连续配对会累加连击，点错则连击重置。${PAIR_DURATION / 1000} 秒内配完，额外 +${PAIR_CLEAR_BONUS}。`, columns: 8, rows: 8 },
+  blocks: { title: '消消乐', rule: `点击上下左右相连的同色方块，至少 3 块才能消除。每块 ${BLOCK_POINT} 分。只有自己点掉的块计入 ${BLOCK_CLEAR_TARGET} 块；掉落连锁照样加基础分，但不计入这 ${BLOCK_CLEAR_TARGET} 块，也不会因此结束。开局同色相连不超过 ${BLOCK_GROUP_LIMIT} 块。点掉的块累计到 ${BLOCK_CLEAR_TARGET}，或玩满 ${MINI_DURATION / 1000} 秒，先到先结算。一次点击超过剩余块数时，只把点掉的块算到 ${BLOCK_CLEAR_TARGET}。${COMBO_WINDOW_MS / 1000} 秒内再点出消除，连击 +1；超过 ${COMBO_WINDOW_MS / 1000} 秒，或点了消不掉的地方，连击归零。连击和倍率没有上限。掉落连锁不加连击。结束时按本局最高连击一次性乘算。`, columns: 10, rows: 10 },
+  moles: { title: '打地鼠', rule: '点击地鼠，白菜留着！每只 25 分，共 10 轮、40 只；每轮最多 3 秒，打完提前换轮。不是地鼠的格子都是白菜。连续打中会累加连击；打到白菜，或这一轮有地鼠漏掉，连击重置。', columns: 4, rows: 4 },
 });
 export const BLOCK_COLORS = Object.freeze(['红','蓝','黄','绿']);
 export const BLOCK_SYMBOLS = Object.freeze(['♥','●','✦','◆']);
@@ -56,7 +60,7 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
   let nextId = 0, fxId = 0;
   const tile = (extra = {}) => ({ id: nextId++, color: integer(random,0,3), fall: 0, spawned: false, ...extra });
   const roundMs = kind === 'pairs' ? PAIR_DURATION : MINI_DURATION;
-  const state = { kind, status: 'playing', score: 0, combo: 0, multiplier: 1, bestCombo: 0, bestMultiplier: 1, baseScore: 0, lastClearAt: null, payoutSettled: false, startedAt: now, deadline: now + roundMs, revision: 0, selected: null, removed: 0, hit: 0, wave: 0, waveUntil: 0, board: [], molePlan: [], message: '', fx: null };
+  const state = { kind, status: 'playing', score: 0, combo: 0, multiplier: 1, bestCombo: 0, bestMultiplier: 1, baseScore: 0, lastClearAt: null, payoutSettled: false, clearBonus: 0, startedAt: now, deadline: now + roundMs, revision: 0, selected: null, removed: 0, hit: 0, wave: 0, waveUntil: 0, board: [], molePlan: [], message: '', fx: null };
   function ensurePlayable() {
     if (state.board.some((_,i) => connectedBlocks(state.board,i).length >= 3)) return;
     const color = integer(random,0,3);
@@ -77,12 +81,44 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
     if (missMoles()) { state.combo = 0; state.multiplier = 1; }
     if (state.wave === 10) { finish('complete'); return; }
     const count = state.molePlan[state.wave++];
-    const cabbage = integer(random,2,Math.min(6,16-count));
-    state.board = shuffle([...Array(count).fill('mole'),...Array(cabbage).fill('cabbage'),...Array(16-count-cabbage).fill('empty')],random).map(type=>({ id:nextId++,type,hit:false }));
+    state.board = shuffle([...Array(count).fill('mole'), ...Array(16 - count).fill('cabbage')], random).map(type => ({ id: nextId++, type, hit: false }));
     state.waveUntil = at + 3000; state.revision++;
   }
   if (kind === 'pairs') state.board = shuffle(PAIR_ICON_LIST.flatMap((icon, pair) => [{ id: nextId++, pair, icon: icon.id, name: icon.name }, { id: nextId++, pair, icon: icon.id, name: icon.name }]), random);
-  if (kind === 'blocks') { state.board = Array.from({length:100},()=>tile()); ensurePlayable(); }
+  function largestGroup() {
+    let best = 0; const seen = new Set();
+    for (let i = 0; i < state.board.length; i++) {
+      if (seen.has(i) || !state.board[i]) continue;
+      const group = connectedBlocks(state.board, i);
+      group.forEach(n => seen.add(n));
+      if (group.length > best) best = group.length;
+    }
+    return best;
+  }
+  function breakOversized() {
+    for (let guard = 0; guard < 80 && largestGroup() > BLOCK_GROUP_LIMIT; guard++) {
+      const seen = new Set();
+      let oversized = null;
+      for (let i = 0; i < 100; i++) {
+        if (seen.has(i)) continue;
+        const group = connectedBlocks(state.board, i);
+        group.forEach(n => seen.add(n));
+        if (group.length > BLOCK_GROUP_LIMIT) { oversized = group; break; }
+      }
+      if (!oversized) break;
+      const next = (state.board[oversized[0]].color + 1) % 4;
+      for (let i = 0; i < oversized.length; i += 2) state.board[oversized[i]] = tile({ color: next });
+    }
+  }
+  if (kind === 'blocks') {
+    for (let attempt = 0; attempt < 40; attempt++) {
+      state.board = Array.from({ length: 100 }, () => tile());
+      if (largestGroup() <= BLOCK_GROUP_LIMIT) break;
+    }
+    breakOversized();
+    ensurePlayable();
+    breakOversized();
+  }
   if (kind === 'moles') {
     let remaining=40;
     for (let round=0;round<10;round++) {
@@ -155,19 +191,18 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
       if (group.length < 3) { breakCombo('至少 3 块同色相连才能消除'); return 0; }
       const cleared = [];
       let counted = 0;
-      const take = (cells) => {
-        const room = BLOCK_CLEAR_TARGET - state.removed;
+      const scoreCells = (cells, countTowardCap) => {
+        const room = countTowardCap ? BLOCK_CLEAR_TARGET - state.removed : cells.length;
         const used = Math.max(0, Math.min(cells.length, room));
-        state.removed += used;
-        counted += used;
+        if (countTowardCap) { state.removed += used; counted += used; }
         const gained = used * BLOCK_POINT;
         points += gained;
         state.score += gained;
         cleared.push(...cells);
         collapse(new Set(cells));
-        return state.removed >= BLOCK_CLEAR_TARGET;
+        return countTowardCap && state.removed >= BLOCK_CLEAR_TARGET;
       };
-      let capped = take(group);
+      let capped = scoreCells(group, true);
       const continuing = state.combo > 0 && state.lastClearAt != null && at - state.lastClearAt <= COMBO_WINDOW_MS;
       state.combo = continuing ? state.combo + 1 : 1;
       state.lastClearAt = at;
@@ -180,8 +215,7 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
           const chain = chainGroup();
           if (!chain) break;
           chains += 1;
-          capped = take(chain);
-          if (capped) break;
+          scoreCells(chain, false);
         }
       }
       if (!capped) ensurePlayable();
@@ -192,7 +226,7 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
       const cell = state.board[index];
       if (cell.type !== 'mole' || cell.hit) {
         if (cell.hit) { state.message = '这只已经打过了'; state.revision++; return 0; }
-        breakCombo(cell.type === 'cabbage' ? '白菜不计分，连击重置' : '打空了，连击重置');
+        breakCombo('白菜不计分，连击重置');
         return 0;
       }
       cell.hit = true; state.hit++; state.combo += 1; state.multiplier = comboMultiplier(state.combo);
@@ -202,7 +236,12 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
     }
     state.revision++;
     if (kind === 'blocks' && state.removed >= BLOCK_CLEAR_TARGET) finish('complete');
-    if (kind === 'pairs' && state.removed >= PAIR_TARGET * 2) finish('complete');
+    if (kind === 'pairs' && state.removed >= PAIR_TARGET * 2) {
+      state.clearBonus = PAIR_CLEAR_BONUS;
+      state.score += PAIR_CLEAR_BONUS;
+      state.message = `全部配对！额外 +${PAIR_CLEAR_BONUS}`;
+      finish('complete');
+    }
     if (kind === 'moles' && state.board.every(c=>c.type !== 'mole'||c.hit)) nextWave(at);
     return points;
   }

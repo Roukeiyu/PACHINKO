@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_POINT, COMBO_WINDOW_MS, COMBO_MULTIPLIER_STEP, comboMultiplier, comboPoints, connectedBlocks, randomMiniGame, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_ICON_LIST } from '../src/mini-games.js';
+import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_POINT, BLOCK_GROUP_LIMIT, COMBO_WINDOW_MS, COMBO_MULTIPLIER_STEP, comboMultiplier, comboPoints, connectedBlocks, randomMiniGame, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS, PAIR_ICON_LIST } from '../src/mini-games.js';
 import { secretPayout } from '../src/secret-wave.js';
 assert.equal(COMBO_MULTIPLIER_STEP,.5);
 assert.deepEqual([0,1,2,3,4].map(comboMultiplier),[1,1,1.5,2,2.5]);
 assert.equal(comboPoints(25,2),38);
 const seeded = seed => () => { seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/2**32; };
 assert.equal(MINI_DURATION,30000);
-assert.equal(PAIR_POINT,20);assert.equal(PAIR_TARGET,20);assert.equal(PAIR_DURATION,50000);
+assert.equal(PAIR_POINT,20);assert.equal(PAIR_TARGET,32);assert.equal(PAIR_DURATION,30000);assert.equal(PAIR_CLEAR_BONUS,200);assert.equal(BLOCK_GROUP_LIMIT,12);
 assert.equal(PAIR_ICON_LIST.length,32);assert.equal(new Set(PAIR_ICON_LIST.map(icon=>icon.id)).size,32);
 assert.deepEqual(Object.values(MINI_GAMES).map(d=>[d.columns,d.rows]),[[8,8],[10,10],[4,4]]);
 assert.deepEqual([0,.4,.9].map(r=>randomMiniGame(()=>r)),['pairs','blocks','moles']);
@@ -31,12 +31,12 @@ for(let seed=0;seed<25;seed++) {
     assert.equal(pairs.state.board[group[0].index],null);
   }
   const pairTotal=Array.from({length:PAIR_TARGET},(_,i)=>comboPoints(PAIR_POINT,i+1)).reduce((a,b)=>a+b);
-  assert.equal(pairTotal,2300);
-  assert.equal(pairs.state.score,pairTotal);assert.equal(pairs.state.status,'complete');
+  assert.equal(pairTotal,5600);
+  assert.equal(pairs.state.score,pairTotal+PAIR_CLEAR_BONUS);assert.equal(pairs.state.clearBonus,PAIR_CLEAR_BONUS);assert.equal(pairs.state.status,'complete');
   assert.equal(pairs.state.removed,PAIR_TARGET*2);
-  assert.equal(pairs.state.board.filter(Boolean).length,64-PAIR_TARGET*2);
+  assert.equal(pairs.state.board.filter(Boolean).length,0);
   assert.ok(pairTotal>1000,'matched pairs are not capped');
-  assert.equal(pairs.select(ordered[PAIR_TARGET][0].index,1001),0);assert.equal(pairs.state.score,pairTotal);
+  assert.equal(pairs.select(0,1001),0);assert.equal(pairs.state.score,pairTotal+PAIR_CLEAR_BONUS);
   const blocks=createMiniGame('blocks',{random:seeded(seed),now:100});
   let moves=0;
   while(blocks.state.status==='playing'&&moves++<100) {
@@ -45,8 +45,11 @@ for(let seed=0;seed<25;seed++) {
     const before=blocks.snapshot(),group=connectedBlocks(before.board,index);
     const room=BLOCK_CLEAR_TARGET-before.removed;
     const points=blocks.select(index,1000+moves);
-    assert.ok(points>=Math.min(group.length,room)*BLOCK_POINT);
-    assert.ok(points<=room*BLOCK_POINT);
+    const counted=Math.min(group.length,room);
+    assert.ok(points>=counted*BLOCK_POINT);
+    assert.equal(points%BLOCK_POINT,0);
+    assert.equal(blocks.state.removed,Math.min(BLOCK_CLEAR_TARGET,before.removed+counted));
+    if(blocks.state.status==='complete') assert.equal(points,counted*BLOCK_POINT,'the click that fills the cap does not keep chaining');
     assert.ok(blocks.state.removed<=BLOCK_CLEAR_TARGET);
     if(blocks.state.status==='playing') assert.equal(blocks.state.score,before.score+points);
     assert.equal(blocks.state.board.length,100);
@@ -54,7 +57,8 @@ for(let seed=0;seed<25;seed++) {
   }
   assert.equal(blocks.state.status,'complete','50 cleared blocks end the round before the timer');
   assert.equal(blocks.state.removed,BLOCK_CLEAR_TARGET);
-  assert.equal(blocks.state.baseScore,BLOCK_CLEAR_TARGET*BLOCK_POINT);
+  assert.ok(blocks.state.baseScore>=BLOCK_CLEAR_TARGET*BLOCK_POINT);
+  assert.equal(blocks.state.baseScore%BLOCK_POINT,0);
   assert.equal(blocks.state.score,Math.round(blocks.state.baseScore*blocks.state.bestMultiplier));
   const moles=createMiniGame('moles',{random:seeded(seed),now:100});
   assert.equal(moles.state.molePlan.length,10);assert.equal(moles.state.molePlan.reduce((a,b)=>a+b),40);
@@ -62,6 +66,9 @@ for(let seed=0;seed<25;seed++) {
   let time=101;
   for(let wave=1;wave<=10;wave++) {
     assert.equal(moles.state.wave,wave);
+    assert.equal(moles.state.board.every(cell=>cell.type==='mole'||cell.type==='cabbage'),true);
+    assert.equal(moles.state.board.filter(cell=>cell.type==='empty').length,0);
+    assert.equal(moles.state.board.filter(cell=>cell.type==='cabbage').length,16-moles.state.board.filter(cell=>cell.type==='mole').length);
     const cabbage=moles.state.board.findIndex(c=>c.type==='cabbage');
     assert.equal(moles.select(cabbage,time),0);
     assert.equal(moles.state.combo,0,'a cabbage swing breaks the streak');
@@ -145,7 +152,7 @@ stacked.tick(stacked.state.deadline);
 assert.equal(stacked.state.score,Math.round(1020*comboMultiplier(1)));
 assert.equal(secretPayout(stacked.state.score,2),stacked.state.score*2,'secret ×2 applies after the end multiplier');
 const lasting=createMiniGame('pairs',{random:seeded(1),now:0});
-lasting.tick(MINI_DURATION);assert.equal(lasting.state.status,'playing','pairs keep going after the 30 second games have ended');
+lasting.tick(PAIR_DURATION-1);assert.equal(lasting.state.status,'playing','pairs stay open until the 30 second mark');
 lasting.tick(PAIR_DURATION);assert.equal(lasting.state.status,'timeout');
 const missed=createMiniGame('pairs',{random:()=>.2,now:0});
 const mate=missed.state.board.findIndex((cell,index)=>index>0&&cell.pair===missed.state.board[0].pair);
@@ -159,7 +166,8 @@ const paint=(x,y,color)=>{ chain.state.board[y*10+x].color=color; };
 paint(0,6,1);paint(0,7,1);paint(0,8,2);paint(0,9,1);paint(1,8,2);paint(2,8,2);
 const chained=chain.select(80,1);
 assert.equal(chain.state.combo,1,'a drop chain adds base points and does not raise the click combo');
-assert.equal(chained,chain.state.removed*10);
+assert.ok(chained>chain.state.removed*BLOCK_POINT,'cascade points stay outside the click count');
+assert.equal(chain.state.status,'playing');
 assert.ok(chain.state.fx.chains>=1);
 const gravity=createMiniGame('blocks',{random:()=>0,now:0});
 gravity.state.board.forEach((cell,index)=>{ cell.color=(index%10+Math.floor(index/10))%4; cell.fall=0; cell.spawned=false; });
@@ -172,4 +180,34 @@ for (let x=0;x<10;x++) {
   const after=gravity.state.board.filter((cell,index)=>index%10===x).slice(10-kept.length).map(cell=>cell.id);
   assert.deepEqual(after,kept,'gravity keeps the remaining column in its original order');
 }
+function maxGroup(board) {
+  let best = 0; const seen = new Set();
+  for (let i = 0; i < board.length; i++) {
+    if (!board[i] || seen.has(i)) continue;
+    const group = connectedBlocks(board, i);
+    group.forEach(n => seen.add(n));
+    best = Math.max(best, group.length);
+  }
+  return best;
+}
+for (let seed = 0; seed < 30; seed++) {
+  const fresh = createMiniGame('blocks', { random: seeded(300 + seed), now: 0 });
+  assert.ok(maxGroup(fresh.state.board) <= BLOCK_GROUP_LIMIT, 'opening boards do not contain a huge same-color region');
+  const index = fresh.state.board.findIndex((_, i) => connectedBlocks(fresh.state.board, i).length >= 3);
+  fresh.select(index, 1);
+  assert.equal(fresh.state.status, 'playing', 'one opening click cannot finish 消消乐');
+  assert.ok(fresh.state.removed <= BLOCK_GROUP_LIMIT);
+}
+const flood = createMiniGame('blocks', { random: () => 0, now: 0 });
+flood.state.board.forEach(cell => { cell.color = 0; cell.fall = 0; cell.spawned = false; });
+for (let x = 0; x < 3; x++) flood.state.board[90 + x].color = 1;
+const clicked = connectedBlocks(flood.state.board, 90).length;
+const gained = flood.select(90, 1);
+assert.equal(flood.state.status, 'playing', 'one click plus its cascade cannot end the round');
+assert.equal(flood.state.removed, clicked, 'only the clicked blocks count toward the cap');
+assert.ok(gained > clicked * BLOCK_POINT, 'the cascade still adds base score');
+assert.equal(flood.state.combo, 1);
+assert.equal(MINI_GAMES.moles.rule.includes('空洞'), false);
+assert.equal(MINI_GAMES.pairs.rule.includes('32'), true);
+assert.equal(MINI_GAMES.blocks.rule.includes('掉落连锁照样加基础分'), true);
 console.log('PASS: combo multipliers, broken streaks, a 50-block cap, timer finish, drop chains, gravity, and secret ×2 on the full total.');

@@ -39,7 +39,7 @@ async function setup(fallback = false, viewport = { width: 1440, height: 1180 })
         Body.setPosition(ball.body, {x:hole.x-47,y:hole.y-2}); Body.setVelocity(ball.body,{x:5,y:-1});
         for(let i=0;i<45 && balls.includes(ball);i++) step();
       }, drain() {
-        for(const ball of [...balls]) {ball.entered=true;Body.setPosition(ball.body,{x:347,y:TABLE.scoreLine-1});Body.setVelocity(ball.body,{x:0,y:6});}step();
+        for(const ball of [...balls]) {ball.entered=true;Body.setPosition(ball.body,{x:90,y:TABLE.scoreLine-1});Body.setVelocity(ball.body,{x:0,y:6});}step();
       }
     }; return { engine, balls`);
     await route.fulfill({ response, body });

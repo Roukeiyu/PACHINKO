@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve, relative, extname } from 'node:path';
 import { chromium } from 'playwright';
-import { comboPoints, PAIR_POINT, PAIR_TARGET } from '../src/mini-games.js';
+import { comboPoints, PAIR_POINT, PAIR_TARGET, PAIR_CLEAR_BONUS } from '../src/mini-games.js';
 
 const root = resolve('dist');
 const prefix = '/PACHINKO/';
@@ -100,9 +100,10 @@ try {
     let matched=0;
     for(const group of pairs.values()) { if(matched>=target) break; matched+=1; for(const button of group) button.click(); }
   }, PAIR_TARGET);
-  const pairTotal=Array.from({length:PAIR_TARGET},(_,i)=>comboPoints(PAIR_POINT,i+1)).reduce((a,b)=>a+b);
+  const pairTotal=Array.from({length:PAIR_TARGET},(_,i)=>comboPoints(PAIR_POINT,i+1)).reduce((a,b)=>a+b)+PAIR_CLEAR_BONUS;
   assert.equal(await page.locator('#mini-score').textContent(), await page.evaluate(n=>n.toLocaleString(), pairTotal));
   assert.equal(await page.locator('#mini-result').isVisible(),true);
+  assert.equal(await page.locator('#mini-result-math').textContent(), `全部配对 +${PAIR_CLEAR_BONUS}`);
   assert.equal(Number((await page.locator('#score').textContent()).replaceAll(',','')),Number(beforeMini.replaceAll(',',''))+pairTotal);
   await page.locator('#mini-return').click();
   assert.equal(await page.locator('#settings').evaluate(el=>el.open),true);

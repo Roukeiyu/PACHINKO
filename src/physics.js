@@ -249,7 +249,8 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     collector.stored.push(ball.scoreFactor); stats.absorbed++; collector.glow = 1;
     onSurprise({ kind: 'store', x: collector.x, y: collector.y, count: collector.stored.length, capacity: collector.capacity, ballId: ball.id, scoreFactor: ball.scoreFactor });
     if (collector.stored.length < collector.capacity) return;
-    const factors = collector.stored.splice(0).flatMap(factor => [factor, factor]);
+    // Stored balls are already in the player's hand, so the release matches them 1:1.
+    const factors = collector.stored.splice(0);
     const columns = shuffledColumns(factors.length);
     let due = Math.max(clock + 250, (pendingDrops.at(-1)?.due ?? clock) + 100);
     factors.forEach((scoreFactor, i) => {
@@ -453,7 +454,10 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
           const multiplier = slotMultipliers(slots)[region.column];
           const lucky = region.column === (slots - 1) / 2;
           remove(ball, i);
+          // Points use the multiplier already on the board. The reel this
+          // center ball starts cannot change that score.
           settleScore({ kind: 'slot', column: region.column, multiplier, lucky, basePoints: multiplier * 10, x: (region.x0 + region.x1) / 2, y: TABLE.scoreLine }, ball);
+          if (lucky) slotMachine.recordLucky(clock);
           continue;
         }
         if (region?.kind === 'drain') {
