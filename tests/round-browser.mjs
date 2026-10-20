@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { existsSync } from 'node:fs';
-import { START_BALLS, BURST_COST } from '../src/round.js';
+import { START_BALLS, BURST_COST, SECRET_BALLS, MINI_BALLS_MIN } from '../src/round.js';
+import { PAIR_DURATION } from '../src/mini-games.js';
 import { BURST_READY_AT } from '../src/charge.js';
 
 const executablePath = process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
@@ -32,7 +33,7 @@ try {
     return { ok, before, after: window.__ponpon.available, score: window.__ponpon.score - score, drains: window.__ponpon.stats.drains };
   });
   assert.equal(spent.ok, true);
-  assert.equal(spent.after - spent.before, 2, 'a ×2 pocket returns 2 balls');
+  assert.equal(spent.after, spent.before, 'a scoring pocket does not return a ball');
   assert.equal(spent.score, 20);
   const missed = await page.evaluate(() => {
     const before = window.__ponpon.available;
@@ -78,12 +79,62 @@ try {
   assert.equal(await page.locator('#best').textContent(), best, 'a new round keeps the saved record');
   assert.equal(await page.locator('#settlement').evaluate(el => el.open), false);
 
-  await page.evaluate(() => { window.__ponpon.setStock(64); window.__ponpon.grant(4321); });
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('ponpon-stale-run-applied')) return;
+    sessionStorage.setItem('ponpon-stale-run-applied', '1');
+    const saved = JSON.parse(localStorage.getItem('ponpon-settings') || '{}');
+    saved.keepProgress = false;
+    saved.run = { score: 9999, balls: 7, slots: 9, over: true, launches: 12, bestCombo: 4, bestSlot: 10, runId: 'stale-run' };
+    localStorage.setItem('ponpon-settings', JSON.stringify(saved));
+  });
   await page.reload();
   await page.clock.runFor(40);
-  assert.equal(await page.evaluate(() => window.__ponpon.available), 64, 'refresh restores the ball stock');
-  assert.equal(await page.evaluate(() => window.__ponpon.score), 4321, 'refresh restores the score');
+  assert.equal(await page.evaluate(() => window.__ponpon.keepProgress), false);
+  assert.equal(await page.evaluate(() => window.__ponpon.available), START_BALLS, 'refresh with keep-progress off starts a fresh stock');
+  assert.equal(await page.evaluate(() => window.__ponpon.score), 0, 'refresh with keep-progress off starts a fresh score');
+  assert.equal(await page.evaluate(() => window.__ponpon.slots), 5, 'refresh with keep-progress off returns to 5 slots');
+  assert.equal(await page.evaluate(() => window.__ponpon.over), false);
+  assert.equal(await page.locator('#settlement').evaluate(el => el.open), false, 'an ended run is not restored when keep-progress is off');
+  assert.equal(await page.locator('#mini-game').evaluate(el => el.open), false, 'a refresh does not restore an in-progress mini-game');
+
+  await page.evaluate(() => { window.__ponpon.setStock(64); window.__ponpon.grant(4321); });
+  await page.locator('#settings-button').click();
+  for (let i = 0; i < 3; i++) await page.locator('#gm-dot').click();
+  assert.equal(await page.locator('#keep-progress').isChecked(), false, 'keep-progress defaults off');
+  await page.locator('#keep-progress').check();
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('ponpon-settings')).run.score), 4321, 'turning keep-progress on saves the current run');
+  await page.keyboard.press('Escape');
+  await page.reload();
+  await page.clock.runFor(40);
+  assert.equal(await page.evaluate(() => window.__ponpon.available), 64, 'keep-progress restores the ball stock');
+  assert.equal(await page.evaluate(() => window.__ponpon.score), 4321, 'keep-progress restores the score');
   assert.equal(await page.evaluate(() => window.__ponpon.slots), 5, '4321 has not unlocked 7 slots');
+  assert.equal(await page.evaluate(() => window.__ponpon.keepProgress), true);
+  const beforeSecret = await page.evaluate(() => window.__ponpon.available);
+  assert.equal(await page.evaluate(() => window.__ponpon.dropHole()), true);
+  await page.clock.runFor(80);
+  assert.equal(await page.locator('#mini-game').evaluate(el => el.open), true);
+  await page.clock.fastForward(PAIR_DURATION + 2000);
+  await page.clock.runFor(40);
+  assert.equal(await page.locator('#mini-result-balls').textContent(), `+${SECRET_BALLS} 球`);
+  const afterSecret = await page.evaluate(() => window.__ponpon.available);
+  assert.ok(afterSecret >= beforeSecret + SECRET_BALLS + MINI_BALLS_MIN, 'a finished secret visit pays its balls');
+  await page.locator('#mini-return').click();
+  await page.clock.runFor(40);
+  assert.equal(await page.locator('#toast').textContent(), `+${SECRET_BALLS} 球`);
+
+  await page.locator('#settings-button').click();
+  for (let i = 0; i < 3; i++) await page.locator('#gm-dot').click();
+  await page.locator('#keep-progress').uncheck();
+  const cleared = await page.evaluate(() => JSON.parse(localStorage.getItem('ponpon-settings')));
+  assert.equal(cleared.keepProgress, false, 'turning keep-progress off is saved');
+  assert.equal(Object.hasOwn(cleared, 'run'), false, 'turning keep-progress off clears the saved run');
+  await page.reload();
+  await page.clock.runFor(40);
+  assert.equal(await page.evaluate(() => window.__ponpon.available), START_BALLS, 'the next refresh starts fresh after the toggle is switched off');
+  assert.equal(await page.evaluate(() => window.__ponpon.score), 0);
+  assert.equal(await page.evaluate(() => window.__ponpon.slots), 5);
+  assert.equal(await page.locator('#settlement').evaluate(el => el.open), false);
   assert.deepEqual(errors, []);
-  console.log('PASS: ball spend and return, drains, blocked game over, restart, and refresh resume.');
+  console.log('PASS: ball spend and return, drains, blocked game over, restart, and keep-progress refresh.');
 } finally { await browser.close(); }

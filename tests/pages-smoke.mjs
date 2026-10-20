@@ -65,6 +65,7 @@ try {
     sessionStorage.setItem('ponpon-pages-resume-applied', '1');
     const saved = JSON.parse(localStorage.getItem('ponpon-settings') || '{}');
     saved.slots = 9;
+    saved.keepProgress = true;
     saved.run = { ...(saved.run || {}), slots: 9, score: 1500, balls: 42, over: false };
     localStorage.setItem('ponpon-settings', JSON.stringify(saved));
   });

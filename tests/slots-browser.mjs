@@ -44,8 +44,9 @@ try {
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('ponpon-settings')).slots), 9);
   await page.reload();
   await page.clock.runFor(50);
-  assert.equal(await page.evaluate(() => window.__ponpon.slots), 9, 'refresh continues this round at 9 slots');
-  assert.equal(await page.evaluate(() => window.__ponpon.score), SLOT_UNLOCK_9, 'refresh keeps this round’s score');
+  assert.equal(await page.evaluate(() => window.__ponpon.slots), 5, 'a refresh starts the next round at 5 slots');
+  assert.equal(await page.evaluate(() => window.__ponpon.score), 0, 'a refresh starts the next round at score 0');
+  assert.equal(await page.evaluate(() => window.__ponpon.keepProgress), false);
   assert.deepEqual(errors, []);
-  console.log('PASS: score thresholds upgrade 5→7→9, a live ball waits, vibration and toast fire, and the unlock survives reload.');
+  console.log('PASS: score thresholds upgrade 5→7→9, a live ball waits, vibration and toast fire, and a refresh starts a fresh round.');
 } finally { await browser.close(); }

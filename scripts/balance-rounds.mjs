@@ -3,7 +3,7 @@
 import { createTable, STEP } from '../src/physics.js';
 import { slotsForScore } from '../src/slots.js';
 import {
-  START_BALLS, BURST_COST, SECRET_BALLS, LUCKY_BALLS, DRUM_RANDOM_BALLS, DRUM_ENLARGE_BALLS, DRUM_CLOCK_BALLS,
+  START_BALLS, BURST_COST, SECRET_BALLS, DRUM_RANDOM_BALLS, DRUM_ENLARGE_BALLS, DRUM_CLOCK_BALLS,
   miniGameBalls, MINI_BALLS_FULL_SCORE,
 } from '../src/round.js';
 
@@ -33,12 +33,9 @@ function playRound(seed) {
     slotRandom: seeded(seed ^ 0x85ebca6b),
     onScore(result) {
       score += result.points;
-      if (result.kind === 'slot') {
-        stock += result.multiplier + (result.lucky ? LUCKY_BALLS : 0);
-        bestSlot = Math.max(bestSlot, result.multiplier);
-      }
+      if (result.kind === 'slot') bestSlot = Math.max(bestSlot, result.multiplier);
       if (result.kind === 'jackpot') {
-        stock += SECRET_BALLS + game.setEmissionPaused(true);
+        stock += game.setEmissionPaused(true);
         jackpots += 1;
         secretWait = true;
         miniAwarded = false;
@@ -62,7 +59,7 @@ function playRound(seed) {
     }
     if (secretWait && idle && !miniAwarded) {
       const performanceScore = random() * MINI_BALLS_FULL_SCORE;
-      stock += miniGameBalls(performanceScore);
+      stock += miniGameBalls(performanceScore) + SECRET_BALLS;
       score += Math.round(performanceScore * 0.35);
       miniMs += MINI_PAUSE_MS;
       miniAwarded = true;

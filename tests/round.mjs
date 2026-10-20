@@ -15,7 +15,7 @@ assert.equal(LAUNCH_COST, 1);
 assert.equal(BURST_COST, 5);
 assert.equal(LUCKY_BALLS, 0);
 assert.equal(SLOT_MACHINE_BALLS, 0);
-assert.ok(SECRET_BALLS > 0);
+assert.equal(SECRET_BALLS, 10);
 assert.equal(miniGameBalls(0), MINI_BALLS_MIN);
 assert.equal(miniGameBalls(1e9), MINI_BALLS_MAX);
 assert.ok(miniGameBalls(900) > MINI_BALLS_MIN && miniGameBalls(900) < MINI_BALLS_MAX);

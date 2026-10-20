@@ -87,7 +87,7 @@ try {
   await page.screenshot({ path: 'test-results/settings.png' });
   await page.keyboard.press('Escape');
   await page.reload();
-  await page.waitForFunction(() => window.__ponpon?.slots === 9);
+  await page.waitForFunction(() => window.__ponpon?.slots === 5);
   assert.equal(await page.locator('#sound-button').getAttribute('aria-label'), '开启声音');
   assert.ok(Number((await page.locator('#best').textContent()).replaceAll(',', '')) > 0);
   await page.locator('#settings-button').click();

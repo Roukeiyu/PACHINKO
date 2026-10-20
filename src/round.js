@@ -6,14 +6,12 @@ export const LOW_BALLS = 10;
 export const LAUNCH_COST = 1;
 export const BURST_COST = 5;
 
-// A slot pays this many balls back: ×2 returns 2, ×20 returns 20.
-// Stars and the reel multiplier change happiness points only.
+// Scoring slots pay happiness points only. They do not put balls back.
+// Stars and the reel multiplier change those points only.
 export const SLOT_MACHINE_BALLS = 0;
-// The center pocket's own multiplier is the Lucky ball reward.
 export const LUCKY_BALLS = 0;
-// The illustrated +30 was too strong once jackpots and mini-games stacked.
-// Eight keeps a secret visit meaningful without funding the rest of the round.
-export const SECRET_BALLS = 8;
+// One payment when a secret-hole visit finishes, after its mini-game.
+export const SECRET_BALLS = 10;
 
 export const MINI_BALLS_MIN = 5;
 export const MINI_BALLS_MAX = 30;
