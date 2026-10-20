@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { connectedBlocks } from '../src/mini-games.js';
+import { connectedBlocks, BLOCK_TARGET, comboPoints, formatComboMultiplier } from '../src/mini-games.js';
 const executablePath=process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined);
 const browser=await chromium.launch({executablePath,args:process.platform==='linux'?['--no-sandbox']:[]});
 await mkdir('test-results',{recursive:true});
@@ -14,7 +14,8 @@ try {
  await page.route('**/src/physics.js*',async route=>{
   const response=await route.fetch();let body=await response.text();assert.ok(body.includes('return { engine, balls'));
   body=body.replace('return { engine, balls',`window.__secretFixture={
-   enter(){const waiting=launch(.6);waiting.entered=true;Body.setPosition(waiting.body,{x:350,y:700});Body.setVelocity(waiting.body,{x:0,y:0});const secret=launch();secret.entered=true;Body.setPosition(secret.body,holes[0]);Body.setVelocity(secret.body,{x:0,y:0});step();},
+   enter(waiting=1){for(let i=0;i<waiting;i++){const ball=launch(.6);ball.entered=true;ball.scoreFactor=1;Body.setPosition(ball.body,{x:350,y:700-i*30});Body.setVelocity(ball.body,{x:0,y:0});}const secret=launch();secret.entered=true;secret.scoreFactor=1;Body.setPosition(secret.body,holes[0]);Body.setVelocity(secret.body,{x:0,y:0});step();},
+   holeNext(){const ball=balls[0];ball.entered=true;ball.scoreFactor=1;Body.setPosition(ball.body,holes[0]);Body.setVelocity(ball.body,{x:0,y:0});step();},
    drain(){for(const ball of [...balls]){ball.entered=true;Body.setPosition(ball.body,{x:347,y:TABLE.scoreLine-1});Body.setVelocity(ball.body,{x:0,y:6});}step();}
   };return { engine, balls`);await route.fulfill({response,body});
  });
@@ -51,27 +52,34 @@ try {
  await start('pairs');assert.equal(await page.locator('#mini-grid button').count(),40);
  let initial=await score(),pairs=await mini();const groups=Object.groupBy(pairs.board.map((c,i)=>({...c,index:i})),c=>c.pair);
  const first=Object.values(groups)[0];await page.locator(`[data-cell="${first[0].index}"]`).click();await page.clock.runFor(250);await cell(first[1].index);
- assert.equal((await mini()).score,50);assert.equal(await page.locator('.mini-removed').count(),2);
+ assert.equal((await mini()).score,50);assert.equal((await mini()).combo,1);assert.equal(await page.locator('#mini-combo').textContent(),`1 连击 ${formatComboMultiplier(1)}`);
+ assert.equal(await page.locator('.mini-removed').count(),2);assert.ok(await page.locator('.mini-float').count()>=1);
  await page.screenshot({path:'test-results/mini-pairs-night-mobile.png'});await page.screenshot({path:'test-results/mini-pairs-preview.jpg',type:'jpeg',quality:55});
  for(const group of Object.values(groups).slice(1)){await cell(group[0].index);await cell(group[1].index);}
- assert.equal((await mini()).status,'complete');assert.equal(await score(),initial+1000);await back();
+ const pairTotal=Array.from({length:20},(_,i)=>comboPoints(50,i+1)).reduce((a,b)=>a+b);
+ assert.equal((await mini()).status,'complete');assert.equal((await mini()).score,pairTotal);assert.ok(pairTotal>BLOCK_TARGET);assert.equal(await score(),initial+pairTotal);await back();
  await start('blocks');assert.equal(await page.locator('#mini-grid button').count(),100);initial=await score();
  const colors=await page.evaluate(()=>[0,1,2,3].map(i=>{const el=document.querySelector(`.mini-color-${i}`),c=document.createElement('canvas').getContext('2d');c.fillStyle=getComputedStyle(el).backgroundColor;c.fillRect(0,0,1,1);return [...c.getImageData(0,0,1,1).data].slice(0,3);}));
  for(let i=0;i<4;i++)for(let j=i+1;j<4;j++)assert.ok(Math.max(...colors[i].map((v,k)=>Math.abs(v-colors[j][k])))>=10,'night puzzle colors remain visually distinct');
  await page.screenshot({path:'test-results/mini-blocks-night-mobile.png'});await page.screenshot({path:'test-results/mini-blocks-preview.jpg',type:'jpeg',quality:55});
  let moves=0;
  while((await mini()).status==='playing'&&moves++<100){const board=(await mini()).board;const index=board.findIndex((_,i)=>connectedBlocks(board,i).length>=3);assert.ok(index>=0);await cell(index);await page.clock.runFor(300);}
- const blocks=await mini();assert.equal(blocks.status,'complete');assert.ok(blocks.score>=1000);assert.equal(await score(),initial+blocks.score);await back();
+ const blocks=await mini();assert.equal(blocks.status,'complete');assert.ok(blocks.score>=BLOCK_TARGET);assert.equal(await score(),initial+blocks.score);
+ assert.equal(await page.locator('#mini-score').textContent(), await page.evaluate(n=>n.toLocaleString(), blocks.score));
+ assert.equal(await page.locator('#mini-result-score').textContent(), await page.evaluate(n=>`收下 ${n.toLocaleString()} 分快乐`, blocks.score));
+ await back();
  await start('moles');initial=await score();assert.equal(await page.locator('#mini-grid button').count(),16);
  const plan=(await mini()).molePlan;assert.equal(plan.reduce((a,b)=>a+b),40);
  await page.screenshot({path:'test-results/mini-moles-night-mobile.png'});
  for(let wave=1;wave<=10;wave++){
   const moles=await mini();assert.equal(moles.wave,wave);
-  await cell(moles.board.findIndex(c=>c.type==='cabbage'));assert.equal((await mini()).score,(await mini()).hit*25);
+  const beforeCabbage=(await mini()).score;
+  await cell(moles.board.findIndex(c=>c.type==='cabbage'));
+  assert.equal((await mini()).score,beforeCabbage);assert.equal((await mini()).combo,0);
   for(const index of moles.board.flatMap((c,i)=>c.type==='mole'?[i]:[]))await cell(index);
   await page.clock.runFor(50);
  }
- assert.equal((await mini()).status,'complete');assert.equal((await mini()).hit,40);assert.equal(await score(),initial+1000);await back();
+ assert.equal((await mini()).status,'complete');assert.equal((await mini()).hit,40);assert.equal(await score(),initial+(await mini()).score);await back();
  // A timed wave advances even if the player does not hit any mole.
  await start('moles');
  for(let wave=2;wave<=10;wave++){await page.clock.fastForward(3000);assert.equal((await mini()).wave,wave,'each visible slice advances one wave');}
@@ -87,6 +95,69 @@ try {
  for(let i=0;i<3;i++){await page.locator('#gm-dot').click();await page.clock.runFor(200);}assert.equal((await state()).gm,false);assert.equal(await page.locator('#gm-tools').isVisible(),false);
  assert.equal(await page.locator('#gm-dot').getAttribute('aria-pressed'),'false');
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&document.documentElement.scrollHeight<=innerHeight+1));
+ await page.locator('#done-settings').click();
+ await page.evaluate(()=>window.__secretFixture.drain());
+ await page.clock.runFor(80);
+ assert.equal((await state()).activeBalls,0);
+ assert.equal((await state()).secretPending,false);
+ const holeBase=await score();
+ await page.evaluate(()=>window.__secretFixture.enter(2));
+ assert.equal(await score(),holeBase+500);
+ assert.equal((await state()).activeBalls,2);
+ assert.equal((await state()).secretMultiplier,1);
+ assert.equal((await state()).miniGame,null);
+ await page.evaluate(()=>window.__secretFixture.holeNext());
+ assert.equal(await score(),holeBase+2000,'the first entry is doubled retroactively and the second is paid at ×2');
+ assert.equal((await state()).activeBalls,1);
+ assert.equal((await state()).miniGame,null,'the second hole does not open another mini-game');
+ assert.equal((await state()).secretMultiplier,2);
+ assert.equal(await page.locator('#toast').textContent(),'双球入洞！秘密洞得分 ×2');
+ await page.evaluate(()=>window.__secretFixture.holeNext());
+ assert.equal(await score(),holeBase+3000,'a third hole stays at ×2');
+ assert.equal((await state()).secretMultiplier,2);
+ assert.equal((await state()).miniGame,null);
+ await page.clock.runFor(50);
+ assert.equal(await page.locator('#mini-game').count(),1);
+ assert.equal(await page.locator('#mini-bonus').textContent(),'×2');
+ assert.equal(await page.locator('#mini-bonus').evaluate(el=>el.classList.contains('is-on')),true);
+ const kind=(await mini()).kind;
+ for(let step=0;step<40 && (await mini()).status==='playing' && (await mini()).score<=BLOCK_TARGET;step++){
+  const board=(await mini()).board;
+  if(kind==='pairs'){
+   const open=board.flatMap((cell,index)=>cell?[{...cell,index}]:[]);
+   const pair=Object.values(Object.groupBy(open,cell=>cell.pair)).find(group=>group.length===2);
+   if(!pair) break;
+   await cell(pair[0].index);await cell(pair[1].index);
+  }else if(kind==='blocks'){
+   const index=board.findIndex((_,i)=>connectedBlocks(board,i).length>=3);
+   if(index<0) break;
+   await cell(index);
+  }else{
+   const mole=board.findIndex(cell=>cell.type==='mole'&&!cell.hit);
+   if(mole>=0) await cell(mole);
+   else await page.clock.fastForward(3000);
+  }
+ }
+ const mid=await mini();
+ const raw=mid.score;
+ assert.ok(raw>=BLOCK_TARGET,'the 1000 line ends 消消乐 early and does not clamp the score');
+ assert.equal(await page.locator('#mini-score').textContent(),await page.evaluate(n=>n.toLocaleString(),raw));
+ const alreadyPaid=mid.status!=='playing';
+ assert.equal(await score(),holeBase+3000+(alreadyPaid?raw*2:0),'mini-game points are credited when the round ends');
+ if(!alreadyPaid) await page.clock.fastForward(30100);
+ const done=await mini();
+ assert.notEqual(done.status,'playing');
+ assert.ok(done.score>=raw);
+ assert.ok(done.score>=BLOCK_TARGET);
+ const paid=done.score*2;
+ assert.equal(await score(),holeBase+3000+paid);
+ const moleNote=done.kind==='moles'?` · 打中 ${done.hit}/40 只`:'';
+ assert.equal(await page.locator('#mini-result-score').textContent(),await page.evaluate(({paid,moleNote})=>`收下 ${paid.toLocaleString()} 分快乐${moleNote} · 双球入洞 ×2`,{paid,moleNote}));
+ await page.screenshot({path:'test-results/secret-double-result.png'});
+ await page.locator('#mini-return').click();await page.clock.runFor(50);
+ assert.equal((await state()).secretPending,false);
+ assert.equal((await state()).secretMultiplier,1);
+ assert.equal((await state()).emissionPaused,false);
  assert.deepEqual(errors,[]);
- console.log('PASS: real secret entry blocks touch/keyboard/auto, drains all balls before a random game, freezes/resumes the table, credits scores once, and three-click GM shortcuts play all three games on mobile at night.');
+ console.log('PASS: real secret entry blocks touch/keyboard/auto, drains all balls before a random game, freezes/resumes the table, credits scores once, lets combo scores pass 1000, doubles that full total once, and three-click GM shortcuts play all three games on mobile at night.');
 }finally{await browser.close();}

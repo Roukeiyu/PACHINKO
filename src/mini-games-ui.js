@@ -1,9 +1,11 @@
-import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_COLORS, BLOCK_SYMBOLS } from './mini-games.js';
+import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_TARGET, BLOCK_COLORS, BLOCK_SYMBOLS, MINI_HIT_SHAKE, MINI_HIT_MS, formatComboMultiplier } from './mini-games.js';
+import { secretPayout } from './secret-wave.js';
 
-export const miniGameMarkup = `<dialog id="mini-game" class="mini-dialog" aria-labelledby="mini-title" aria-describedby="mini-rule"><div class="mini-inner"><div class="mini-heading"><span class="mini-eyebrow">秘密小游戏</span><span id="mini-round"></span></div><h2 id="mini-title"></h2><p id="mini-rule"></p><div class="mini-hud"><span>剩余 <strong id="mini-time">30</strong> 秒</span><span>本局 <strong id="mini-score">0</strong> 分</span></div><progress id="mini-progress" max="${MINI_DURATION}" value="${MINI_DURATION}" aria-label="小游戏剩余时间"></progress><div id="mini-grid" class="mini-grid"></div><p id="mini-message" role="status"></p><div id="mini-result" hidden><div class="mini-result-mark">✦</div><h3 id="mini-result-title"></h3><p id="mini-result-score"></p><button class="done-button" id="mini-return">返回球台</button></div></div></dialog>`;
+export const miniGameMarkup = `<dialog id="mini-game" class="mini-dialog" aria-labelledby="mini-title" aria-describedby="mini-rule"><div class="mini-inner"><div class="mini-heading"><span class="mini-eyebrow">秘密小游戏</span><span id="mini-round"></span></div><h2 id="mini-title"></h2><p id="mini-rule"></p><div class="mini-hud"><span>剩余 <strong id="mini-time">30</strong> 秒</span><span id="mini-combo" class="mini-combo" aria-live="polite"></span><span>本局 <strong id="mini-score">0</strong> 分<span id="mini-bonus" class="mini-bonus">×2</span></span></div><progress id="mini-progress" max="${MINI_DURATION}" value="${MINI_DURATION}" aria-label="小游戏剩余时间"></progress><div id="mini-stage"><div id="mini-fx" class="mini-fx" aria-hidden="true"></div><div id="mini-grid" class="mini-grid"></div></div><p id="mini-message" role="status"></p><div id="mini-result" hidden><div class="mini-result-mark">✦</div><h3 id="mini-result-title"></h3><p id="mini-result-score"></p><button class="done-button" id="mini-return">返回球台</button></div></div></dialog>`;
 export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {} }) {
   const $ = selector => root.querySelector(selector);
-  let game=null, source=null, revision=-1, settled=false, buttons=[];
+  let game=null, source=null, scoreMultiplier=1, revision=-1, fxId=0, settled=false, buttons=[];
+  const calm = () => document.documentElement.classList.contains('calm');
   // Play time follows foreground frames only. A hidden tab must not spend the 30s.
   let visibleAt=0, lastWall=0;
   document.addEventListener('visibilitychange', () => { if (document.hidden) lastWall = 0; });
@@ -14,13 +16,61 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {} 
     lastWall = now;
     return visibleAt;
   }
+  function burst(fx) {
+    const score=$('#mini-score');
+    if (!fx.broken) { score.classList.remove('mini-score-pop'); void score.offsetWidth; score.classList.add('mini-score-pop'); }
+    if (fx.broken || calm()) return;
+    const layer=$('#mini-fx'); layer.replaceChildren();
+    const origin=layer.getBoundingClientRect();
+    const tier=Math.min(4, fx.combo||1);
+    const cells=(fx.cells||[]).slice(0,8);
+    for (const [nth, index] of cells.entries()) {
+      const button=buttons[index]; if (!button) continue;
+      const rect=button.getBoundingClientRect();
+      const x=rect.left-origin.left+rect.width/2, y=rect.top-origin.top+rect.height/2;
+      if (fx.kind==='moles') {
+        const hammer=document.createElement('span'); hammer.className='mini-hammer'; hammer.textContent='🔨'; hammer.style.left=`${x}px`; hammer.style.top=`${y}px`; layer.append(hammer);
+        button.classList.add('mini-squash');
+      } else if (fx.kind==='pairs') {
+        const ghost=document.createElement('span'); ghost.className='mini-ghost'; ghost.textContent=fx.icons?.[nth]||'✦'; ghost.style.left=`${x}px`; ghost.style.top=`${y}px`; layer.append(ghost);
+      } else button.classList.add('mini-burst');
+      const count=Math.min(14, 4+tier*2);
+      for (let i=0;i<count;i++) {
+        const bit=document.createElement('i'); bit.className='mini-bit';
+        bit.style.left=`${x}px`; bit.style.top=`${y}px`;
+        bit.style.setProperty('--dx',`${Math.cos(i*1.3)* (10+tier*6)}px`);
+        bit.style.setProperty('--dy',`${Math.sin(i*1.3)* (10+tier*6)}px`);
+        layer.append(bit);
+      }
+    }
+    if (fx.points) {
+      const anchor=buttons[cells[0]];
+      const rect=anchor?anchor.getBoundingClientRect():layer.getBoundingClientRect();
+      const pop=document.createElement('b'); pop.className='mini-float'; pop.dataset.tier=String(tier);
+      pop.textContent=`+${fx.points.toLocaleString()}${fx.chains?` 连锁${fx.chains}`:''}`;
+      pop.style.left=`${rect.left-origin.left+rect.width/2}px`; pop.style.top=`${rect.top-origin.top}px`;
+      layer.append(pop);
+    }
+    const flash=document.createElement('span'); flash.className='mini-flash'; layer.append(flash);
+    const distance=Math.min(2.5, MINI_HIT_SHAKE+(tier-1)*.25);
+    root.animate([{transform:'translate(0,0)'},{transform:`translate(${distance}px,${distance*-.4}px)`},{transform:`translate(${-distance}px,0)`},{transform:'translate(0,0)'}],{duration:MINI_HIT_MS,easing:'ease-out'});
+    try { if (navigator.vibrate) navigator.vibrate(Math.min(18, 10+tier)); } catch { /* the page can refuse vibration */ }
+    setTimeout(()=>{ layer.replaceChildren(); buttons.forEach(button=>button.classList.remove('mini-squash','mini-fly','mini-burst')); }, 280);
+  }
   function paint() {
     if (!game) return;
     const s=game.state;
     $('#mini-time').textContent=String(Math.ceil(game.remaining(visibleAt)/1000));
     $('#mini-score').textContent=s.score.toLocaleString();
+    $('#mini-score').classList.toggle('is-hot', s.combo>=4);
+    const combo=$('#mini-combo');
+    combo.textContent=s.combo?`${s.combo} 连击 ${formatComboMultiplier(s.combo)}`:'连击 —';
+    combo.dataset.tier=String(Math.min(4,s.combo));
+    combo.classList.toggle('is-on', s.combo>0);
+    $('#mini-bonus').classList.toggle('is-on', scoreMultiplier > 1);
+    $('#mini-bonus').textContent=`×${scoreMultiplier}`;
     $('#mini-progress').value=game.remaining(visibleAt);
-    $('#mini-round').textContent=s.kind==='moles'?`第 ${s.wave}/10 轮 · ${s.hit}/40 只`:s.kind==='pairs'?`${s.removed/2}/20 对`:`目标 1000 分`;
+    $('#mini-round').textContent=s.kind==='moles'?`第 ${s.wave}/10 轮 · ${s.hit}/40 只`:s.kind==='pairs'?`${s.removed/2}/20 对`:`目标 ${BLOCK_TARGET.toLocaleString()} 分`;
     if (revision !== s.revision) {
       revision=s.revision;$('#mini-message').textContent=s.message;
       s.board.forEach((cell,index)=>{
@@ -43,17 +93,21 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {} 
         }
       });
     }
-    if (s.status!=='playing'&&!settled) {
+      if (s.fx && s.fx.id!==fxId) { fxId=s.fx.id; burst(s.fx); }
+      if (s.status!=='playing'&&!settled) {
       settled=true;$('#mini-grid').hidden=true;$('#mini-message').hidden=true;$('#mini-result').hidden=false;
       $('#mini-result-title').textContent=s.status==='complete'?'挑战完成！':'时间到啦';
-      $('#mini-result-score').textContent=`收下 ${s.score.toLocaleString()} 分快乐${s.kind==='moles'?` · 打中 ${s.hit}/40 只`:''}`;
-      onFinish({kind:s.kind,score:s.score,source,status:s.status});
+      const paid=secretPayout(s.score, scoreMultiplier);
+      const moleNote=s.kind==='moles'?` · 打中 ${s.hit}/40 只`:'';
+      const doubleNote=scoreMultiplier>1?' · 双球入洞 ×2':'';
+      $('#mini-result-score').textContent=`收下 ${paid.toLocaleString()} 分快乐${moleNote}${doubleNote}`;
+      onFinish({kind:s.kind,score:paid,baseScore:s.score,multiplier:scoreMultiplier,source,status:s.status});
       $('#mini-return').focus();
     }
   }
-  function start(kind, origin='secret') {
+  function start(kind, origin='secret', multiplier=1) {
     if (root.open) return false;
-    source=origin;const now=performance.now();visibleAt=now;lastWall=now;game=createMiniGame(kind,{now});settled=false;revision=-1;
+    source=origin;scoreMultiplier=origin==='secret'&&multiplier>=2?2:1;const now=performance.now();visibleAt=now;lastWall=now;game=createMiniGame(kind,{now});settled=false;revision=-1;fxId=0;
     const definition=MINI_GAMES[kind];$('#mini-title').textContent=definition.title;$('#mini-rule').textContent=definition.rule;
     root.dataset.kind=kind;$('#mini-grid').hidden=false;$('#mini-message').hidden=false;$('#mini-result').hidden=true;
     $('#mini-grid').style.setProperty('--columns',definition.columns);

@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve, relative, extname } from 'node:path';
 import { chromium } from 'playwright';
+import { comboPoints } from '../src/mini-games.js';
 
 const root = resolve('dist');
 const prefix = '/PACHINKO/';
@@ -85,9 +86,10 @@ try {
     for(const button of document.querySelectorAll('#mini-grid button')) {const group=pairs.get(button.textContent)||[];group.push(button);pairs.set(button.textContent,group);}
     for(const group of pairs.values()) for(const button of group) button.click();
   });
-  assert.equal(await page.locator('#mini-score').textContent(),'1,000');
+  const pairTotal=Array.from({length:20},(_,i)=>comboPoints(50,i+1)).reduce((a,b)=>a+b);
+  assert.equal(await page.locator('#mini-score').textContent(), await page.evaluate(n=>n.toLocaleString(), pairTotal));
   assert.equal(await page.locator('#mini-result').isVisible(),true);
-  assert.equal(Number((await page.locator('#score').textContent()).replaceAll(',','')),Number(beforeMini.replaceAll(',',''))+1000);
+  assert.equal(Number((await page.locator('#score').textContent()).replaceAll(',','')),Number(beforeMini.replaceAll(',',''))+pairTotal);
   await page.locator('#mini-return').click();
   assert.equal(await page.locator('#settings').evaluate(el=>el.open),true);
   assert.deepEqual(errors, []);

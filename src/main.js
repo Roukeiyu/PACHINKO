@@ -6,6 +6,7 @@ import { createTimePalette, collectTimeTokens, applyTimePalette, TIME_PHASES, TI
 import { createBackgroundMusic } from './music.js';
 import { chargeAt, chargePercent, overchargeAt, chargeEffectsAt, CHARGE_DURATION, OVERCHARGE_DURATION, BURST_READY_AT } from './charge.js';
 import { randomMiniGame } from './mini-games.js';
+import { createSecretWave } from './secret-wave.js';
 import { createMiniGamesUI, miniGameMarkup } from './mini-games-ui.js';
 import { sceneMotionAt } from './scene-motion.js';
 import { celebrateReward, advanceCelebrations } from './reward-effects.js';
@@ -127,9 +128,10 @@ const game = createTable({ slots: state.slots, collections: state.collections, o
 const renderer = createRenderer($('#board'));
 let frame = 0, last = 0, accumulator = 0, lastDrop = -1000, lastAuto = 0;
 let chargeStart = 0, chargeSource = null, suppressAssistClickUntil = 0;
+const secretWave = createSecretWave();
 const miniGames = createMiniGamesUI({ root: $('#mini-game'), onFinish: result => addScore(result.score),
   onPoints: () => tone(784,.12,'sine',0,.12), onExit: source => {
-    if (source === 'secret') { state.secretPending = false; game.setEmissionPaused(false); }
+    if (source === 'secret') { state.secretPending = false; game.setEmissionPaused(false); secretWave.reset(); }
     last = 0; accumulator = 0; lastAuto = performance.now(); syncLaunchControls();
     if (source === 'gm') $('#settings').showModal();
   },
@@ -223,7 +225,11 @@ function addScore(points) {
   $('.score-value').classList.remove('score-bump'); void $('.score-value').offsetWidth; $('.score-value').classList.add('score-bump');
 }
 function award(result) {
-  addScore(result.points);
+  const jackpot = result.kind === 'jackpot';
+  const settlement = jackpot ? secretWave.enter(result.points) : null;
+  const points = settlement ? settlement.pay : result.points;
+  if (settlement?.retro) addScore(settlement.retro);
+  addScore(points);
   if (result.collection) {
     updateCollections();
     if (result.collection.upgraded) {
@@ -231,12 +237,13 @@ function award(result) {
       toast(`${slotIcon(multiplier)} 槽位升至 Lv.${level} · 奖励 ×${bonus}`);
     }
   }
-  const jackpot = result.kind === 'jackpot', profile = celebrateReward(fx, result, state.calm);
+  const profile = celebrateReward(fx, result, state.calm);
   if (!jackpot) fx.slotGlows[result.column] = 1;
   const title = jackpot ? '✦ 秘密洞！ ' : profile.tier >= 3 ? `${profile.name} · ` : '';
-  fx.popups.push({ x: result.x, y: result.y - 45, text: `${title}+${result.points}${result.scoreFactor > 1 ? ` · 星星 ×${result.scoreFactor}` : ''}${result.globalMultiplier > 1 ? ` · 全场 ×${result.globalMultiplier}` : ''}`,
+  fx.popups.push({ x: result.x, y: result.y - 45, text: `${title}+${points}${result.scoreFactor > 1 ? ` · 星星 ×${result.scoreFactor}` : ''}${result.globalMultiplier > 1 ? ` · 全场 ×${result.globalMultiplier}` : ''}`,
     life: 1, decay: jackpot ? 1000 / (60 * profile.duration) : .012, rise: jackpot ? .2 : .6, big: profile.tier >= 4, color: profile.color, size: 19 + profile.tier * 2 });
-  if (jackpot) { toast(`✦ 发现秘密洞！收下 ${result.points} 分，等待秘密出现`, profile.duration); waitForSecret(); }
+  if (jackpot && settlement.doubledNow) toast('双球入洞！秘密洞得分 ×2', profile.duration);
+  else if (jackpot && settlement.startWait) { toast(`✦ 发现秘密洞！收下 ${points} 分，等待秘密出现`, profile.duration); waitForSecret(); }
   rewardSound(profile);
 }
 function rewardSound(profile) {
@@ -352,7 +359,7 @@ function tick(now) {
     } else if (!state.secretPending && now - lastDrop > 1700) $('#shot-state').textContent = game.balls.length ? `${game.balls.length} 颗小快乐在冒险` : '右下角 · 弹珠就位';
     if (state.auto && !state.secretPending && now - lastAuto > 1100) { launch(); lastAuto = now; }
   }
-  if (state.secretPending && !game.balls.length && !miniGames.open && !panelOpen() && !document.hidden) { miniGames.start(randomMiniGame()); syncLaunchControls(); }
+  if (state.secretPending && !game.balls.length && !miniGames.open && !panelOpen() && !document.hidden) { miniGames.start(randomMiniGame(), 'secret', secretWave.multiplier); syncLaunchControls(); }
   if (miniGames.open) { $('.game-layout').style.removeProperty('transform'); frame = requestAnimationFrame(tick); return; }
   const motion = sceneMotionAt(game.clock, state, fx);
   if (motion.intensity) $('.game-layout').style.transform = `translate(${motion.uiX.toFixed(2)}px, ${motion.uiY.toFixed(2)}px)`;
@@ -418,4 +425,4 @@ $('#best').textContent = state.best.toLocaleString(); $('#mobile-best').textCont
 frame = requestAnimationFrame(tick);
 window.addEventListener('pagehide', () => { endCharge(false); cancelAnimationFrame(frame); frame = 0; audio?.suspend().catch(()=>{}); });
 window.addEventListener('pageshow', () => { if (!frame) { last = 0; accumulator = 0; frame = requestAnimationFrame(tick); } syncAudioVisibility(); });
-if (import.meta.env.DEV) Object.defineProperty(window, '__ponpon', { get: () => ({ score: state.score, collections: structuredClone(state.collections), secretPending: state.secretPending, emissionPaused: game.emissionPaused, gm: state.gm, miniGame: miniGames.snapshot(), render3D: state.render3D, rendering: renderer.snapshot(), star: game.star ? { ...game.star } : null, activeBalls: game.balls.length, slots: state.slots, pins: game.pins.length,  auto: state.auto, charging: state.charging, charge: state.charge, chargeEffects: state.charging ? chargeEffectsAt(state.chargeElapsed) : null, pendingLaunches: game.pendingLaunches, stats: structuredClone(game.stats), rewards: structuredClone(game.rewards), collector: { count: game.collector.stored.length, capacity: game.collector.capacity, remaining: game.collector.remaining, outlets: game.collector.outlets.map(p => ({ ...p })) }, bumpers: game.bumpers.map(b => ({ ...b.position })), timeFlow: { enabled: state.timeFlow, startedAt: state.timeFlowStartedAt, phase: timePalette?.phase.id, position: timePalette?.phase.position, tokens: timeTokens.length }, gameClock: game.clock, slotMachine: structuredClone(game.slotMachine), centerRadius: game.bumpers[2].plugin.radius, canonNotes: canon.count, currentNote: currentNote?.name, positions: game.balls.map(b => ({ ...b.body.position, entered: b.entered, power: b.power, bonus: b.bonus, scoreFactor: b.scoreFactor })), music: backgroundMusic?.status, musicEnabled: state.music, musicVolume: state.musicVolume, audioState: audio?.state }) });
+if (import.meta.env.DEV) Object.defineProperty(window, '__ponpon', { get: () => ({ score: state.score, collections: structuredClone(state.collections), secretPending: state.secretPending, secretMultiplier: secretWave.multiplier, emissionPaused: game.emissionPaused, gm: state.gm, miniGame: miniGames.snapshot(), render3D: state.render3D, rendering: renderer.snapshot(), star: game.star ? { ...game.star } : null, activeBalls: game.balls.length, slots: state.slots, pins: game.pins.length,  auto: state.auto, charging: state.charging, charge: state.charge, chargeEffects: state.charging ? chargeEffectsAt(state.chargeElapsed) : null, pendingLaunches: game.pendingLaunches, stats: structuredClone(game.stats), rewards: structuredClone(game.rewards), collector: { count: game.collector.stored.length, capacity: game.collector.capacity, remaining: game.collector.remaining, outlets: game.collector.outlets.map(p => ({ ...p })) }, bumpers: game.bumpers.map(b => ({ ...b.position })), timeFlow: { enabled: state.timeFlow, startedAt: state.timeFlowStartedAt, phase: timePalette?.phase.id, position: timePalette?.phase.position, tokens: timeTokens.length }, gameClock: game.clock, slotMachine: structuredClone(game.slotMachine), centerRadius: game.bumpers[2].plugin.radius, canonNotes: canon.count, currentNote: currentNote?.name, positions: game.balls.map(b => ({ ...b.body.position, entered: b.entered, power: b.power, bonus: b.bonus, scoreFactor: b.scoreFactor })), music: backgroundMusic?.status, musicEnabled: state.music, musicVolume: state.musicVolume, audioState: audio?.state }) });
