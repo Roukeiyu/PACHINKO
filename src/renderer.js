@@ -8,6 +8,14 @@ import { sceneMotionAt } from './scene-motion.js';
 
 const W = TABLE.width, H = TABLE.height;
 const world = (x, y, z = 0) => new THREE.Vector3(x - W / 2, H / 2 - y, z);
+// One-point perspective. The old view was orthographic at 14° and 1400 units.
+// Shake amplitude stays in scene-motion.js; depth comes from this view and the taller rails.
+export const VIEW_PITCH_DEG = 36;
+export const VIEW_FOV = 44;
+export const VIEW_DISTANCE = 1550;
+export const VIEW_LOOK_Y = -50;
+export const WALL_HEIGHT = 58;
+export const RAIL_HEIGHT = 36;
 
 // The simulation remains on the tabletop. Every solid is built from the same
 // Matter body, then follows its position, angle and size without a second world.
@@ -52,7 +60,7 @@ function create3DRenderer(canvas) {
   webgl.shadowMap.enabled = true;
   webgl.shadowMap.type = THREE.PCFSoftShadowMap;
   const scene = new THREE.Scene(), table = new THREE.Group(); scene.add(table);
-  const camera = new THREE.OrthographicCamera(-(W + 10) / 2, (W + 10) / 2, (H + 12) / 2, -(H + 12) / 2, .1, 3000);
+  const camera = new THREE.PerspectiveCamera(VIEW_FOV, W / H, 8, 5000);
   let motion = sceneMotionAt(0, {}, {}), currentGame, currentTheme, currentPalette, lastAtlas = -Infinity;
   const keyLight = new THREE.DirectionalLight('#ffffff', 1.35);
   keyLight.position.set(-360, 400, 650); keyLight.castShadow = true;
@@ -133,11 +141,11 @@ function create3DRenderer(canvas) {
     text.position.copy(world(x, y, 9.5)); table.add(text); wells.push({ storage, label, texture, text, last: '' });
   }
   function setup(game) {
-    for (const b of game.walls) bodyModel(b, wallSide, 28);
+    for (const b of game.walls) bodyModel(b, wallSide, WALL_HEIGHT);
     for (const b of game.pins) bodyModel(b, pinSide, 18, b.plugin.radius || 7.5);
     for (const b of game.bumpers) bodyModel(b, drumSide, 32, b.plugin.baseRadius + 6);
     for (const b of game.kickers) bodyModel(b, drumSide, 16, 13);
-    for (const b of game.rails) bodyModel(b, railSide, 20);
+    for (const b of game.rails) bodyModel(b, railSide, RAIL_HEIGHT);
     for (const b of game.diamonds) bodyModel(b, purpleSide, 13);
     for (const b of game.spinners) bodyModel(b, spinnerSide, 12);
     for (const b of game.deflectors) bodyModel(b, railSide, 15);
@@ -149,6 +157,58 @@ function create3DRenderer(canvas) {
     // Recess the painted reel assembly so moving balls can cross its display.
     box(SLOT_DISPLAY.x, SLOT_DISPLAY.y, SLOT_DISPLAY.width, SLOT_DISPLAY.height, 3, goldSide, -1, 8);
     for (const spinner of game.spinners) disc(spinner.position.x, spinner.position.y, 15, 5, goldSide, 12);
+    decorate();
+  }
+  let decorCount = 0;
+  function decorate() {
+    const cream = material('#f7d6e2'), bear = material('#c4784a'), cat = material('#7d6bb5');
+    const cherry = material('#e36b78'), leaf = material('#5f8f55'), lemon = material('#e7b84a'), orange = material('#ef8d3a');
+    const head = new THREE.SphereGeometry(12, 12, 10);
+    const berry = new THREE.SphereGeometry(8, 10, 8);
+    const pip = new THREE.SphereGeometry(3.2, 8, 6);
+    const stem = new THREE.CylinderGeometry(1.1, 1.1, 8, 5);
+    const ear = new THREE.CylinderGeometry(2.6, 3, 14, 6);
+    const cone = new THREE.ConeGeometry(6, 13, 6);
+    function sit(x, y, z, scale, build) {
+      const group = new THREE.Group();
+      build(group);
+      group.position.copy(world(x, y, z));
+      group.scale.setScalar(scale);
+      group.traverse(object => { if (object.isMesh) { object.castShadow = false; object.receiveShadow = false; } });
+      table.add(group); decorCount++;
+    }
+    function ears(group, color, spread, height, tilt) {
+      for (const side of [-1, 1]) {
+        const mesh = new THREE.Mesh(ear, color);
+        mesh.position.set(side * spread, 0, height);
+        mesh.rotation.x = Math.PI / 2; mesh.rotation.z = side * tilt;
+        group.add(mesh);
+      }
+    }
+    sit(150, -24, 96, 3.4, group => {
+      const face = new THREE.Mesh(head, cream); face.position.z = 12; group.add(face); ears(group, cream, 5, 28, .35);
+    });
+    sit(380, -30, 110, 3.6, group => {
+      const face = new THREE.Mesh(head, bear); face.position.z = 12; group.add(face);
+      for (const side of [-1, 1]) { const mesh = new THREE.Mesh(pip, bear); mesh.position.set(side * 7, 0, 22); group.add(mesh); }
+    });
+    sit(610, -24, 96, 3.4, group => {
+      const face = new THREE.Mesh(head, cat); face.position.z = 12; group.add(face);
+      for (const side of [-1, 1]) {
+        const mesh = new THREE.Mesh(cone, cat); mesh.position.set(side * 6, 0, 24); mesh.rotation.x = Math.PI / 2; mesh.rotation.z = side * .2; group.add(mesh);
+      }
+    });
+    function fruit(x, y, z, color) {
+      sit(x, y, z, 2.6, group => {
+        const body = new THREE.Mesh(berry, color); body.position.z = 8; group.add(body);
+        const stalk = new THREE.Mesh(stem, leaf); stalk.position.z = 16; stalk.rotation.x = Math.PI / 2; group.add(stalk);
+        const cap = new THREE.Mesh(pip, leaf); cap.position.set(3, 0, 18); group.add(cap);
+      });
+    }
+    fruit(250, -18, 88, lemon); fruit(510, -18, 88, orange);
+    fruit(-6, 210, 64, cherry); fruit(766, 210, 64, cherry);
+    sit(300, -36, 70, 2.4, group => { const mesh = new THREE.Mesh(cone, leaf); mesh.rotation.x = Math.PI / 2; group.add(mesh); });
+    sit(470, -36, 70, 2.4, group => { const mesh = new THREE.Mesh(cone, leaf); mesh.rotation.x = Math.PI / 2; mesh.rotation.z = .4; group.add(mesh); });
   }
   let slotCount = 0;
   function updateLayout(game) {
@@ -192,11 +252,13 @@ function create3DRenderer(canvas) {
   const starShape = new THREE.Shape();
   for (let i = 0; i < 10; i++) { const a = Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 5 : 11; if (i) starShape.lineTo(Math.cos(a) * r, Math.sin(a) * r); else starShape.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
   starShape.closePath(); const collectible = extrude(starShape, 5, goldSide, .7);
-  // Keep the table fixed; shake translates the camera parallel to its view.
-  const pitch = THREE.MathUtils.degToRad(14);
-  const cameraBase = new THREE.Vector3(0, -Math.sin(pitch) * 1400, Math.cos(pitch) * 1400);
+  // Keep the table fixed. Shake translates the camera parallel to its view so the
+  // orientation stays put and the taller rails parallax against the floor.
+  const pitch = THREE.MathUtils.degToRad(VIEW_PITCH_DEG);
+  const cameraBase = new THREE.Vector3(0, -Math.sin(pitch) * VIEW_DISTANCE, Math.cos(pitch) * VIEW_DISTANCE);
+  const lookAt = new THREE.Vector3();
   camera.position.copy(cameraBase);
-  camera.up.set(0, 1, 0); camera.lookAt(0, 0, 0); camera.updateMatrixWorld();
+  camera.up.set(0, 1, 0); camera.lookAt(0, VIEW_LOOK_Y, 0); camera.updateMatrixWorld();
   const project = (x, y, z = 0) => { const p = world(x, y, z).applyMatrix4(table.matrixWorld).project(camera); return { x: (p.x + 1) / 2, y: (1 - p.y) / 2 }; };
   function resize() { const width = canvas.getBoundingClientRect().width; if (width) webgl.setSize(width, width * H / W, false); }
   const observer = new ResizeObserver(resize); observer.observe(canvas); resize();
@@ -247,13 +309,15 @@ function create3DRenderer(canvas) {
     motion = sceneMotionAt(game.clock, state, fx);
     const cameraOffset = new THREE.Vector3(-motion.x, motion.y * Math.cos(pitch), motion.y * Math.sin(pitch));
     camera.position.copy(cameraBase).add(cameraOffset);
-    camera.up.set(0, 1, 0); camera.lookAt(cameraOffset);
+    lookAt.set(cameraOffset.x, VIEW_LOOK_Y + cameraOffset.y, cameraOffset.z);
+    camera.up.set(0, 1, 0); camera.lookAt(lookAt);
     camera.updateMatrixWorld();
     table.updateMatrixWorld(true); boardInverse.value.copy(table.matrixWorld).invert();
     webgl.render(scene, camera);
   }
   function snapshot() {
-    return { mode: 'webgl', cameraAngle: 0, tableTransform: { position: table.position.toArray(), rotation: table.rotation.toArray().slice(0,3) }, cameraPosition: camera.position.toArray(), cameraQuaternion: camera.quaternion.toArray(), motion: { ...motion }, pitch: 14, meshes: bodies.size, triangles: webgl.info.render.triangles, contextLost: webgl.getContext().isContextLost(),
+    const frame = [[12, 16], [748, 16], [12, 892], [748, 892]].flatMap(([x, y]) => [project(x, y, 0), project(x, y, WALL_HEIGHT)]);
+    return { mode: 'webgl', cameraAngle: 0, tableTransform: { position: table.position.toArray(), rotation: table.rotation.toArray().slice(0,3) }, cameraPosition: camera.position.toArray(), cameraBase: cameraBase.toArray(), cameraQuaternion: camera.quaternion.toArray(), motion: { ...motion }, pitch: VIEW_PITCH_DEG, fov: VIEW_FOV, decor: decorCount, frame, meshes: bodies.size, triangles: webgl.info.render.triangles, contextLost: webgl.getContext().isContextLost(),
       bodies: [...bodies.values()].map(({ body, mesh, height }) => ({ id: body.id, kind: body.label, x: mesh.position.x + W / 2, y: H / 2 - mesh.position.y, angle: -mesh.rotation.z, radius: body.plugin.radius, height, scale: mesh.scale.x, projected: project(body.position.x, body.position.y, height) })),
       balls: [...balls].map(([id, mesh]) => ({ id, x: mesh.position.x + W / 2, y: H / 2 - mesh.position.y, z: mesh.position.z })),
       samples: [[70,200,.8],[23,280,28.8],[150,155,18.8],[350,367,32.8],[350,465,2.8],[615,482,2]].map(([x,y,z]) => project(x,y,z)), readyBall: project(TABLE.launchX, TABLE.launchY, 12), textures: webgl.info.memory.textures, geometries: webgl.info.memory.geometries, alignmentError: Math.max(0, ...[...bodies.values()].map(({body, mesh}) => Math.hypot(mesh.position.x - (body.position.x - W / 2), mesh.position.y - (H / 2 - body.position.y)))) };

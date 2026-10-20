@@ -280,7 +280,7 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
         Body.setVelocity(body, { x: dx / d * 10.8, y: dy / d * 10.8 });
         ball.lastKick = clock;
       }
-      onHit({ kind: obstacle.label, x: body.position.x, y: body.position.y, index: obstacle.plugin.index || 0 });
+      onHit({ kind: obstacle.label, x: body.position.x, y: body.position.y, index: obstacle.plugin.index || 0, speed: body.speed });
     }
   });
   function remove(ball, index) { Composite.remove(engine.world, ball.body); balls.splice(index, 1); }
