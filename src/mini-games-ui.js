@@ -1,4 +1,5 @@
-import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_COLORS, BLOCK_SYMBOLS, MINI_HIT_SHAKE, MINI_HIT_MS, comboMultiplier, formatComboMultiplier } from './mini-games.js';
+import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_COLORS, BLOCK_SYMBOLS, MINI_HIT_SHAKE, MINI_HIT_MS, comboMultiplier, formatComboMultiplier, PAIR_DURATION, PAIR_TARGET } from './mini-games.js';
+import { PAIR_SVG } from './pair-icons.js';
 import { secretPayout } from './secret-wave.js';
 
 export const miniGameMarkup = `<dialog id="mini-game" class="mini-dialog" aria-labelledby="mini-title" aria-describedby="mini-rule"><div class="mini-inner"><div class="mini-heading"><span class="mini-eyebrow">秘密小游戏</span><span id="mini-round"></span></div><h2 id="mini-title"></h2><p id="mini-rule"></p><div class="mini-hud"><span>剩余 <strong id="mini-time">30</strong> 秒</span><span id="mini-combo" class="mini-combo" aria-live="polite"></span><span>本局 <strong id="mini-score">0</strong> 分<span id="mini-bonus" class="mini-bonus">×2</span></span></div><progress id="mini-progress" max="${MINI_DURATION}" value="${MINI_DURATION}" aria-label="小游戏剩余时间"></progress><div id="mini-stage"><div id="mini-fx" class="mini-fx" aria-hidden="true"></div><div id="mini-grid" class="mini-grid"></div></div><p id="mini-message" role="status"></p><div id="mini-result" hidden><div class="mini-result-mark">✦</div><h3 id="mini-result-title"></h3><p id="mini-result-math" class="mini-result-math" hidden></p><p id="mini-result-score"></p><button class="done-button" id="mini-return">返回球台</button></div></div></dialog>`;
@@ -32,7 +33,10 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
         const hammer=document.createElement('span'); hammer.className='mini-hammer'; hammer.textContent='🔨'; hammer.style.left=`${x}px`; hammer.style.top=`${y}px`; layer.append(hammer);
         button.classList.add('mini-squash');
       } else if (fx.kind==='pairs') {
-        const ghost=document.createElement('span'); ghost.className='mini-ghost'; ghost.textContent=fx.icons?.[nth]||'✦'; ghost.style.left=`${x}px`; ghost.style.top=`${y}px`; layer.append(ghost);
+        const ghost=document.createElement('span'); ghost.className='mini-ghost';
+        const markup=PAIR_SVG[fx.icons?.[nth]];
+        if (markup) ghost.innerHTML=markup; else ghost.textContent='✦';
+        ghost.style.left=`${x}px`; ghost.style.top=`${y}px`; layer.append(ghost);
       } else button.classList.add('mini-burst');
       const count=Math.min(14, 4+tier*2);
       for (let i=0;i<count;i++) {
@@ -75,11 +79,16 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
       progress.value=Math.min(s.removed, BLOCK_CLEAR_TARGET);
       progress.setAttribute('aria-label','已消除方块');
       $('#mini-round').textContent=`已消除 ${Math.min(s.removed, BLOCK_CLEAR_TARGET)}/${BLOCK_CLEAR_TARGET}`;
+    } else if (s.kind==='pairs') {
+      progress.max=PAIR_DURATION;
+      progress.value=game.remaining(visibleAt);
+      progress.setAttribute('aria-label','小游戏剩余时间');
+      $('#mini-round').textContent=`${s.removed / 2}/${PAIR_TARGET} 对`;
     } else {
       progress.max=MINI_DURATION;
       progress.value=game.remaining(visibleAt);
       progress.setAttribute('aria-label','小游戏剩余时间');
-      $('#mini-round').textContent=s.kind==='moles'?`第 ${s.wave}/10 轮 · ${s.hit}/40 只`:`${s.removed/2}/20 对`;
+      $('#mini-round').textContent=`第 ${s.wave}/10 轮 · ${s.hit}/40 只`;
     }
     if (revision !== s.revision) {
       revision=s.revision;$('#mini-message').textContent=s.message;
@@ -88,8 +97,8 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
         button.dataset.tileId=cell?String(cell.id):'';
         button.className='mini-cell';button.style.removeProperty('--fall');
         button.hidden=false;button.disabled=s.status!=='playing';button.setAttribute('aria-pressed',String(s.selected===index));
-        if (!cell) { button.classList.add('mini-removed');button.disabled=true;button.textContent='';button.setAttribute('aria-label','已消除');return; }
-        if (s.kind==='pairs') { button.textContent=cell.icon;button.setAttribute('aria-label',`${cell.icon}，第 ${index+1} 格`);button.classList.toggle('mini-selected',s.selected===index); }
+        if (!cell) { button.classList.add('mini-removed');button.disabled=true;button.textContent='';delete button.dataset.icon;button.setAttribute('aria-label','已消除');return; }
+        if (s.kind==='pairs') { button.dataset.icon=cell.icon; button.innerHTML=PAIR_SVG[cell.icon]||''; button.setAttribute('aria-label',`${cell.name}，第 ${index+1} 格`); button.classList.toggle('mini-selected',s.selected===index); }
         if (s.kind==='blocks') {
           button.classList.add(`mini-color-${cell.color}`);button.textContent=BLOCK_SYMBOLS[cell.color];
           button.setAttribute('aria-label',`${BLOCK_COLORS[cell.color]}色方块，第 ${Math.floor(index/10)+1} 行 ${index%10+1} 列`);

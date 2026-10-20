@@ -1,3 +1,6 @@
+import { PAIR_ICON_LIST } from './pair-icons.js';
+
+export { PAIR_ICON_LIST };
 export const MINI_DURATION = 30000;
 // 消消乐 ends at this many cleared blocks, or when the 30 second timer runs out.
 // The last clear that crosses the line only scores the blocks that fit.
@@ -12,12 +15,16 @@ export const MAX_BLOCK_CHAINS = 8;
 // Light hit shake, the same 1.5 step used for light reward shakes. Charge camera shake stays separate.
 export const MINI_HIT_SHAKE = 1.5;
 export const MINI_HIT_MS = 160;
+// 8×8 is 32 unique pairs. The round ends at 20 matches or 50 seconds.
+// Base 20 with the shared combo makes a perfect 20-streak worth 2300.
+export const PAIR_POINT = 20;
+export const PAIR_TARGET = 20;
+export const PAIR_DURATION = 50000;
 export const MINI_GAMES = Object.freeze({
-  pairs: { title: '对对碰', rule: '找出相同图案，选中一对就会消失。每对 50 分，全部找完提前结束。连续配对会累加连击，翻错则连击重置。', columns: 8, rows: 5 },
+  pairs: { title: '对对碰', rule: `64 张牌排成 8×8，32 种图案都摊开。点中相同的两张就会消除。配成 ${PAIR_TARGET} 对，或玩满 ${PAIR_DURATION / 1000} 秒，先到先结算。每对 ${PAIR_POINT} 分。连续配对会累加连击，点错则连击重置。`, columns: 8, rows: 8 },
   blocks: { title: '消消乐', rule: `点击上下左右相连的同色方块，至少 3 块才能消除。每块 ${BLOCK_POINT} 分。累计消除 ${BLOCK_CLEAR_TARGET} 块，或玩满 ${MINI_DURATION / 1000} 秒，先到先结算。最后一次超过 ${BLOCK_CLEAR_TARGET} 块时只算到 ${BLOCK_CLEAR_TARGET} 块，基础分最多 ${BLOCK_CLEAR_TARGET * BLOCK_POINT}。${COMBO_WINDOW_MS / 1000} 秒内再点出消除，连击 +1；超过 ${COMBO_WINDOW_MS / 1000} 秒，或点了消不掉的地方，连击归零。连击和倍率没有上限。掉落连锁只加基础分，不增加连击。结束时按本局最高连击一次性乘算。`, columns: 10, rows: 10 },
   moles: { title: '打地鼠', rule: '点击地鼠，白菜留着！每只 25 分，共 10 轮、40 只；每轮最多 3 秒，打完提前换轮。连续打中会累加连击；打到白菜、空洞，或这一轮有地鼠漏掉，连击重置。', columns: 4, rows: 4 },
 });
-export const PAIR_ICONS = Object.freeze(['🍒','🍊','🍇','🍍','🍓','🍋','🍉','🍎','🍐','🍑','🥝','🥭','🫐','🍈','🥥','🍌','🥕','🌽','🥑','🍅']);
 export const BLOCK_COLORS = Object.freeze(['红','蓝','黄','绿']);
 export const BLOCK_SYMBOLS = Object.freeze(['♥','●','✦','◆']);
 export const comboMultiplier = combo => combo > 0 ? 1 + (combo - 1) * COMBO_MULTIPLIER_STEP : 1;
@@ -48,7 +55,8 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
   if (!MINI_GAMES[kind]) throw new RangeError('Unknown mini-game');
   let nextId = 0, fxId = 0;
   const tile = (extra = {}) => ({ id: nextId++, color: integer(random,0,3), fall: 0, spawned: false, ...extra });
-  const state = { kind, status: 'playing', score: 0, combo: 0, multiplier: 1, bestCombo: 0, bestMultiplier: 1, baseScore: 0, lastClearAt: null, payoutSettled: false, startedAt: now, deadline: now + MINI_DURATION, revision: 0, selected: null, removed: 0, hit: 0, wave: 0, waveUntil: 0, board: [], molePlan: [], message: '', fx: null };
+  const roundMs = kind === 'pairs' ? PAIR_DURATION : MINI_DURATION;
+  const state = { kind, status: 'playing', score: 0, combo: 0, multiplier: 1, bestCombo: 0, bestMultiplier: 1, baseScore: 0, lastClearAt: null, payoutSettled: false, startedAt: now, deadline: now + roundMs, revision: 0, selected: null, removed: 0, hit: 0, wave: 0, waveUntil: 0, board: [], molePlan: [], message: '', fx: null };
   function ensurePlayable() {
     if (state.board.some((_,i) => connectedBlocks(state.board,i).length >= 3)) return;
     const color = integer(random,0,3);
@@ -73,7 +81,7 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
     state.board = shuffle([...Array(count).fill('mole'),...Array(cabbage).fill('cabbage'),...Array(16-count-cabbage).fill('empty')],random).map(type=>({ id:nextId++,type,hit:false }));
     state.waveUntil = at + 3000; state.revision++;
   }
-  if (kind === 'pairs') state.board = shuffle(PAIR_ICONS.flatMap((icon,pair)=>[{id:nextId++,pair,icon},{id:nextId++,pair,icon}]),random);
+  if (kind === 'pairs') state.board = shuffle(PAIR_ICON_LIST.flatMap((icon, pair) => [{ id: nextId++, pair, icon: icon.id, name: icon.name }, { id: nextId++, pair, icon: icon.id, name: icon.name }]), random);
   if (kind === 'blocks') { state.board = Array.from({length:100},()=>tile()); ensurePlayable(); }
   if (kind === 'moles') {
     let remaining=40;
@@ -136,7 +144,7 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
         const icons=[state.board[state.selected].icon, state.board[index].icon];
         state.board[state.selected] = null; state.board[index] = null; state.selected = null;
         state.removed += 2; state.combo += 1; state.multiplier = comboMultiplier(state.combo);
-        points = comboPoints(50, state.combo);
+        points = comboPoints(PAIR_POINT, state.combo);
         state.score += points;
         state.message = `找到一对！+${points} · ${state.combo} 连击 ${formatComboMultiplier(state.combo)}`;
         state.fx = { id:++fxId, kind, broken:false, points, combo:state.combo, multiplier:state.multiplier, cells, icons, chains:0 };
@@ -194,9 +202,9 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
     }
     state.revision++;
     if (kind === 'blocks' && state.removed >= BLOCK_CLEAR_TARGET) finish('complete');
-    if (kind === 'pairs' && state.removed === 40) finish('complete');
+    if (kind === 'pairs' && state.removed >= PAIR_TARGET * 2) finish('complete');
     if (kind === 'moles' && state.board.every(c=>c.type !== 'mole'||c.hit)) nextWave(at);
     return points;
   }
-  return { state, tick, select, remaining:at=>Math.max(0,Math.min(MINI_DURATION,state.deadline-at)), snapshot:()=>structuredClone(state) };
+  return { state, tick, select, remaining: at => Math.max(0, Math.min(roundMs, state.deadline - at)), snapshot: () => structuredClone(state) };
 }

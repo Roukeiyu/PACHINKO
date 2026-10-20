@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
+import { PAIR_DURATION } from '../src/mini-games.js';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 const executablePath = process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
@@ -108,7 +109,7 @@ try {
   assert.equal(await page.evaluate(() => window.__rewardFixture.snapshot().bursts.length), 0);
   await page.evaluate(()=>window.__rewardPhysics.drain());await page.clock.runFor(50);
   assert.equal(await page.locator('#mini-game').evaluate(el=>el.open),true);
-  await page.clock.fastForward(30100);await page.locator('#mini-return').click();await page.clock.runFor(50);
+  await page.clock.fastForward(PAIR_DURATION+2000);await page.locator('#mini-return').click();await page.clock.runFor(50);
   await page.setViewportSize({width:390,height:844});
   await page.evaluate(() => { window.__rewardFixture.reset(); window.__rewardFixture.night(); window.__rewardPhysics.slot(10); window.__rewardFixture.advance(800); });
   await page.clock.runFor(50);

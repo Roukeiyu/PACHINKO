@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve, relative, extname } from 'node:path';
 import { chromium } from 'playwright';
-import { comboPoints } from '../src/mini-games.js';
+import { comboPoints, PAIR_POINT, PAIR_TARGET } from '../src/mini-games.js';
 
 const root = resolve('dist');
 const prefix = '/PACHINKO/';
@@ -81,13 +81,16 @@ try {
   for(let i=0;i<3;i++) await page.locator('#gm-dot').click();
   assert.equal(await page.locator('#gm-tools').isVisible(),true);
   await page.locator('[data-mini="pairs"]').click();
-  assert.equal(await page.locator('#mini-grid button').count(),40);
-  await page.evaluate(()=>{
+  assert.equal(await page.locator('#mini-grid button').count(),64);
+  const iconCount=await page.locator('#mini-grid button').evaluateAll(buttons=>new Set(buttons.map(button=>button.dataset.icon)).size);
+  assert.equal(iconCount,32);
+  await page.evaluate(target=>{
     const pairs=new Map();
-    for(const button of document.querySelectorAll('#mini-grid button')) {const group=pairs.get(button.textContent)||[];group.push(button);pairs.set(button.textContent,group);}
-    for(const group of pairs.values()) for(const button of group) button.click();
-  });
-  const pairTotal=Array.from({length:20},(_,i)=>comboPoints(50,i+1)).reduce((a,b)=>a+b);
+    for(const button of document.querySelectorAll('#mini-grid button')) {const group=pairs.get(button.dataset.icon)||[];group.push(button);pairs.set(button.dataset.icon,group);}
+    let matched=0;
+    for(const group of pairs.values()) { if(matched>=target) break; matched+=1; for(const button of group) button.click(); }
+  }, PAIR_TARGET);
+  const pairTotal=Array.from({length:PAIR_TARGET},(_,i)=>comboPoints(PAIR_POINT,i+1)).reduce((a,b)=>a+b);
   assert.equal(await page.locator('#mini-score').textContent(), await page.evaluate(n=>n.toLocaleString(), pairTotal));
   assert.equal(await page.locator('#mini-result').isVisible(),true);
   assert.equal(Number((await page.locator('#score').textContent()).replaceAll(',','')),Number(beforeMini.replaceAll(',',''))+pairTotal);

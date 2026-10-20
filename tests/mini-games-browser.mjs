@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { connectedBlocks, BLOCK_CLEAR_TARGET, comboPoints, formatComboMultiplier } from '../src/mini-games.js';
+import { connectedBlocks, BLOCK_CLEAR_TARGET, comboPoints, formatComboMultiplier, PAIR_POINT, PAIR_TARGET, PAIR_DURATION } from '../src/mini-games.js';
 const executablePath=process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined);
 const browser=await chromium.launch({executablePath,args:process.platform==='linux'?['--no-sandbox']:[]});
 await mkdir('test-results',{recursive:true});
@@ -36,7 +36,7 @@ try {
  assert.equal(s.activeBalls,0);assert.ok(['pairs','blocks','moles'].includes(s.miniGame.kind));
  assert.equal(await page.locator('#mini-game').evaluate(el=>el.open),true);
  const before=await score(),clock=s.gameClock;await page.keyboard.press('Escape');assert.equal(await page.locator('#mini-game').evaluate(el=>el.open),true);
- await page.clock.fastForward(30100);s=await state();assert.notEqual(s.miniGame.status,'playing');assert.equal(s.gameClock,clock,'the table pauses during the mini-game');
+ await page.clock.fastForward(PAIR_DURATION+2000);s=await state();assert.notEqual(s.miniGame.status,'playing');assert.equal(s.gameClock,clock,'the table pauses during the mini-game');
  assert.equal(s.stats.launches,2);assert.equal(s.score,before+s.miniGame.score);
  await page.clock.fastForward(5000);assert.equal(await score(),s.score,'results are credited exactly once');
  await page.locator('#mini-return').click();await page.clock.runFor(50);s=await state();assert.equal(s.secretPending,false);assert.equal(s.emissionPaused,false);assert.equal(s.auto,true);
@@ -49,14 +49,23 @@ try {
  async function start(kind){await page.locator(`[data-mini="${kind}"]`).click();await page.clock.runFor(50);assert.equal(await page.locator('#settings').evaluate(el=>el.open),false);assert.equal((await mini()).kind,kind);}
  async function cell(index){await page.locator(`[data-cell="${index}"]`).evaluate(el=>el.click());}
  async function back(){await page.locator('#mini-return').click();await page.clock.runFor(50);assert.equal(await page.locator('#settings').evaluate(el=>el.open),true);}
- await start('pairs');assert.equal(await page.locator('#mini-grid button').count(),40);
+ await page.setViewportSize({width:375,height:812});
+ await start('pairs');assert.equal(await page.locator('#mini-grid button').count(),64);
+ const cellBox=await page.locator('#mini-grid button').first().boundingBox();
+ assert.ok(cellBox.width>=40&&cellBox.height>=40,`375px pair cell is ${cellBox?.width}×${cellBox?.height}`);
+ const dialogBox=await page.locator('#mini-game').boundingBox();
+ assert.ok(dialogBox.width>=370&&dialogBox.x<=2,`pairs dialog is ${dialogBox.width}px at x ${dialogBox.x}`);
+ await page.setViewportSize({width:390,height:844});
  let initial=await score(),pairs=await mini();const groups=Object.groupBy(pairs.board.map((c,i)=>({...c,index:i})),c=>c.pair);
+ assert.equal(Object.keys(groups).length,32);
  const first=Object.values(groups)[0];await page.locator(`[data-cell="${first[0].index}"]`).click();await page.clock.runFor(250);await cell(first[1].index);
- assert.equal((await mini()).score,50);assert.equal((await mini()).combo,1);assert.equal(await page.locator('#mini-combo').textContent(),`1 连击 ${formatComboMultiplier(1)}`);
+ assert.equal((await mini()).score,PAIR_POINT);assert.equal((await mini()).combo,1);assert.equal(await page.locator('#mini-combo').textContent(),`1 连击 ${formatComboMultiplier(1)}`);
+ assert.equal(await page.locator('#mini-round').textContent(),`1/${PAIR_TARGET} 对`);
  assert.equal(await page.locator('.mini-removed').count(),2);assert.ok(await page.locator('.mini-float').count()>=1);
+ assert.equal(await page.locator('.mini-ghost svg').count(),2);
  await page.screenshot({path:'test-results/mini-pairs-night-mobile.png'});await page.screenshot({path:'test-results/mini-pairs-preview.jpg',type:'jpeg',quality:55});
- for(const group of Object.values(groups).slice(1)){await cell(group[0].index);await cell(group[1].index);}
- const pairTotal=Array.from({length:20},(_,i)=>comboPoints(50,i+1)).reduce((a,b)=>a+b);
+ for(const group of Object.values(groups).slice(1,PAIR_TARGET)){await cell(group[0].index);await cell(group[1].index);}
+ const pairTotal=Array.from({length:PAIR_TARGET},(_,i)=>comboPoints(PAIR_POINT,i+1)).reduce((a,b)=>a+b);
  assert.equal((await mini()).status,'complete');assert.equal((await mini()).score,pairTotal);assert.ok(pairTotal>1000);assert.equal(await score(),initial+pairTotal);await back();
  await start('blocks');assert.equal(await page.locator('#mini-grid button').count(),100);initial=await score();
  const colors=await page.evaluate(()=>[0,1,2,3].map(i=>{const el=document.querySelector(`.mini-color-${i}`),c=document.createElement('canvas').getContext('2d');c.fillStyle=getComputedStyle(el).backgroundColor;c.fillRect(0,0,1,1);return [...c.getImageData(0,0,1,1).data].slice(0,3);}));
@@ -152,7 +161,7 @@ try {
  assert.equal(await page.locator('#mini-score').textContent(),await page.evaluate(n=>n.toLocaleString(),raw));
  const alreadyPaid=mid.status!=='playing';
  assert.equal(await score(),holeBase+3000+(alreadyPaid?raw*2:0),'mini-game points are credited when the round ends');
- if(!alreadyPaid) await page.clock.fastForward(30100);
+ if(!alreadyPaid) await page.clock.fastForward(PAIR_DURATION+2000);
  const done=await mini();
  assert.notEqual(done.status,'playing');
  assert.ok(done.score>=raw);

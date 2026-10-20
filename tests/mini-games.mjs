@@ -1,34 +1,42 @@
 import assert from 'node:assert/strict';
-import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_POINT, COMBO_WINDOW_MS, COMBO_MULTIPLIER_STEP, comboMultiplier, comboPoints, connectedBlocks, randomMiniGame } from '../src/mini-games.js';
+import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_POINT, COMBO_WINDOW_MS, COMBO_MULTIPLIER_STEP, comboMultiplier, comboPoints, connectedBlocks, randomMiniGame, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_ICON_LIST } from '../src/mini-games.js';
 import { secretPayout } from '../src/secret-wave.js';
 assert.equal(COMBO_MULTIPLIER_STEP,.5);
 assert.deepEqual([0,1,2,3,4].map(comboMultiplier),[1,1,1.5,2,2.5]);
 assert.equal(comboPoints(25,2),38);
 const seeded = seed => () => { seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/2**32; };
 assert.equal(MINI_DURATION,30000);
-assert.deepEqual(Object.values(MINI_GAMES).map(d=>[d.columns,d.rows]),[[8,5],[10,10],[4,4]]);
+assert.equal(PAIR_POINT,20);assert.equal(PAIR_TARGET,20);assert.equal(PAIR_DURATION,50000);
+assert.equal(PAIR_ICON_LIST.length,32);assert.equal(new Set(PAIR_ICON_LIST.map(icon=>icon.id)).size,32);
+assert.deepEqual(Object.values(MINI_GAMES).map(d=>[d.columns,d.rows]),[[8,8],[10,10],[4,4]]);
 assert.deepEqual([0,.4,.9].map(r=>randomMiniGame(()=>r)),['pairs','blocks','moles']);
 assert.throws(()=>createMiniGame('other'),RangeError);
 for(let seed=0;seed<25;seed++) {
   const pairs=createMiniGame('pairs',{random:seeded(seed),now:100});
-  assert.equal(pairs.state.board.length,40);
+  assert.equal(pairs.state.board.length,64);
+  assert.equal(pairs.state.deadline,100+PAIR_DURATION);
   const groups=Object.groupBy(pairs.state.board.map((c,i)=>({...c,index:i})),c=>c.pair);
-  assert.equal(Object.keys(groups).length,20);assert.ok(Object.values(groups).every(g=>g.length===2));
+  assert.equal(Object.keys(groups).length,32);assert.ok(Object.values(groups).every(g=>g.length===2));
+  assert.equal(new Set(pairs.state.board.map(cell=>cell.icon)).size,32);
   const mismatch=Object.values(groups).slice(0,2).map(g=>g[0].index);
   pairs.select(mismatch[0],101);pairs.select(mismatch[1],102);assert.equal(pairs.state.score,0);
   pairs.select(mismatch[1],103);assert.equal(pairs.state.selected,null);
   let streak=0;
-  for(const group of Object.values(groups)) {
+  const ordered=Object.values(groups);
+  for(const group of ordered.slice(0,PAIR_TARGET)) {
     assert.equal(pairs.select(group[0].index,1000),0);
     streak+=1;
-    assert.equal(pairs.select(group[1].index,1000),comboPoints(50,streak));
+    assert.equal(pairs.select(group[1].index,1000),comboPoints(PAIR_POINT,streak));
     assert.equal(pairs.state.combo,streak);
     assert.equal(pairs.state.board[group[0].index],null);
   }
-  const pairTotal=Array.from({length:20},(_,i)=>comboPoints(50,i+1)).reduce((a,b)=>a+b);
+  const pairTotal=Array.from({length:PAIR_TARGET},(_,i)=>comboPoints(PAIR_POINT,i+1)).reduce((a,b)=>a+b);
+  assert.equal(pairTotal,2300);
   assert.equal(pairs.state.score,pairTotal);assert.equal(pairs.state.status,'complete');
+  assert.equal(pairs.state.removed,PAIR_TARGET*2);
+  assert.equal(pairs.state.board.filter(Boolean).length,64-PAIR_TARGET*2);
   assert.ok(pairTotal>1000,'matched pairs are not capped');
-  assert.equal(pairs.select(0,1001),0);assert.equal(pairs.state.score,pairTotal);
+  assert.equal(pairs.select(ordered[PAIR_TARGET][0].index,1001),0);assert.equal(pairs.state.score,pairTotal);
   const blocks=createMiniGame('blocks',{random:seeded(seed),now:100});
   let moves=0;
   while(blocks.state.status==='playing'&&moves++<100) {
@@ -77,7 +85,7 @@ for(const kind of ['pairs','blocks']) {
   if(kind==='pairs'){const partner=game.state.board.findIndex((c,i)=>i>0&&c.pair===game.state.board[0].pair);game.select(0,501);game.select(partner,502);}
   else {const index=game.state.board.findIndex((_,i)=>connectedBlocks(game.state.board,i).length>=3);game.select(index,501);}
   const score=game.state.score;assert.ok(score>0);
-  assert.equal(game.select(0,30500),0);assert.equal(game.state.status,'timeout');
+  assert.equal(game.select(0,game.state.deadline),0);assert.equal(game.state.status,'timeout');
   if(kind==='pairs') assert.equal(game.state.score,score);
   else assert.equal(game.state.score,Math.round(score*comboMultiplier(game.state.bestCombo)));
 }
@@ -136,6 +144,9 @@ assert.equal(stacked.state.combo,1);assert.equal(stacked.state.score,1020);
 stacked.tick(stacked.state.deadline);
 assert.equal(stacked.state.score,Math.round(1020*comboMultiplier(1)));
 assert.equal(secretPayout(stacked.state.score,2),stacked.state.score*2,'secret ×2 applies after the end multiplier');
+const lasting=createMiniGame('pairs',{random:seeded(1),now:0});
+lasting.tick(MINI_DURATION);assert.equal(lasting.state.status,'playing','pairs keep going after the 30 second games have ended');
+lasting.tick(PAIR_DURATION);assert.equal(lasting.state.status,'timeout');
 const missed=createMiniGame('pairs',{random:()=>.2,now:0});
 const mate=missed.state.board.findIndex((cell,index)=>index>0&&cell.pair===missed.state.board[0].pair);
 missed.select(0,1);missed.select(mate,2);assert.equal(missed.state.combo,1);
