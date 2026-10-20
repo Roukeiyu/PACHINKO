@@ -1,5 +1,6 @@
 // Front-end leaderboard. Preset rows are a fixed list: generated once, never reshuffled.
-// A configured VITE_LEADERBOARD_URL is optional. No token is sent with requests.
+// VITE_LEADERBOARD_URL is the worker origin, without a path. Requests go to /top and /submit.
+// No token is sent. An empty URL, or a failed request, keeps using this browser's saved rows.
 
 export const LEADERBOARD_LIMIT = 20;
 export const LEADERBOARD_QUALIFY_SCORE = 50000;
@@ -69,6 +70,12 @@ function resolveStorage(storage) {
   return memoryStorage();
 }
 
+function remoteUrls(url) {
+  const base = String(url || '').trim().replace(/\/+$/, '');
+  if (!base) return null;
+  return { top: `${base}/top`, submit: `${base}/submit` };
+}
+
 function asScore(value) {
   const score = Math.floor(Number(value));
   return Number.isSafeInteger(score) && score > 0 ? score : 0;
@@ -85,7 +92,7 @@ function normalize(entry) {
 export function createLeaderboard({ url = '', storage, fetchImpl, presets = PRESET_BOARD } = {}) {
   const store = resolveStorage(storage);
   const request = fetchImpl ?? globalThis.fetch?.bind(globalThis);
-  const endpoint = String(url || '').trim();
+  const endpoint = remoteUrls(url);
 
   function readSaved() {
     try {
@@ -108,7 +115,7 @@ export function createLeaderboard({ url = '', storage, fetchImpl, presets = PRES
   async function fetchTop() {
     if (endpoint && request) {
       try {
-        const response = await request(endpoint, { method: 'GET', credentials: 'omit', headers: { Accept: 'application/json' } });
+        const response = await request(endpoint.top, { method: 'GET', credentials: 'omit', headers: { Accept: 'application/json' } });
         if (!response?.ok) throw new Error('leaderboard request failed');
         const data = await response.json();
         const rows = Array.isArray(data) ? data : data?.entries;
@@ -134,7 +141,7 @@ export function createLeaderboard({ url = '', storage, fetchImpl, presets = PRES
     const stored = existing || saved[saved.length - 1];
     if (remote && endpoint && request) {
       try {
-        const response = await request(endpoint, {
+        const response = await request(endpoint.submit, {
           method: 'POST',
           credentials: 'omit',
           keepalive,

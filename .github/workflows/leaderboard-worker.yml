@@ -1,0 +1,76 @@
+name: Deploy leaderboard worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'worker/**'
+      - '.github/workflows/leaderboard-worker.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: leaderboard-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - name: Install worker dependencies
+        working-directory: worker
+        run: npm ci --no-audit --no-fund
+      - name: Test the worker
+        working-directory: worker
+        run: npm test
+      - name: Check deploy secrets
+        id: secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          LEADERBOARD_GITHUB_TOKEN: ${{ secrets.LEADERBOARD_GITHUB_TOKEN }}
+        run: |
+          missing=0
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::warning::缺少仓库 secret CLOUDFLARE_API_TOKEN。Pages 部署不受影响。"
+            missing=1
+          fi
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning::缺少仓库 secret CLOUDFLARE_ACCOUNT_ID。Pages 部署不受影响。"
+            missing=1
+          fi
+          if [ -z "$LEADERBOARD_GITHUB_TOKEN" ]; then
+            echo "::warning::缺少仓库 secret LEADERBOARD_GITHUB_TOKEN。Pages 部署不受影响。"
+            missing=1
+          fi
+          if [ "$missing" = 1 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "排行榜 Worker 的 secret 还没配齐，已跳过部署。需要 CLOUDFLARE_API_TOKEN、CLOUDFLARE_ACCOUNT_ID、LEADERBOARD_GITHUB_TOKEN。GitHub Pages 的工作流是分开的，不受影响。"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Deploy the worker
+        if: steps.secrets.outputs.skip != 'true'
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy
+      - name: Store the GitHub token on the worker
+        if: steps.secrets.outputs.skip != 'true'
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          LEADERBOARD_GITHUB_TOKEN: ${{ secrets.LEADERBOARD_GITHUB_TOKEN }}
+        run: printf '%s' "$LEADERBOARD_GITHUB_TOKEN" | npx wrangler secret put GITHUB_TOKEN

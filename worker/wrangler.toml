@@ -1,0 +1,15 @@
+name = "ponpon-leaderboard"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+workers_dev = true
+
+# GITHUB_TOKEN is not stored here. Set it with:
+#   npx wrangler secret put GITHUB_TOKEN
+# The token only needs Contents read and write on Roukeiyu/PACHINKO.
+
+[vars]
+GITHUB_OWNER = "Roukeiyu"
+GITHUB_REPO = "PACHINKO"
+GITHUB_BRANCH = "leaderboard-data"
+GITHUB_PATH = "leaderboard.json"
+CACHE_SECONDS = "45"

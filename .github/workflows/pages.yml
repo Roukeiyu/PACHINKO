@@ -32,6 +32,8 @@ jobs:
       - name: Check mini-game rules and camera motion
         run: npm run test:mini-games:rules && node tests/scene-motion.mjs
       - name: Build the game
+        env:
+          VITE_LEADERBOARD_URL: ${{ vars.VITE_LEADERBOARD_URL }}
         run: npm run build
       - name: Upload website
         uses: actions/upload-pages-artifact@v3

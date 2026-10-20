@@ -49,10 +49,12 @@ const remote = createLeaderboard({
   },
 });
 assert.deepEqual((await remote.fetchTop()).map(entry => entry.name), ['SRV']);
+assert.equal(calls[0].url, 'https://leaderboard.example/scores/top');
 assert.equal(calls[0].headers.Authorization, undefined);
 assert.equal(calls[0].headers.authorization, undefined);
 await remote.submit({ runId: 'run', name: '<img src=x>', score: 60000 });
 assert.equal(remote.readSaved()[0].name, '<img src=x>');
+assert.equal(calls.at(-1).url, 'https://leaderboard.example/scores/submit');
 assert.equal(calls.at(-1).method, 'POST');
 assert.equal(calls.at(-1).headers.Authorization, undefined);
 const failed = createLeaderboard({
