@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createRenderer as createCanvasRenderer } from './renderer-2d.js';
-import { TABLE } from './physics.js';
+import { TABLE, LAUNCH_SQUASH } from './physics.js';
 import { SLOT_DISPLAY } from './slot-machine.js';
 import { chargeEffectsAt } from './charge.js';
 import { sceneMotionAt } from './scene-motion.js';
@@ -236,7 +236,7 @@ function create3DRenderer(canvas) {
       mesh.position.copy(world(ball.body.position.x, ball.body.position.y, 12));
       mesh.rotation.set(ball.body.position.y / 11, ball.body.position.x / 11, ball.body.angle);
     }
-    const compression = state.charging ? state.charge * 22 : 0;
+    const compression = state.charging ? state.charge * LAUNCH_SQUASH : 0;
     readyBall.position.copy(world(TABLE.launchX, TABLE.launchY + compression, 12));
     readyBall.visible = !game.balls.some(b => b.body.position.x > 683 && b.body.position.y > 730);
     spring.scale.y = (52 - compression) / 52; springPlate.position.copy(world(TABLE.launchX, 811 + compression, 5));

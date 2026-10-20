@@ -58,7 +58,8 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
   }
   function tick(at) {
     if (state.status !== 'playing') return;
-    if (kind === 'moles') while (state.status === 'playing' && at >= state.waveUntil) nextWave(state.waveUntil);
+    // One missed wave per tick. A stalled frame must not skip the rest of the round.
+    if (kind === 'moles' && state.status === 'playing' && at >= state.waveUntil) nextWave(state.waveUntil);
     if (state.status === 'playing' && at >= state.deadline) finish('timeout');
   }
   function select(index, at) {

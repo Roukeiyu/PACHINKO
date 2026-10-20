@@ -4,12 +4,22 @@ export const miniGameMarkup = `<dialog id="mini-game" class="mini-dialog" aria-l
 export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {} }) {
   const $ = selector => root.querySelector(selector);
   let game=null, source=null, revision=-1, settled=false, buttons=[];
+  // Play time follows foreground frames only. A hidden tab must not spend the 30s.
+  let visibleAt=0, lastWall=0;
+  document.addEventListener('visibilitychange', () => { if (document.hidden) lastWall = 0; });
+  function visibleNow(now) {
+    if (document.hidden) { lastWall = 0; return visibleAt; }
+    if (!lastWall) { lastWall = now; return visibleAt; }
+    visibleAt += Math.max(0, now - lastWall);
+    lastWall = now;
+    return visibleAt;
+  }
   function paint() {
     if (!game) return;
     const s=game.state;
-    $('#mini-time').textContent=String(Math.ceil(game.remaining(performance.now())/1000));
+    $('#mini-time').textContent=String(Math.ceil(game.remaining(visibleAt)/1000));
     $('#mini-score').textContent=s.score.toLocaleString();
-    $('#mini-progress').value=game.remaining(performance.now());
+    $('#mini-progress').value=game.remaining(visibleAt);
     $('#mini-round').textContent=s.kind==='moles'?`第 ${s.wave}/10 轮 · ${s.hit}/40 只`:s.kind==='pairs'?`${s.removed/2}/20 对`:`目标 1000 分`;
     if (revision !== s.revision) {
       revision=s.revision;$('#mini-message').textContent=s.message;
@@ -43,7 +53,7 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {} 
   }
   function start(kind, origin='secret') {
     if (root.open) return false;
-    source=origin;game=createMiniGame(kind,{now:performance.now()});settled=false;revision=-1;
+    source=origin;const now=performance.now();visibleAt=now;lastWall=now;game=createMiniGame(kind,{now});settled=false;revision=-1;
     const definition=MINI_GAMES[kind];$('#mini-title').textContent=definition.title;$('#mini-rule').textContent=definition.rule;
     root.dataset.kind=kind;$('#mini-grid').hidden=false;$('#mini-message').hidden=false;$('#mini-result').hidden=true;
     $('#mini-grid').style.setProperty('--columns',definition.columns);
@@ -53,9 +63,9 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {} 
   }
   $('#mini-grid').addEventListener('click',event=>{
     const button=event.target.closest('[data-cell]');if(!button||!game||settled)return;
-    const points=game.select(+button.dataset.cell,performance.now());if(points)onPoints(points);paint();
+    const points=game.select(+button.dataset.cell,visibleNow(performance.now()));if(points)onPoints(points);paint();
   });
   $('#mini-return').addEventListener('click',()=>{if(!settled)return;const origin=source;root.close();game=null;source=null;onExit(origin);});
   root.addEventListener('cancel',event=>event.preventDefault());
-  return { start, update(now){if(root.open&&game&&!settled){game.tick(now);paint();}}, get open(){return root.open;}, get source(){return source;}, snapshot:()=>game?.snapshot()??null };
+  return { start, update(now){if(!(root.open&&game&&!settled)||document.hidden){if(document.hidden)lastWall=0;return;}game.tick(visibleNow(now));paint();}, get open(){return root.open;}, get source(){return source;}, snapshot:()=>game?.snapshot()??null };
 }
