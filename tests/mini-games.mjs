@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_TARGET, COMBO_MULTIPLIER_STEP, comboMultiplier, comboPoints, connectedBlocks, randomMiniGame } from '../src/mini-games.js';
+import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_TARGET, COMBO_WINDOW_MS, COMBO_MULTIPLIER_STEP, comboMultiplier, comboPoints, connectedBlocks, randomMiniGame } from '../src/mini-games.js';
 import { secretPayout } from '../src/secret-wave.js';
 assert.equal(COMBO_MULTIPLIER_STEP,.5);
 assert.deepEqual([0,1,2,3,4].map(comboMultiplier),[1,1,1.5,2,2.5]);
@@ -35,13 +35,18 @@ for(let seed=0;seed<25;seed++) {
     const index=blocks.state.board.findIndex((_,i)=>connectedBlocks(blocks.state.board,i).length>=3);
     assert.ok(index>=0,'refilled boards always have a legal move');
     const before=blocks.snapshot(),group=connectedBlocks(before.board,index);
-    const points=blocks.select(index,1000);
-    assert.ok(points>=comboPoints(group.length*10,1));
+    const points=blocks.select(index,1000+moves);
+    assert.ok(points>=group.length*10);
     assert.equal(blocks.state.score,before.score+points);
     assert.equal(blocks.state.board.length,100);
     assert.ok(blocks.state.board.every(c=>c.color>=0&&c.color<4));
   }
-  assert.equal(blocks.state.status,'complete');assert.ok(blocks.state.score>=BLOCK_TARGET,'reaching the passing line can score past 1000');
+  assert.equal(blocks.state.status,'playing','1000 is a goal line, not an early finish');assert.ok(blocks.state.score>=BLOCK_TARGET,'base points can pass 1000 before the timer');
+  const base=blocks.state.score, best=blocks.state.bestCombo;
+  blocks.tick(blocks.state.deadline);
+  assert.equal(blocks.state.status,'timeout');
+  assert.equal(blocks.state.baseScore,base);
+  assert.equal(blocks.state.score,Math.round(base*comboMultiplier(best)));
   const moles=createMiniGame('moles',{random:seeded(seed),now:100});
   assert.equal(moles.state.molePlan.length,10);assert.equal(moles.state.molePlan.reduce((a,b)=>a+b),40);
   assert.ok(moles.state.molePlan.every(n=>n>=2&&n<=6));
@@ -71,7 +76,9 @@ for(const kind of ['pairs','blocks']) {
   if(kind==='pairs'){const partner=game.state.board.findIndex((c,i)=>i>0&&c.pair===game.state.board[0].pair);game.select(0,501);game.select(partner,502);}
   else {const index=game.state.board.findIndex((_,i)=>connectedBlocks(game.state.board,i).length>=3);game.select(index,501);}
   const score=game.state.score;assert.ok(score>0);
-  assert.equal(game.select(0,30500),0);assert.equal(game.state.status,'timeout');assert.equal(game.state.score,score);
+  assert.equal(game.select(0,30500),0);assert.equal(game.state.status,'timeout');
+  if(kind==='pairs') assert.equal(game.state.score,score);
+  else assert.equal(game.state.score,Math.round(score*comboMultiplier(game.state.bestCombo)));
 }
 const edge=Array.from({length:100},(_,i)=>({color:i%4}));edge[9].color=edge[10].color=5;
 assert.equal(connectedBlocks(edge,9).length,1,'rows never wrap at the right edge');
@@ -90,14 +97,28 @@ function isolatedTrio(score) {
 }
 const cross=isolatedTrio(990);
 assert.equal(cross.select(90,1),30);
-assert.equal(cross.state.score,1020);assert.equal(cross.state.status,'complete');
-assert.equal(cross.select(5,2),0);assert.equal(cross.state.score,1020,'a finished round keeps the overflow instead of clamping');
+assert.equal(cross.state.score,1020);assert.equal(cross.state.status,'playing','passing 1000 does not end the round');
+const lonely=cross.state.board.findIndex((_,i)=>connectedBlocks(cross.state.board,i).length<3);
+assert.ok(lonely>=0);assert.equal(cross.select(lonely,2),0);assert.equal(cross.state.score,1020,'a miss adds nothing and does not clamp');
+const streak=isolatedTrio(0);
+assert.equal(streak.select(90,1000),30);assert.equal(streak.state.combo,1);
+streak.state.board[80].color=3;streak.state.board[81].color=3;streak.state.board[82].color=3;
+const continued=streak.select(80,1400);assert.ok(continued>=30&&continued%10===0);assert.equal(streak.state.combo,2);assert.equal(streak.state.multiplier,1.5);
+const miss=streak.state.board.findIndex((_,i)=>connectedBlocks(streak.state.board,i).length<3);
+assert.ok(miss>=0);assert.equal(streak.select(miss,1500),0,'a click that cannot clear breaks the window');
+assert.equal(streak.state.combo,0);assert.equal(streak.state.lastClearAt,null);
+streak.state.board[70].color=2;streak.state.board[71].color=2;streak.state.board[72].color=2;
+const restarted=streak.select(70,2000);assert.ok(restarted>=30&&restarted%10===0);assert.equal(streak.state.combo,1,'a later clear starts at 1');
+assert.equal(streak.state.bestCombo,2);
+streak.tick(2000+COMBO_WINDOW_MS+1);
+assert.equal(streak.state.combo,0);assert.equal(streak.state.bestCombo,2,'the peak survives the window');
 const stacked=isolatedTrio(990);
 stacked.state.combo=2;
-assert.equal(stacked.select(90,1),comboPoints(30,3));
-assert.equal(stacked.state.score,990+comboPoints(30,3));
-assert.equal(secretPayout(stacked.state.score,2),stacked.state.score*2,'secret ×2 applies to the full combo score');
-assert.ok(secretPayout(stacked.state.score,2)>2000);
+assert.equal(stacked.select(90,1),30,'a preset streak without a fresh clear does not continue');
+assert.equal(stacked.state.combo,1);assert.equal(stacked.state.score,1020);
+stacked.tick(stacked.state.deadline);
+assert.equal(stacked.state.score,Math.round(1020*comboMultiplier(1)));
+assert.equal(secretPayout(stacked.state.score,2),stacked.state.score*2,'secret ×2 applies after the end multiplier');
 const missed=createMiniGame('pairs',{random:()=>.2,now:0});
 const mate=missed.state.board.findIndex((cell,index)=>index>0&&cell.pair===missed.state.board[0].pair);
 missed.select(0,1);missed.select(mate,2);assert.equal(missed.state.combo,1);
@@ -109,8 +130,8 @@ chain.state.board.forEach((cell,index)=>{ cell.color=(index%10+Math.floor(index/
 const paint=(x,y,color)=>{ chain.state.board[y*10+x].color=color; };
 paint(0,6,1);paint(0,7,1);paint(0,8,2);paint(0,9,1);paint(1,8,2);paint(2,8,2);
 const chained=chain.select(80,1);
-assert.ok(chain.state.combo>=2, 'a drop that joins three blocks counts as another combo');
-assert.ok(chained>comboPoints(30,1));
+assert.equal(chain.state.combo,1,'a drop chain adds base points and does not raise the click combo');
+assert.equal(chained,chain.state.removed*10);
 assert.ok(chain.state.fx.chains>=1);
 const gravity=createMiniGame('blocks',{random:()=>0,now:0});
 gravity.state.board.forEach((cell,index)=>{ cell.color=(index%10+Math.floor(index/10))%4; cell.fall=0; cell.spawned=false; });

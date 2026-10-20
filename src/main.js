@@ -11,7 +11,8 @@ import { createHaptics } from './haptics.js';
 import { createMiniGamesUI, miniGameMarkup } from './mini-games-ui.js';
 import { sceneMotionAt } from './scene-motion.js';
 import { celebrateReward, advanceCelebrations } from './reward-effects.js';
-import { COLLECTION_TYPES, restoreCollections, collectionStatus } from './collections.js';
+import { COLLECTION_TYPES, restoreCollections } from './collections.js';
+import { nextSlotCount, restoreSlots, SLOT_UNLOCK_7, SLOT_UNLOCK_9 } from './slots.js';
 import { slotIcon } from './slot-icons.js';
 import './style.css';
 
@@ -30,7 +31,7 @@ let saved = {};
 try { saved = JSON.parse(localStorage.getItem('ponpon-settings') || '{}'); } catch {}
 const state = {
   collections: restoreCollections(saved?.collections),
-  slots: [5,7,9].includes(saved.slots) ? saved.slots : 7,
+  slots: restoreSlots(saved.slots),
   sound: saved.sound !== false, volume: Number.isFinite(saved.volume) ? Math.max(0,Math.min(1,saved.volume)) : .55,
   music: saved.music !== false, musicVolume: Number.isFinite(saved.musicVolume) ? Math.max(0,Math.min(1,saved.musicVolume)) : .35,
   timeFlow: saved.timeFlow === true, timeFlowStartedAt: Number.isFinite(saved.timeFlowStartedAt) && saved.timeFlowStartedAt > 0 ? saved.timeFlowStartedAt : Date.now(),
@@ -46,11 +47,11 @@ document.querySelector('#app').innerHTML = `
   <header><div class="brand"><div class="brand-mark"><svg width="32" height="32" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="14" fill="#fff9e9"/><circle cx="15" cy="18" r="1.5" fill="#435444"/><circle cx="25" cy="18" r="1.5" fill="#435444"/><path d="M16 24q4 4 8 0" fill="none" stroke="#435444" stroke-width="1.5" stroke-linecap="round"/></svg></div><div class="brand-copy"><div class="brand-name">PON <span>PON</span><span style="font-size:13px;color:var(--flow-ink-89957a,#89957a)"> ✳</span></div><div class="brand-caption">A LITTLE JOY MACHINE</div></div><h1 class="mobile-title">弹一点，小快乐</h1></div><div class="header-actions"><span class="quiet-tag">TAKE A BREAK. MAKE A PON.</span><button class="icon-button" id="sound-button" aria-label="关闭声音"></button><button class="settings-button" id="settings-button" aria-label="游乐场设置">${icon('settings')}<span>游乐场设置</span></button></div></header>
   <section class="intro"><div><div class="eyebrow">YOUR DAILY DOSE OF HAPPY</div><h1>弹一点，小快乐<em>✧</em></h1><p>蓄一点力，弹进一场奇妙的小冒险。</p></div><div class="intro-sticker">100% 快乐<br>0% 压力</div></section>
   <main class="game-layout">
-    <section class="machine" aria-label="柏青哥游戏区"><div class="mobile-hud"><span>快乐积分 <strong id="mobile-score">0</strong></span><span class="hud-best">最高<strong id="mobile-best">0</strong></span><span id="shot-state">右下角 · 弹珠就位</span><span class="bonus-label">秘密洞 <b id="hole-points">+500</b></span><button type="button" id="collection-button" class="collection-button" aria-label="打开水果收集册">收集册</button></div><div class="machine-top"><span class="machine-label"><i class="status-dot"></i> <span id="machine-caption">THE HAPPY LITTLE PACHINKO</span></span><span class="tiny-dots">● ● ●</span></div><div class="board-wrap"><canvas id="board" tabindex="0" width="760" height="900" aria-describedby="slot-status" aria-label="${state.render3D ? '3D' : '2D'} 球台；弹珠从右下角沿轨道发射；长按下方按钮或右侧弹簧蓄力，${CHARGE_DURATION/1000}秒满蓄力，再按${OVERCHARGE_DURATION/1000}秒松手五球连发。右侧秘密洞奖励500分，左侧三角平台随机换向；左下蓄球罐存满20颗，从顶部均匀随机落下40颗；每进洞50次自动转动三格老虎机，两格相同全场3分钟双倍，三格相同全场1分钟五倍。"></canvas><span id="slot-status" class="sr-only" role="status">老虎机：进洞 0/50；两格相同全场 ×2 三分钟，三格相同全场 ×5 一分钟。</span><button class="plunger-hit" id="plunger" aria-label="长按右侧弹簧${CHARGE_DURATION/1000}秒满蓄力，再按${OVERCHARGE_DURATION/1000}秒松手五球连发"></button></div><div class="launch-control"><div class="compact-tools"><button class="icon-button" id="compact-sound" aria-label="关闭声音"></button><button class="settings-button" id="compact-settings" aria-label="游乐场设置">${icon('settings')}<span>设置</span></button></div><div class="launch-row"><div class="launch-mode"><button class="launch-button" id="launch">${icon('arrow')} <span id="launch-label">按住蓄力 · 松开发射</span><kbd>SPACE</kbd></button><label class="power-row" id="auto-power" for="power" hidden><span>弹射力度</span><output id="power-value" for="power">65%</output><input type="range" min="1" max="100" value="65" id="power" aria-label="自动弹射力度"/></label></div></div><p class="machine-foot">蓄力 ${CHARGE_DURATION/1000} 秒满 · 再按 ${OVERCHARGE_DURATION/1000} 秒五球连发 · 拾星本球加倍 · 蓄满 20 颗落 40 颗</p></div><div class="reward-dashboard" aria-label="反弹点惊喜进度"><div><span>左鼓 · 随机赠球 <b id="reward-0">0/10</b></span><progress id="reward-progress-0" max="10" value="0" aria-label="左侧反弹点命中次数"></progress><small>满 10 次送一颗</small></div><div><span>中央 · 时钟爆发 <b id="reward-2">0/30</b></span><progress id="reward-progress-2" max="30" value="0" aria-label="中央反弹点命中次数"></progress><small>1 秒发射 12 颗</small></div><div><span>右鼓 · 中央变大 <b id="reward-1">0/10</b></span><progress id="reward-progress-1" max="10" value="0" aria-label="右侧反弹点命中次数"></progress><small id="reward-timer">持续 10 秒</small></div></div></section>
+    <section class="machine" aria-label="柏青哥游戏区"><div class="mobile-hud"><span>快乐积分 <strong id="mobile-score">0</strong></span><span class="hud-best">最高<strong id="mobile-best">0</strong></span><span id="shot-state">右下角 · 弹珠就位</span><span class="bonus-label">秘密洞 <b id="hole-points">+500</b></span><button type="button" id="collection-button" class="collection-button" aria-label="打开水果收集册">收集册</button></div><div class="machine-top"><span class="machine-label"><i class="status-dot"></i> <span id="machine-caption">THE HAPPY LITTLE PACHINKO</span></span><span class="tiny-dots">● ● ●</span></div><div class="board-wrap"><canvas id="board" tabindex="0" width="760" height="900" aria-describedby="slot-status" aria-label="${state.render3D ? '3D' : '2D'} 球台；弹珠从右下角沿轨道发射；长按下方按钮或右侧弹簧蓄力，${CHARGE_DURATION/1000}秒满蓄力，再按${OVERCHARGE_DURATION/1000}秒松手五球连发。右侧秘密洞奖励500分，左侧三角平台随机换向；左下蓄球罐存满20颗，从顶部均匀随机落下40颗；每进洞50次自动转动三格老虎机，两格相同全场3分钟双倍，三格相同全场1分钟五倍。"></canvas><div id="slot-upgrade" class="slot-upgrade" hidden></div><span id="slot-status" class="sr-only" role="status">老虎机：进洞 0/50；两格相同全场 ×2 三分钟，三格相同全场 ×5 一分钟。</span><button class="plunger-hit" id="plunger" aria-label="长按右侧弹簧${CHARGE_DURATION/1000}秒满蓄力，再按${OVERCHARGE_DURATION/1000}秒松手五球连发"></button></div><div class="launch-control"><div class="compact-tools"><button class="icon-button" id="compact-sound" aria-label="关闭声音"></button><button class="settings-button" id="compact-settings" aria-label="游乐场设置">${icon('settings')}<span>设置</span></button></div><div class="launch-row"><div class="launch-mode"><button class="launch-button" id="launch">${icon('arrow')} <span id="launch-label">按住蓄力 · 松开发射</span><kbd>SPACE</kbd></button><label class="power-row" id="auto-power" for="power" hidden><span>弹射力度</span><output id="power-value" for="power">65%</output><input type="range" min="1" max="100" value="65" id="power" aria-label="自动弹射力度"/></label></div></div><p class="machine-foot">蓄力 ${CHARGE_DURATION/1000} 秒满 · 再按 ${OVERCHARGE_DURATION/1000} 秒五球连发 · 拾星本球加倍 · 蓄满 20 颗落 40 颗</p></div><div class="reward-dashboard" aria-label="反弹点惊喜进度"><div><span>左鼓 · 随机赠球 <b id="reward-0">0/10</b></span><progress id="reward-progress-0" max="10" value="0" aria-label="左侧反弹点命中次数"></progress><small>满 10 次送一颗</small></div><div><span>中央 · 时钟爆发 <b id="reward-2">0/30</b></span><progress id="reward-progress-2" max="30" value="0" aria-label="中央反弹点命中次数"></progress><small>1 秒发射 12 颗</small></div><div><span>右鼓 · 中央变大 <b id="reward-1">0/10</b></span><progress id="reward-progress-1" max="10" value="0" aria-label="右侧反弹点命中次数"></progress><small id="reward-timer">持续 10 秒</small></div></div></section>
     <aside class="sidebar"><section class="card score-card"><div class="card-label">今日份快乐 <span class="small-label">HAPPY POINTS</span></div><div class="score-value"><span id="score">0</span><span class="score-unit">分</span></div><div class="score-divider"></div><div class="score-stats"><span>已投小球 &nbsp;<strong id="ball-count">0</strong></span><span>最高纪录 &nbsp;<strong id="best">0</strong></span></div></section><section class="card how-card"><div class="card-label">快乐使用说明 <span>↗</span></div><ol><li><span class="step-no">01</span>力度决定高度，回流口重返球场</li><li><span class="step-no">02</span>左右鼓满 10 次，赠球或放大中央</li><li><span class="step-no">03</span>中央满 30 次，十二时钟大爆发</li><li><span class="step-no">04</span>蓄球罐存满 20 颗，顶部落下 40 颗</li><li><span class="step-no">05</span>进洞满 50 次转好运，两同 ×2，三同 ×5</li></ol></section><div class="little-note">✿ &nbsp; 不用赶路，弹一会儿也很好</div></aside>
   </main><div class="bottom-info"><span>✧ &nbsp; 真实物理碰撞 · 无限次小快乐</span><span class="sound-indicator"><span class="sound-bars"><i></i><i></i><i></i></span><span id="sound-status">声音已开启，快乐有回响</span></span></div><footer class="footer"><span>PON PON · YOUR POCKET-SIZED HAPPY PLACE</span><span>MADE WITH <b>♡</b> & A LITTLE BOUNCE</span></footer>
 </div><div class="toast" id="toast" role="status"></div>
-<dialog id="settings"><div class="dialog-inner"><div class="dialog-head"><button id="gm-dot" class="gm-dot" type="button" aria-label="边框装饰" aria-pressed="false"><span></span></button><h2>布置你的游乐场</h2><button class="icon-button" id="close-settings" aria-label="关闭设置">${icon('close')}</button></div><p class="dialog-sub">换一种心情，再接住一颗小快乐。</p><div id="gm-tools" class="gm-tools" hidden><span>GM · 小游戏试玩</span><div><button type="button" data-mini="pairs">对对碰</button><button type="button" data-mini="blocks">消消乐</button><button type="button" data-mini="moles">打地鼠</button></div></div><label class="setting-row auto-setting" for="auto"><span>自动弹射<small>关闭设置后连续发射，力度在球台下方调整</small></span><input id="auto" type="checkbox" role="switch" /></label><div class="setting-label">落袋槽位<small>越多槽位，越多惊喜</small></div><div class="choices">${[5,7,9].map(n=>`<button class="choice" data-slots="${n}">${n} 个槽位</button>`).join('')}</div><label class="setting-row mode-setting" for="three-d"><span>3D 模式<small>关闭使用 2D 画面，开启使用立体球台</small></span><input id="three-d" type="checkbox" role="switch" ${state.render3D?'checked':''}/></label><label class="setting-row time-setting" for="time-flow"><span>时间流逝模式<small>白天 4 分钟 → 黄昏 1 分钟 → 夜间 4 分钟 → 清晨 1 分钟</small></span><input id="time-flow" type="checkbox" role="switch" ${state.timeFlow?'checked':''}/></label><div id="time-cycle-info" class="time-cycle-info" ${state.timeFlow?'':'hidden'}><div class="time-cycle-head"><strong id="time-phase">白天</strong><span id="time-phase-clock"></span></div><progress id="time-cycle-progress" max="${TIME_CYCLE}" value="0" aria-label="十分钟昼夜循环进度"></progress></div><label class="setting-row music-setting" for="music"><span>律动背景音乐<small>120 BPM · 轻快入场，随后律动循环</small></span><input id="music" type="checkbox" role="switch" ${state.music?'checked':''}/></label><label class="setting-row" for="music-volume">音乐音量<input id="music-volume" type="range" min="0" max="100" value="${state.musicVolume*100}" /></label><label class="setting-row" for="volume">音效音量<input id="volume" type="range" min="0" max="100" value="${state.volume*100}" /></label><label class="setting-row mode-setting" for="vibrate"><span>震动<small>碰撞轻一下，进普通洞稍强，Lucky 和秘密洞更明显。静音不影响；不支持的手机会自动跳过</small></span><input id="vibrate" type="checkbox" role="switch" ${state.vibrate?'checked':''}/></label><label class="setting-row" for="calm">轻柔模式（减少装饰动效）<input id="calm" type="checkbox" ${state.calm?'checked':''}/></label><button class="done-button" id="done-settings">好啦，继续快乐</button><p class="setting-note">设置自动保存。调整槽位会清空在途小球，保留得分。</p></div></dialog><dialog id="collection-book" class="collection-dialog" aria-labelledby="collection-title"><div class="dialog-inner"><div class="dialog-head"><h2 id="collection-title">水果收集册</h2><button type="button" id="close-collection" class="icon-button" aria-label="关闭收集册">${icon('close')}</button></div><div class="collection-book"><p>每次进槽收集 1 颗，同类水果共享进度。累计 20 / 50 / 100 颗自动升级，奖励变为原来的 1.5 / 2 / 3 倍，从下一次进槽生效。</p><div class="collection-grid">${COLLECTION_TYPES.map(({multiplier,name})=>`<article class="collection-item" data-collection="${multiplier}"><span class="collection-icon" aria-hidden="true">${slotIcon(multiplier)}</span><div><strong>${name}</strong><span class="collection-level"></span></div><p class="collection-reward"></p><progress max="20" value="0" aria-label="${name}收集进度"></progress><small class="collection-count"></small></article>`).join('')}</div><p class="collection-note">进度自动保存在当前浏览器。星星和老虎机加倍只增加积分，不增加收集数量；调整槽位后保留进度。</p><button type="button" id="collection-return" class="done-button">返回弹珠台</button></div></div></dialog>${miniGameMarkup}`;
+<dialog id="settings"><div class="dialog-inner"><div class="dialog-head"><button id="gm-dot" class="gm-dot" type="button" aria-label="边框装饰" aria-pressed="false"><span></span></button><h2>布置你的游乐场</h2><button class="icon-button" id="close-settings" aria-label="关闭设置">${icon('close')}</button></div><p class="dialog-sub">换一种心情，再接住一颗小快乐。</p><div id="gm-tools" class="gm-tools" hidden><span>GM · 小游戏试玩</span><div><button type="button" data-mini="pairs">对对碰</button><button type="button" data-mini="blocks">消消乐</button><button type="button" data-mini="moles">打地鼠</button></div></div><label class="setting-row auto-setting" for="auto"><span>自动弹射<small>关闭设置后连续发射，力度在球台下方调整</small></span><input id="auto" type="checkbox" role="switch" /></label><p id="slot-tier" class="setting-note">落袋随快乐积分自动增加：${SLOT_UNLOCK_7.toLocaleString()} 分升至 7 槽，${SLOT_UNLOCK_9.toLocaleString()} 分升至 9 槽。</p><label class="setting-row mode-setting" for="three-d"><span>3D 模式<small>关闭使用 2D 画面，开启使用立体球台</small></span><input id="three-d" type="checkbox" role="switch" ${state.render3D?'checked':''}/></label><label class="setting-row time-setting" for="time-flow"><span>时间流逝模式<small>白天 4 分钟 → 黄昏 1 分钟 → 夜间 4 分钟 → 清晨 1 分钟</small></span><input id="time-flow" type="checkbox" role="switch" ${state.timeFlow?'checked':''}/></label><div id="time-cycle-info" class="time-cycle-info" ${state.timeFlow?'':'hidden'}><div class="time-cycle-head"><strong id="time-phase">白天</strong><span id="time-phase-clock"></span></div><progress id="time-cycle-progress" max="${TIME_CYCLE}" value="0" aria-label="十分钟昼夜循环进度"></progress></div><label class="setting-row music-setting" for="music"><span>律动背景音乐<small>120 BPM · 轻快入场，随后律动循环</small></span><input id="music" type="checkbox" role="switch" ${state.music?'checked':''}/></label><label class="setting-row" for="music-volume">音乐音量<input id="music-volume" type="range" min="0" max="100" value="${state.musicVolume*100}" /></label><label class="setting-row" for="volume">音效音量<input id="volume" type="range" min="0" max="100" value="${state.volume*100}" /></label><label class="setting-row mode-setting" for="vibrate"><span>震动<small>碰撞轻一下，进普通洞稍强，Lucky 和秘密洞更明显。静音不影响；不支持的手机会自动跳过</small></span><input id="vibrate" type="checkbox" role="switch" ${state.vibrate?'checked':''}/></label><label class="setting-row" for="calm">轻柔模式（减少装饰动效）<input id="calm" type="checkbox" ${state.calm?'checked':''}/></label><button class="done-button" id="done-settings">好啦，继续快乐</button><p class="setting-note">设置自动保存。槽位升级会等这一波弹珠落完再切换，已经打开的槽位不会降回去。</p></div></dialog><dialog id="collection-book" class="collection-dialog" aria-labelledby="collection-title"><div class="dialog-inner"><div class="dialog-head"><h2 id="collection-title">水果收集册</h2><button type="button" id="close-collection" class="icon-button" aria-label="关闭收集册">${icon('close')}</button></div><div class="collection-book"><p>每种水果进槽一次记 1 个。这里只囤积数量，留给以后的功能使用，不改变槽位得分。</p><div class="collection-grid">${COLLECTION_TYPES.map(({id,name})=>`<article class="collection-item" data-collection="${id}"><span class="collection-icon" aria-hidden="true">${slotIcon(id)}</span><div><strong>${name}</strong><small class="collection-count"></small></div></article>`).join('')}</div><p class="collection-note">数量自动保存在当前浏览器。星星和老虎机加倍只增加积分，不增加收集数量。</p><button type="button" id="collection-return" class="done-button">返回弹珠台</button></div></div></dialog>${miniGameMarkup}`;
 
 const $ = (s) => document.querySelector(s);
 const panelOpen = () => $('#settings').open || $('#collection-book').open;
@@ -228,6 +229,34 @@ function addScore(points) {
   state.score += points; state.best = Math.max(state.best, state.score); persist();
   $('#score').textContent = state.score.toLocaleString(); $('#mobile-score').textContent = state.score.toLocaleString(); $('#best').textContent = state.best.toLocaleString(); $('#mobile-best').textContent = state.best.toLocaleString();
   $('.score-value').classList.remove('score-bump'); void $('.score-value').offsetWidth; $('.score-value').classList.add('score-bump');
+  considerSlotUpgrade();
+}
+let slotUpgradeTimer = 0;
+function tableBusy() {
+  return game.balls.length > 0 || game.pendingLaunches > 0 || game.collector.remaining > 0 || state.secretPending || miniGames.open || panelOpen();
+}
+function applySlotUpgrade(next) {
+  if (next <= state.slots) return;
+  state.slots = next;
+  game.setSlots(next);
+  fx.slotGlows = Array(next).fill(0);
+  persist();
+  const banner = $('#slot-upgrade');
+  banner.textContent = `${next} 槽开启`;
+  banner.hidden = false;
+  banner.classList.remove('is-on'); void banner.offsetWidth; banner.classList.add('is-on');
+  clearTimeout(slotUpgradeTimer);
+  slotUpgradeTimer = setTimeout(() => { banner.hidden = true; banner.classList.remove('is-on'); }, 1600);
+  toast(`槽位升级！${next} 个落袋已开启`);
+  haptics.upgrade();
+  updateSlotTier();
+}
+function considerSlotUpgrade() {
+  if (state.slotsPinned) return;
+  const next = nextSlotCount(state.slots, state.score);
+  if (next === state.slots) return;
+  if (tableBusy()) return;
+  applySlotUpgrade(next);
 }
 function award(result) {
   const jackpot = result.kind === 'jackpot';
@@ -235,13 +264,7 @@ function award(result) {
   const points = settlement ? settlement.pay : result.points;
   if (settlement?.retro) addScore(settlement.retro);
   addScore(points);
-  if (result.collection) {
-    updateCollections();
-    if (result.collection.upgraded) {
-      const { multiplier, level, bonus } = result.collection;
-      toast(`${slotIcon(multiplier)} 槽位升至 Lv.${level} · 奖励 ×${bonus}`);
-    }
-  }
+  if (result.collection) updateCollections();
   haptics.score(result);
   const profile = celebrateReward(fx, result, state.calm);
   if (!jackpot) fx.slotGlows[result.column] = 1;
@@ -364,6 +387,7 @@ function tick(now) {
       $('#shot-state').textContent = overcharge === 1 ? '✦ 五球连发已就绪！' : percent === 100 ? `✧ 彩虹蓄力 · 再按 ${((BURST_READY_AT - state.chargeElapsed) / 1000).toFixed(1)}s 五球连发` : '弹簧蓄力中…';
     } else if (!state.secretPending && now - lastDrop > 1700) $('#shot-state').textContent = game.balls.length ? `${game.balls.length} 颗小快乐在冒险` : '右下角 · 弹珠就位';
     if (state.auto && !state.secretPending && now - lastAuto > 1100) { launch(); lastAuto = now; }
+    considerSlotUpgrade();
   }
   if (state.secretPending && !game.balls.length && !miniGames.open && !panelOpen() && !document.hidden) { miniGames.start(randomMiniGame(), 'secret', secretWave.multiplier); syncLaunchControls(); }
   if (miniGames.open) { $('.game-layout').style.removeProperty('transform'); frame = requestAnimationFrame(tick); return; }
@@ -382,19 +406,19 @@ function tick(now) {
   frame = requestAnimationFrame(tick);
 }
 function updateCollections() {
-  for (const { multiplier } of COLLECTION_TYPES) {
-    const item = document.querySelector(`[data-collection="${multiplier}"]`);
-    const { count, level, bonus, next } = collectionStatus(state.collections[multiplier]);
-    item.dataset.level = level;
-    item.querySelector('.collection-level').textContent = `Lv.${level}${next === null ? ' · 已满级' : ''}`;
-    item.querySelector('.collection-reward').textContent = `基础 ${multiplier * 10} 分 → ${multiplier * 10 * bonus} 分 / 颗`;
-    const progress = item.querySelector('progress'); progress.max = next ?? 100; progress.value = Math.min(count, progress.max);
-    item.querySelector('.collection-count').textContent = next === null ? `已收集 ${count.toLocaleString()} 颗` : `${count.toLocaleString()} / ${next} 颗 · 再收集 ${next - count} 颗升级`;
+  for (const { id, name } of COLLECTION_TYPES) {
+    const item = document.querySelector(`[data-collection="${id}"]`);
+    const count = state.collections[id] || 0;
+    item.querySelector('.collection-count').textContent = `已收集 ${count.toLocaleString()} 个`;
+    item.setAttribute('aria-label', `${name} 已收集 ${count.toLocaleString()} 个`);
   }
 }
+function updateSlotTier() {
+  const tier = $('#slot-tier');
+  if (tier) tier.textContent = `当前 ${state.slots} 槽。快乐积分 ${SLOT_UNLOCK_7.toLocaleString()} 升至 7 槽，${SLOT_UNLOCK_9.toLocaleString()} 升至 9 槽。已解锁的槽位会保存，刷新也不会降回去。`;
+}
 function updateLayout() {
-  updateCollections(); updateTimeFlow(performance.now(), true);
-  document.querySelectorAll('[data-slots]').forEach(b => { b.classList.toggle('selected', +b.dataset.slots === state.slots); b.setAttribute('aria-pressed', String(+b.dataset.slots === state.slots)); });
+  updateCollections(); updateSlotTier(); updateTimeFlow(performance.now(), true);
 }
 function updateSound() {
   $('#sound-button').innerHTML = icon(state.sound ? 'sound' : 'muted'); $('#sound-button').setAttribute('aria-label', state.sound ? '关闭声音' : '开启声音'); $('#sound-button').setAttribute('aria-pressed', String(state.sound));
@@ -420,7 +444,6 @@ $('#sound-button').addEventListener('click', () => { state.sound = !state.sound;
 $('#settings-button').addEventListener('click', () => openPanel('settings'));
 $('#close-settings').addEventListener('click', () => $('#settings').close()); $('#done-settings').addEventListener('click', () => $('#settings').close());
 for (const panel of [$('#settings'), $('#collection-book')]) panel.addEventListener('click', event => { if (event.target === panel) { const r = panel.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) panel.close(); } });
-document.querySelectorAll('[data-slots]').forEach(b => b.addEventListener('click', () => { if (state.slots === +b.dataset.slots) return; state.slots = +b.dataset.slots; game.setSlots(state.slots); fx.slotGlows = Array(state.slots).fill(0); updateLayout(); persist(); }));
 $('#volume').addEventListener('input', event => { state.volume = +event.target.value / 100; if (state.volume > 0) state.sound = true; unlockAudio(); updateSound(); persist(); });
 $('#volume').addEventListener('change', () => sound('confirm'));
 $('#music').addEventListener('change', event => { state.music = event.target.checked; unlockAudio(); updateSound(); persist(); });
@@ -432,4 +455,4 @@ $('#best').textContent = state.best.toLocaleString(); $('#mobile-best').textCont
 frame = requestAnimationFrame(tick);
 window.addEventListener('pagehide', () => { endCharge(false); cancelAnimationFrame(frame); frame = 0; audio?.suspend().catch(()=>{}); });
 window.addEventListener('pageshow', () => { if (!frame) { last = 0; accumulator = 0; frame = requestAnimationFrame(tick); } syncAudioVisibility(); });
-if (import.meta.env.DEV) Object.defineProperty(window, '__ponpon', { get: () => ({ score: state.score, collections: structuredClone(state.collections), secretPending: state.secretPending, secretMultiplier: secretWave.multiplier, emissionPaused: game.emissionPaused, gm: state.gm, miniGame: miniGames.snapshot(), render3D: state.render3D, rendering: renderer.snapshot(), star: game.star ? { ...game.star } : null, activeBalls: game.balls.length, slots: state.slots, pins: game.pins.length,  auto: state.auto, charging: state.charging, charge: state.charge, chargeEffects: state.charging ? chargeEffectsAt(state.chargeElapsed) : null, pendingLaunches: game.pendingLaunches, stats: structuredClone(game.stats), rewards: structuredClone(game.rewards), collector: { count: game.collector.stored.length, capacity: game.collector.capacity, remaining: game.collector.remaining, outlets: game.collector.outlets.map(p => ({ ...p })) }, bumpers: game.bumpers.map(b => ({ ...b.position })), timeFlow: { enabled: state.timeFlow, startedAt: state.timeFlowStartedAt, phase: timePalette?.phase.id, position: timePalette?.phase.position, tokens: timeTokens.length }, gameClock: game.clock, slotMachine: structuredClone(game.slotMachine), centerRadius: game.bumpers[2].plugin.radius, canonNotes: canon.count, currentNote: currentNote?.name, positions: game.balls.map(b => ({ ...b.body.position, entered: b.entered, power: b.power, bonus: b.bonus, scoreFactor: b.scoreFactor })), music: backgroundMusic?.status, musicEnabled: state.music, musicVolume: state.musicVolume, audioState: audio?.state }) });
+if (import.meta.env.DEV) Object.defineProperty(window, '__ponpon', { get: () => ({ score: state.score, collections: structuredClone(state.collections), secretPending: state.secretPending, secretMultiplier: secretWave.multiplier, emissionPaused: game.emissionPaused, gm: state.gm, miniGame: miniGames.snapshot(), render3D: state.render3D, rendering: renderer.snapshot(), star: game.star ? { ...game.star } : null, activeBalls: game.balls.length, slots: state.slots, pins: game.pins.length,  auto: state.auto, charging: state.charging, charge: state.charge, chargeEffects: state.charging ? chargeEffectsAt(state.chargeElapsed) : null, pendingLaunches: game.pendingLaunches, stats: structuredClone(game.stats), rewards: structuredClone(game.rewards), collector: { count: game.collector.stored.length, capacity: game.collector.capacity, remaining: game.collector.remaining, outlets: game.collector.outlets.map(p => ({ ...p })) }, bumpers: game.bumpers.map(b => ({ ...b.position })), timeFlow: { enabled: state.timeFlow, startedAt: state.timeFlowStartedAt, phase: timePalette?.phase.id, position: timePalette?.phase.position, tokens: timeTokens.length }, gameClock: game.clock, slotMachine: structuredClone(game.slotMachine), centerRadius: game.bumpers[2].plugin.radius, canonNotes: canon.count, currentNote: currentNote?.name, positions: game.balls.map(b => ({ ...b.body.position, entered: b.entered, power: b.power, bonus: b.bonus, scoreFactor: b.scoreFactor })), music: backgroundMusic?.status, musicEnabled: state.music, musicVolume: state.musicVolume, audioState: audio?.state, setSlots(count) { state.slotsPinned = true; state.slots = count; game.setSlots(count); fx.slotGlows = Array(state.slots).fill(0); persist(); updateSlotTier(); }, grant(points) { state.slotsPinned = false; addScore(points); }, holdBall() { const ball = game.launch(1); return !!ball; }, releaseWave() { game.setSlots(state.slots); } }) });

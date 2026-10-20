@@ -63,13 +63,13 @@ async function setup(fallback = false, viewport = { width: 1440, height: 1180 })
 }
 try {
   const fallback = await setup(true);
-  const symbols = { 2:'🍒', 3:'🍊', 5:'🍇', 10:'🍍' };
+  const symbols = { 2:'🍒', 3:'🍊', 5:'🍇', 10:'🍍', 20:'🍉' };
   const upper = { animal:['🐰','🐻','🐱'] };
   for (const theme of Object.keys(upper)) for (const count of [5,7,9]) {
     await fallback.evaluate(({theme,count}) => window.__rewardFixture.theme(theme,count), {theme,count});
     await fallback.clock.runFor(50);
     const labels = await fallback.evaluate(() => window.__rewardLabels);
-    const slots = labels.filter(l => l.y === 820), factors = count===5 ? [2,3,10,3,2] : count===7 ? [2,3,5,10,5,3,2] : [2,2,3,5,10,5,3,2,2];
+    const slots = labels.filter(l => l.y === 820), factors = count===5 ? [2,3,5,3,2] : count===7 ? [2,3,5,10,5,3,2] : [2,3,5,10,20,10,5,3,2];
     assert.deepEqual(slots.map(l => l.value), factors.map(m => symbols[m]), `${theme}/${count}: repeated multipliers always share a fruit`);
     for (const motif of upper[theme]) assert.ok(labels.some(l => l.value === motif && l.y < 400));
     assert.ok(upper[theme].every(icon => !slots.some(l => l.value === icon)), 'drums use a separate icon family');
@@ -77,7 +77,7 @@ try {
   await fallback.close();
   const page = await setup();
   assert.equal(await page.evaluate(() => window.__rewardFixture.snapshot().rendering.mode), 'webgl');
-  await page.evaluate(() => { window.__rewardFixture.reset(); window.__rewardPhysics.slot(10); window.__rewardFixture.advance(700); });
+  await page.evaluate(() => { window.__rewardFixture.theme('animal', 7); window.__rewardFixture.reset(); window.__rewardPhysics.slot(10); window.__rewardFixture.advance(700); });
   await page.clock.runFor(50);
   let state = await page.evaluate(() => window.__rewardFixture.snapshot());
   assert.equal(state.score, 100); assert.equal(state.bursts[0].scene, 'lucky');

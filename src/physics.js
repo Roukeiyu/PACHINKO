@@ -1,5 +1,7 @@
 import Matter from 'matter-js';
-import { collectSlot, collectionStatus } from './collections.js';
+import { collectSlot } from './collections.js';
+import { slotMultipliers } from './slots.js';
+export { slotMultipliers };
 import { createSlotMachine, SLOT_DISPLAY } from './slot-machine.js';
 
 const { Engine, Bodies, Body, Composite, Events } = Matter;
@@ -9,7 +11,6 @@ export const TABLE = Object.freeze({ width: 760, height: 900, left: 39, right: 6
 export const LAUNCH_SQUASH = 22;
 export const STEP = 1000 / 120;
 const FILTER = { world: 1, ascending: 2, playing: 4, returnRamp: 8, launchDoor: 16 };
-export const slotMultipliers = count => count === 5 ? [2, 3, 10, 3, 2] : count === 9 ? [2, 2, 3, 5, 10, 5, 3, 2, 2] : [2, 3, 5, 10, 5, 3, 2];
 
 // Physics is independent of rendering, so trajectory and scoring can be tested at
 // the same fixed time step used on desktop and mobile (including fast launches).
@@ -289,11 +290,10 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     stats.scored++;
     // The bonus is read at entry, never copied to a ball or to storage stock.
     // The entry that earns a spin is scored before its future result activates.
-    // This entry earns collection progress; its upgrade applies to subsequent entries.
-    const collectionMultiplier = result.kind === 'slot' && collections ? collectionStatus(collections[result.multiplier]).bonus : 1;
+    // Fruit counts are recorded here and do not change the points.
     const collection = collections ? collectSlot(collections, result) : null;
-    onScore({ ...result, scoreFactor: ball.scoreFactor, globalMultiplier, collectionMultiplier, collection,
-      points: result.basePoints * ball.scoreFactor * globalMultiplier * collectionMultiplier, ballId: ball.id });
+    onScore({ ...result, scoreFactor: ball.scoreFactor, globalMultiplier, collection,
+      points: result.basePoints * ball.scoreFactor * globalMultiplier, ballId: ball.id });
     slotMachine.recordEntry(clock);
   }
   function step(dt = STEP) {
@@ -388,7 +388,8 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
       if (ball.entered && x < 666 && y >= TABLE.scoreLine) {
         const column = Math.max(0, Math.min(slots - 1, Math.floor((x - TABLE.left) / ((TABLE.right - TABLE.left) / slots))));
         const multiplier = slotMultipliers(slots)[column];
-        remove(ball, i); settleScore({ kind: 'slot', column, multiplier, basePoints: multiplier * 10, x: TABLE.left + (column + .5) * (TABLE.right - TABLE.left) / slots, y: TABLE.scoreLine }, ball); continue;
+        const lucky = column === (slots - 1) / 2;
+        remove(ball, i); settleScore({ kind: 'slot', column, multiplier, lucky, basePoints: multiplier * 10, x: TABLE.left + (column + .5) * (TABLE.right - TABLE.left) / slots, y: TABLE.scoreLine }, ball); continue;
       }
       // Balls falling back down the shooter lane are returned, never mis-scored
       // as the rightmost slot. A timeout is visible rather than a hidden teleport.

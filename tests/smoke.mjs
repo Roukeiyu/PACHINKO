@@ -51,10 +51,10 @@ try {
   assert.ok(await page.evaluate(before => window.__ponpon.stats.returns > before, returnsBefore), 'weak automatic shots return');
   await page.keyboard.press('End'); await toggleAuto();
   console.log('PASS: the 1% automatic slider produces only a tiny hop and natural return.');
+  assert.equal(await page.locator('[data-slots]').count(), 0, 'slot count is no longer a manual setting');
+  assert.equal(await page.evaluate(() => window.__ponpon.slots), 5, 'a new table starts at 5 slots');
   for (const slots of [5, 9, 7]) {
-    await page.locator('#settings-button').click();
-    await page.locator(`[data-slots="${slots}"]`).click();
-    await page.locator('#done-settings').click();
+    await page.evaluate(n => window.__ponpon.setSlots(n), slots);
     const before = await page.evaluate(() => window.__ponpon.score);
     await toggleAuto();
     await page.waitForFunction(previous => window.__ponpon.score > previous, before, { timeout: 30000 });
@@ -73,8 +73,8 @@ try {
   await page.waitForTimeout(900);
   assert.equal(await page.locator('#ball-count').textContent(), count);
   console.log('PASS: animal scene and automatic launch/pause.');
+  await page.evaluate(() => window.__ponpon.setSlots(9));
   await page.locator('#settings-button').click();
-  await page.locator('[data-slots="9"]').click();
   await page.locator('#calm').check();
   assert.equal(await page.locator('#vibrate').isChecked(), true, 'vibration defaults on');
   await page.keyboard.press('Escape');

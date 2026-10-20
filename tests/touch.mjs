@@ -94,10 +94,10 @@ try {
   await page.waitForTimeout(400);
   assert.deepEqual(await page.evaluate(() => window.__ponpon.positions), before, 'settings must pause physical motion');
   assert.deepEqual(await page.evaluate(() => window.__ponpon.star), starBefore, 'settings also pause star respawning');
-  await page.locator('[data-slots="9"]').tap();
+  assert.equal(await page.locator('[data-slots]').count(), 0);
   await page.screenshot({ path: 'test-results/mobile-settings.png', fullPage: true });
   await page.locator('#done-settings').tap();
-  assert.equal(await page.evaluate(() => window.__ponpon.slots), 9);
+  assert.equal(await page.evaluate(() => window.__ponpon.slots), 5);
   assert.equal(await page.locator('[data-theme]').count(), 0);
   for (const [width, height] of [[320,568], [390,664], [390,844], [430,932], [844,390]]) {
     await page.setViewportSize({ width, height }); await page.evaluate(() => scrollTo(0, 0));

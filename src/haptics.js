@@ -51,10 +51,11 @@ export function createHaptics({ vibrate = defaultVibrate, now = () => performanc
     score(result, at = now()) {
       if (!result) return false;
       if (result.kind === 'jackpot') return buzz(HAPTIC_JACKPOT_PATTERN, RANK.jackpot, at);
-      if (result.kind === 'slot' && result.multiplier >= 10) return buzz(HAPTIC_LUCKY_MS, RANK.lucky, at);
+      if (result.kind === 'slot' && (result.lucky || result.multiplier >= 10)) return buzz(HAPTIC_LUCKY_MS, RANK.lucky, at);
       if (result.kind === 'slot') return buzz(HAPTIC_SLOT_MS, RANK.slot, at);
       return false;
     },
+    upgrade(at = now()) { return buzz(HAPTIC_JACKPOT_PATTERN, RANK.jackpot, at); },
     tap(ms = HAPTIC_COLLISION_MS, at = now()) { return buzz(ms, RANK.collision, at); },
   };
 }

@@ -4,6 +4,7 @@ const profiles = {
   3: { tier: 2, name: '花瓣绽放', color: '#dd8fa6', shape: 'petal', count: 18, waves: 1, radius: 60, duration: 950, speed: 4.5, notes: [587, 740, 880] },
   5: { tier: 3, name: '星光喷泉', color: '#a58ad5', shape: 'star', count: 18, waves: 2, radius: 90, duration: 2400, speed: 6, notes: [587, 740, 880, 1175, 1480] },
   10: { tier: 4, name: '金色礼花', color: '#dab05b', shape: 'ribbon', count: 20, waves: 3, radius: 125, duration: 3800, speed: 8, notes: [587, 740, 880, 1175, 1480, 1760, 2349] },
+  20: { tier: 4, name: '金色礼花', color: '#dab05b', shape: 'ribbon', count: 22, waves: 3, radius: 140, duration: 4000, speed: 8.2, notes: [587, 740, 880, 1175, 1480, 1760, 2349] },
   jackpot: { tier: 5, name: '秘密宝藏', color: '#d4a44c', shape: 'star', count: 20, waves: 4, radius: 150, duration: 5500, waveInterval: 700, speed: 8.5, notes: [587, 740, 880, 1175, 1480, 1760, 2349, 2960] },
   clock: { tier: 6, name: '30 次碰撞 · 十二时钟盛典', color: '#e2ae48', shape: 'star', count: 28, waves: 5, radius: 270, duration: 3000, speed: 10, notes: [294, 440, 587, 740, 880, 1175, 1480, 1760, 2349, 2960, 3520, 4699] },
 };
@@ -36,7 +37,7 @@ export function celebrateReward(fx, result, calm, random = Math.random) {
   const profile = rewardProfile(result);
   const burst = { kind: result.kind, x: result.x, y: result.kind === 'slot' ? result.y - 52 : result.y,
     profile, age: 0, nextWave: 0, calm,
-    scene: result.kind === 'jackpot' ? 'treasure' : result.kind === 'slot' && result.multiplier === 10 ? 'lucky' : profile === profiles[5] ? 'stars' : null };
+    scene: result.kind === 'jackpot' ? 'treasure' : result.kind === 'slot' && (result.lucky || result.multiplier === 10 || result.multiplier === 20) ? 'lucky' : profile === profiles[5] ? 'stars' : null };
   fx.celebrations.push(burst);
   if (fx.celebrations.length > 16) {
     const lowestTier = Math.min(...fx.celebrations.map(b => b.profile.tier));

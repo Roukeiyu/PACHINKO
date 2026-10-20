@@ -1,29 +1,26 @@
-// Collections are keyed by the original slot fruit, independent of temporary
-// score multipliers, theme changes, and repeated slots in a layout.
+// The book stores a count per fruit. It no longer changes slot score.
+// Older saves used the same ids (2/3/5/10). A new center fruit is 20.
 export const COLLECTION_TYPES = Object.freeze([
-  Object.freeze({ multiplier: 2, name: '樱桃' }),
-  Object.freeze({ multiplier: 3, name: '橙子' }),
-  Object.freeze({ multiplier: 5, name: '葡萄' }),
-  Object.freeze({ multiplier: 10, name: '菠萝' }),
+  Object.freeze({ id: 2, name: '樱桃' }),
+  Object.freeze({ id: 3, name: '橙子' }),
+  Object.freeze({ id: 5, name: '葡萄' }),
+  Object.freeze({ id: 10, name: '菠萝' }),
+  Object.freeze({ id: 20, name: '西瓜' }),
 ]);
+
 export function restoreCollections(saved) {
-  return Object.fromEntries(COLLECTION_TYPES.map(({ multiplier }) => {
-    const value = saved?.[multiplier];
-    return [multiplier, Number.isSafeInteger(value) && value >= 0 ? value : 0];
+  const source = saved && typeof saved === 'object' ? saved : {};
+  return Object.fromEntries(COLLECTION_TYPES.map(({ id }) => {
+    const value = source[id] ?? source[String(id)];
+    return [id, Number.isSafeInteger(value) && value >= 0 ? value : 0];
   }));
 }
-export function collectSlot(collections, result) {
-  if (result.kind !== 'slot' || !COLLECTION_TYPES.some(type => type.multiplier === result.multiplier)) return null;
-  const key = result.multiplier, before = collections[key];
-  collections[key] = Math.min(Number.MAX_SAFE_INTEGER, before + 1);
-  const previousLevel = collectionStatus(before).level;
-  const status = collectionStatus(collections[key]);
-  return { multiplier: key, before, ...status, upgraded: status.level > previousLevel };
-}
 
-export const COLLECTION_GOALS = Object.freeze([20, 50, 100]);
-const BONUS = Object.freeze([1, 1.5, 2, 3]);
-export function collectionStatus(count = 0) {
-  const level = COLLECTION_GOALS.filter(goal => count >= goal).length;
-  return { count, level, bonus: BONUS[level], next: COLLECTION_GOALS[level] ?? null };
+export function collectSlot(collections, result) {
+  if (result.kind !== 'slot' || !COLLECTION_TYPES.some(type => type.id === result.multiplier)) return null;
+  const key = result.multiplier;
+  const before = collections[key] ?? 0;
+  const count = Math.min(Number.MAX_SAFE_INTEGER, before + 1);
+  collections[key] = count;
+  return { id: key, multiplier: key, before, count };
 }

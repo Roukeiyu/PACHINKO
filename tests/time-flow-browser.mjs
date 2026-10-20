@@ -15,6 +15,8 @@ try {
   const errors = []; page.on('pageerror',e=>errors.push(e.message));
   await page.clock.setFixedTime(epoch);
   await page.addInitScript(() => {
+    const saved = JSON.parse(localStorage.getItem('ponpon-settings') || '{}');
+    if (saved.slots == null) localStorage.setItem('ponpon-settings', JSON.stringify({ ...saved, slots: 7, sound: false }));
     const fillText = CanvasRenderingContext2D.prototype.fillText;
     window.__timeFlowText = {}; window.__timeFlowIcons = {};
     CanvasRenderingContext2D.prototype.fillText = function(value, ...args) {
@@ -24,7 +26,7 @@ try {
     };
   });
   await page.goto(process.env.TEST_URL || 'http://127.0.0.1:5173');
-  const domColors = () => page.evaluate(() => Object.fromEntries(['html','.machine','.board-wrap','#settings','.choice.selected','#launch','#done-settings'].map(selector=>{const c=getComputedStyle(document.querySelector(selector));return [selector,{ color:c.color, background:c.backgroundColor, image:c.backgroundImage,border:c.borderColor }];})));
+  const domColors = () => page.evaluate(() => Object.fromEntries(['html','.machine','.board-wrap','#settings','#slot-tier','#launch','#done-settings'].map(selector=>{const c=getComputedStyle(document.querySelector(selector));return [selector,{ color:c.color, background:c.backgroundColor, image:c.backgroundImage,border:c.borderColor }];})));
   const original = await domColors();
   const iconStyles = () => page.evaluate(() => ({
     mascot: [...document.querySelectorAll('.mascot *,.brand-mark svg *')].map(el => {const s=getComputedStyle(el);return [s.fill,s.stroke];}),

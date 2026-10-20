@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { collectionStatus } from '../src/collections.js';
 import { slotMultipliers, TABLE } from '../src/physics.js';
 const executablePath = process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
 const browser = await chromium.launch({ executablePath, args: process.platform === 'linux' ? ['--no-sandbox'] : [] });
@@ -35,7 +34,7 @@ try {
     }; return { engine, balls`);
     await route.fulfill({ response, body });
   });
-  // Slot face = base fruit × global reel multiplier × collection bonus.
+  // Slot face = base fruit × global reel multiplier. Collections do not change it.
   async function waitForSlotProduct() {
     const started = Date.now();
     let expected = '';
@@ -48,7 +47,7 @@ try {
       }, { left: TABLE.left, right: TABLE.right });
       if (snap) {
         const base = slotMultipliers(snap.slots)[snap.column];
-        const label = `×${base * snap.global * collectionStatus(snap.collections[base]).bonus}`;
+        const label = `×${base * snap.global}`;
         const hole = `+${500 * snap.global}`;
         expected = `${label} ${hole}`;
         if (snap.labels.includes(label) && snap.labels.includes(hole)) return;
@@ -82,7 +81,7 @@ try {
     return { score: pon.score, slots: pon.slots, column, collections: pon.collections, global: pon.slotMachine.multiplier, star: pon.star.multiplier };
   }, { left: TABLE.left, right: TABLE.right });
   const fruit = slotMultipliers(scored.slots)[scored.column];
-  const scoredDelta = fruit * 10 * scored.star * scored.global * collectionStatus(scored.collections[fruit]).bonus;
+  const scoredDelta = fruit * 10 * scored.star * scored.global;
   await page.evaluate(() => window.__slotFixture.enter(1, true));
   assert.equal(await page.evaluate(() => window.__ponpon.score), scored.score + scoredDelta, 'score is base × star × global reel × collection bonus');
   await page.locator('#settings-button').click();
@@ -96,7 +95,7 @@ try {
   assert.deepEqual(await page.evaluate(() => ({ state: window.__ponpon.slotMachine, clock: window.__ponpon.gameClock })), hidden, 'background visibility freezes the countdown too');
   await page.evaluate(() => { delete document.hidden; document.dispatchEvent(new Event('visibilitychange')); });
   await page.locator('#settings-button').click();
-  await page.locator('[data-slots="9"]').click(); await page.locator('#calm').check(); await page.locator('#done-settings').click();
+  await page.evaluate(() => window.__ponpon.setSlots(9)); await page.locator('#calm').check(); await page.locator('#done-settings').click();
   assert.equal(await page.evaluate(() => window.__ponpon.slotMachine.entries), 101);
   assert.equal(await page.evaluate(() => window.__ponpon.slotMachine.multiplier), 5);
   await page.screenshot({ path: 'test-results/slot-machine-x5.png', fullPage: true });

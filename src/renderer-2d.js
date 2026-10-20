@@ -4,11 +4,10 @@ import { TABLE, slotMultipliers, LAUNCH_SQUASH } from './physics.js';
 import { SLOT_DISPLAY, SLOT_SYMBOLS, slotBonusLabel } from './slot-machine.js';
 import { rewardProfile, activeRewardScenes, rewardSceneAt, marqueePoint } from './reward-effects.js';
 import { slotIcon, slotColorIndex } from './slot-icons.js';
-import { collectionStatus } from './collections.js';
 
 export function createRenderer(canvas, { textureMode = false } = {}) {
   const ctx = canvas.getContext('2d');
-  let activePalette = null, paintingBall = false, motion = sceneMotionAt(0, {}, {});
+  let activePalette = null, paintingBall = false, motion = sceneMotionAt(0, {}, {}), starMemory = null, starFlash = null;
   const paintColor = (value, role) => paintingBall ? value : activePalette?.color(value, role) ?? value;
   const { width: W, height: H } = TABLE;
   function resize() {
@@ -70,24 +69,12 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     const sw = (TABLE.right - TABLE.left) / state.slots, multipliers = slotMultipliers(state.slots);
     for (let i = 0; i < state.slots; i++) {
       const x = TABLE.left + i * sw, glow = fx.slotGlows[i] || 0;
-      const collected = collectionStatus(state.collections?.[multipliers[i]]);
       box(x + 3, TABLE.slotTop, sw - 6, 86, 12, theme.colors[slotColorIndex(multipliers[i])]);
       if (glow) { const p = rewardProfile({ multiplier: multipliers[i] }); ctx.save(); ctx.globalAlpha = glow * .65; ctx.shadowBlur = 8 + p.tier * 5; ctx.shadowColor = paintColor(p.color, 'glow'); box(x + 3, TABLE.slotTop, sw - 6, 86, 12, p.color); ctx.restore(); }
-      if (collected.level) {
-        ctx.save(); ctx.lineWidth = 1 + collected.level;
-        ctx.strokeStyle = ['','#bb8b61','#91a2b7','#d4ad55'][collected.level];
-        ctx.beginPath(); ctx.roundRect(x + 6, TABLE.slotTop + 3, sw - 12, 80, 10); ctx.stroke();
-        for (let gem = 0; gem < collected.level; gem++) {
-          const gx = x + sw / 2 + (gem - (collected.level - 1) / 2) * 8;
-          ctx.fillStyle = ctx.strokeStyle; ctx.beginPath(); ctx.moveTo(gx, TABLE.slotTop + 77); ctx.lineTo(gx+2.5,TABLE.slotTop+80);ctx.lineTo(gx,TABLE.slotTop+83);ctx.lineTo(gx-2.5,TABLE.slotTop+80);ctx.closePath();ctx.fill();
-        }
-        ctx.restore();
-      }
-      text(`Lv.${collected.level} · ${collected.next === null ? 'MAX' : `${collected.count}/${collected.next}`}`, x + sw / 2, TABLE.slotTop + 8, state.slots === 9 ? 6.5 : 7.5, '#627454', 'bold');
       text(slotIcon(multipliers[i]), x + sw / 2, TABLE.slotTop + 23, state.slots === 9 ? 22 : 26, '#627454');
-      text(`×${multipliers[i] * bonus.multiplier * collected.bonus}`, x + sw / 2, TABLE.slotTop + 54, 17, '#4c6648', 'bold');
+      text(`×${multipliers[i] * bonus.multiplier}`, x + sw / 2, TABLE.slotTop + 54, 17, '#4c6648', 'bold');
       if (bonus.multiplier > 1) text(`进洞 ×${bonus.multiplier}`, x + sw / 2, TABLE.slotTop + 73, 9, bonus.multiplier === 5 ? '#8b59b5' : '#99712d');
-      else if (multipliers[i] === 10) text('LUCKY', x + sw / 2, TABLE.slotTop + 73, 9, '#aa8243');
+      else if (i === (state.slots - 1) / 2 || multipliers[i] >= 10) text('LUCKY', x + sw / 2, TABLE.slotTop + 73, 9, '#aa8243');
     }
     for (const hole of game.holes) {
       const treasure = (fx.celebrations || []).find(b => b.kind === 'jackpot' && b.x === hole.x && b.y === hole.y);
@@ -242,23 +229,51 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       ball(TABLE.launchX, TABLE.launchY + compression, .88);
     }
     text('PULL', 713, 850 + compression * .3, 9, '#65785c', 'bold');
-    if (game.star) {
-      const s = game.star, pulse = state.calm ? 1 : 1 + Math.sin(t * 4) * .09;
-      const purple = s.multiplier === 5, color = purple ? '#a477d4' : '#d8ae58';
+    if (game.star) starMemory = { id: game.star.id, x: game.star.x, y: game.star.y, multiplier: game.star.multiplier };
+    else if (starMemory) { starFlash = { ...starMemory, at: game.clock }; starMemory = null; }
+    if (game.star && !textureMode) {
+      const s = game.star, purple = s.multiplier === 5;
+      const pulse = state.calm ? 1 : 1 + Math.sin(t * 4) * .08;
+      const flicker = state.calm ? .9 : .72 + .28 * Math.sin(game.clock / 140);
       const remaining = Math.max(0, s.expiresAt - game.clock);
-      ctx.save(); ctx.translate(s.x, s.y); ctx.scale(pulse, pulse);
+      const core = purple ? '#f4e8ff' : '#fff6d0', mid = purple ? '#c9a0ee' : '#f5cd70', edge = purple ? '#8d62c4' : '#e0b04a';
+      ctx.save(); ctx.translate(s.x, s.y); ctx.globalAlpha = flicker;
+      const halo = ctx.createRadialGradient(0, 0, 2, 0, 0, 30 * pulse);
+      halo.addColorStop(0, core); halo.addColorStop(.35, mid); halo.addColorStop(1, edge + '00');
+      ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(0, 0, 30 * pulse, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
       ctx.beginPath(); ctx.arc(0, 0, 16, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * remaining / (s.expiresAt - s.born));
-      ctx.strokeStyle = paintColor(color, 'line'); ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.shadowColor = paintColor(purple ? '#b98de7' : '#efc264', 'glow'); ctx.shadowBlur = 12;
+      ctx.strokeStyle = paintColor(purple ? '#a477d4' : '#d8ae58', 'line'); ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.save(); ctx.scale(pulse, pulse); ctx.shadowColor = paintColor(purple ? '#e7d4ff' : '#ffe7a1', 'glow'); ctx.shadowBlur = state.calm ? 0 : 16;
       ctx.beginPath();
       for (let i = 0; i < 10; i++) {
         const angle = -Math.PI / 2 + i * Math.PI / 5, radius = i % 2 ? 5 : 11;
         if (i) ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius); else ctx.moveTo(0, -radius);
       }
-      ctx.closePath(); ctx.fillStyle = paintColor(purple ? '#b58ae0' : '#f5cd70', 'glow'); ctx.fill(); ctx.shadowBlur = 0;
-      ctx.strokeStyle = paintColor(purple ? '#f7eaff' : '#fff8dc', 'line'); ctx.lineWidth = 1.5; ctx.stroke();
-      text(`×${s.multiplier} · ${Math.ceil(remaining / 1000)}s`, 0, 29, 10, purple ? '#8b59b5' : '#b58b42', 'bold'); ctx.restore();
+      ctx.closePath();
+      const fill = ctx.createRadialGradient(0, -3, 1, 0, 0, 12);
+      fill.addColorStop(0, '#fffef8'); fill.addColorStop(.5, core); fill.addColorStop(1, mid);
+      ctx.fillStyle = fill; ctx.fill(); ctx.shadowBlur = 0;
+      ctx.strokeStyle = paintColor(purple ? '#f7eaff' : '#fff8dc', 'line'); ctx.lineWidth = 1.2; ctx.stroke();
+      const sparks = state.calm ? 3 : 6;
+      for (let i = 0; i < sparks; i++) {
+        const angle = game.clock / 420 + i * Math.PI * 2 / sparks, radius = 15 + Math.sin(game.clock / 260 + i) * 3;
+        ctx.globalAlpha = flicker * (.45 + .55 * ((i + game.clock / 80) % 1));
+        ctx.fillStyle = i % 2 ? '#fff' : mid;
+        ctx.beginPath(); ctx.arc(Math.cos(angle) * radius, Math.sin(angle) * radius, 1.4, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+      ctx.globalAlpha = 1;
+      text(`×${s.multiplier} · ${Math.ceil(remaining / 1000)}s`, 0, 29, 10, purple ? '#8b59b5' : '#b58b42', 'bold');
+      ctx.restore();
     }
+    if (!textureMode && starFlash && game.clock - starFlash.at < 420) {
+      const age = (game.clock - starFlash.at) / 420, radius = 12 + age * 36;
+      ctx.save(); ctx.globalAlpha = (1 - age) * (state.calm ? .45 : .9);
+      const burst = ctx.createRadialGradient(starFlash.x, starFlash.y, 2, starFlash.x, starFlash.y, radius);
+      burst.addColorStop(0, '#fffef6'); burst.addColorStop(.4, starFlash.multiplier === 5 ? '#e7d2ff' : '#ffe39a'); burst.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = burst; ctx.beginPath(); ctx.arc(starFlash.x, starFlash.y, radius, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    } else if (starFlash && game.clock - starFlash.at >= 420) starFlash = null;
     // Celebration scenery stays behind every live ball.
     for (const burst of activeRewardScenes(fx.celebrations || [])) {
       const scene = rewardSceneAt(burst, state.calm), age = burst.age, color = burst.profile.color;
@@ -384,6 +399,6 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     ctx.restore();
   }
   return { draw, resize, project: (x, y) => project2DMotion(x, y, motion, W, H),
-    snapshot: () => ({ mode: '2d', motion: { ...motion }, readyBall: project2DMotion(TABLE.launchX, TABLE.launchY, motion, W, H) }),
+    snapshot: () => ({ mode: '2d', motion: { ...motion }, readyBall: project2DMotion(TABLE.launchX, TABLE.launchY, motion, W, H), star: starMemory ? project2DMotion(starMemory.x, starMemory.y, motion, W, H) : null }),
     dispose: () => observer?.disconnect() };
 }

@@ -1,7 +1,7 @@
-import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_TARGET, BLOCK_COLORS, BLOCK_SYMBOLS, MINI_HIT_SHAKE, MINI_HIT_MS, formatComboMultiplier } from './mini-games.js';
+import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_TARGET, BLOCK_COLORS, BLOCK_SYMBOLS, MINI_HIT_SHAKE, MINI_HIT_MS, comboMultiplier, formatComboMultiplier } from './mini-games.js';
 import { secretPayout } from './secret-wave.js';
 
-export const miniGameMarkup = `<dialog id="mini-game" class="mini-dialog" aria-labelledby="mini-title" aria-describedby="mini-rule"><div class="mini-inner"><div class="mini-heading"><span class="mini-eyebrow">秘密小游戏</span><span id="mini-round"></span></div><h2 id="mini-title"></h2><p id="mini-rule"></p><div class="mini-hud"><span>剩余 <strong id="mini-time">30</strong> 秒</span><span id="mini-combo" class="mini-combo" aria-live="polite"></span><span>本局 <strong id="mini-score">0</strong> 分<span id="mini-bonus" class="mini-bonus">×2</span></span></div><progress id="mini-progress" max="${MINI_DURATION}" value="${MINI_DURATION}" aria-label="小游戏剩余时间"></progress><div id="mini-stage"><div id="mini-fx" class="mini-fx" aria-hidden="true"></div><div id="mini-grid" class="mini-grid"></div></div><p id="mini-message" role="status"></p><div id="mini-result" hidden><div class="mini-result-mark">✦</div><h3 id="mini-result-title"></h3><p id="mini-result-score"></p><button class="done-button" id="mini-return">返回球台</button></div></div></dialog>`;
+export const miniGameMarkup = `<dialog id="mini-game" class="mini-dialog" aria-labelledby="mini-title" aria-describedby="mini-rule"><div class="mini-inner"><div class="mini-heading"><span class="mini-eyebrow">秘密小游戏</span><span id="mini-round"></span></div><h2 id="mini-title"></h2><p id="mini-rule"></p><div class="mini-hud"><span>剩余 <strong id="mini-time">30</strong> 秒</span><span id="mini-combo" class="mini-combo" aria-live="polite"></span><span>本局 <strong id="mini-score">0</strong> 分<span id="mini-bonus" class="mini-bonus">×2</span></span></div><progress id="mini-progress" max="${MINI_DURATION}" value="${MINI_DURATION}" aria-label="小游戏剩余时间"></progress><div id="mini-stage"><div id="mini-fx" class="mini-fx" aria-hidden="true"></div><div id="mini-grid" class="mini-grid"></div></div><p id="mini-message" role="status"></p><div id="mini-result" hidden><div class="mini-result-mark">✦</div><h3 id="mini-result-title"></h3><p id="mini-result-math" class="mini-result-math" hidden></p><p id="mini-result-score"></p><button class="done-button" id="mini-return">返回球台</button></div></div></dialog>`;
 export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {}, vibrate = () => {} }) {
   const $ = selector => root.querySelector(selector);
   let game=null, source=null, scoreMultiplier=1, revision=-1, fxId=0, settled=false, buttons=[];
@@ -64,7 +64,7 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     $('#mini-score').textContent=s.score.toLocaleString();
     $('#mini-score').classList.toggle('is-hot', s.combo>=4);
     const combo=$('#mini-combo');
-    combo.textContent=s.combo?`${s.combo} 连击 ${formatComboMultiplier(s.combo)}`:'连击 —';
+    combo.textContent=s.kind==='blocks'||s.combo?`${s.combo} 连击 ${formatComboMultiplier(s.combo)}`:'连击 —';
     combo.dataset.tier=String(Math.min(4,s.combo));
     combo.classList.toggle('is-on', s.combo>0);
     $('#mini-bonus').classList.toggle('is-on', scoreMultiplier > 1);
@@ -97,6 +97,14 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
       if (s.status!=='playing'&&!settled) {
       settled=true;$('#mini-grid').hidden=true;$('#mini-message').hidden=true;$('#mini-result').hidden=false;
       $('#mini-result-title').textContent=s.status==='complete'?'挑战完成！':'时间到啦';
+      const math=$('#mini-result-math');
+      if (s.kind==='blocks') {
+        math.hidden=false;
+        const peak = comboMultiplier(s.bestCombo);
+        const peakText = Number.isInteger(peak) ? String(peak) : peak.toFixed(1);
+        math.textContent=`${s.baseScore.toLocaleString()} × ${peakText} = ${s.score.toLocaleString()}`;
+        math.classList.remove('is-on'); void math.offsetWidth; math.classList.add('is-on');
+      } else { math.hidden=true; math.textContent=''; math.classList.remove('is-on'); }
       const paid=secretPayout(s.score, scoreMultiplier);
       const moleNote=s.kind==='moles'?` · 打中 ${s.hit}/40 只`:'';
       const doubleNote=scoreMultiplier>1?' · 双球入洞 ×2':'';

@@ -44,7 +44,7 @@ try {
   assert.deepEqual(await physical(),preserved,'switching to 3D retains live balls, scores, rewards and clocks');
   let state=await page.evaluate(()=>window.__ponpon),r=state.rendering;
   assert.equal(r.mode,'webgl');assert.ok(r.meshes>80 && r.triangles>20000);assert.equal(r.alignmentError,0);
-  assert.equal(r.pitch,VIEW_PITCH_DEG);assert.equal(r.fov,VIEW_FOV);assert.ok(r.decor>=8,'procedural scenery sits around the table');
+  assert.equal(r.pitch,VIEW_PITCH_DEG);assert.equal(r.fov,VIEW_FOV);assert.equal(r.decor,undefined,'off-board scenery is gone');
   assert.ok(r.bodies.filter(b=>b.kind==='wall').every(b=>b.height===WALL_HEIGHT));
   assert.ok(r.bodies.filter(b=>b.kind==='rail').every(b=>b.height===RAIL_HEIGHT));
   const fits=frame=>frame.every(p=>p.x>0.02&&p.x<0.98&&p.y>0.02&&p.y<0.98);
@@ -64,8 +64,8 @@ try {
   assert.equal(await page.evaluate(()=>window.__ponpon.rendering.cameraAngle),0,'drag and arrow keys do not adjust the fixed camera');
   assert.equal(await page.evaluate(()=>window.__ponpon.stats.launches),1);
   await page.evaluate(()=>document.querySelector('#settings-button').click());
-  for(const count of [5,9,7]) {
-    await page.evaluate(n=>document.querySelector(`[data-slots="${n}"]`).click(),count);await page.clock.runFor(50);
+  for(const count of [7,9,5]) {
+    await page.evaluate(n=>window.__ponpon.setSlots(n),count);await page.clock.runFor(50);
     assert.equal(await page.evaluate(()=>window.__ponpon.rendering.bodies.filter(b=>b.kind==='divider').length),count-1);
     assert.equal(await page.evaluate(()=>window.__ponpon.rendering.alignmentError),0);
   }

@@ -11,9 +11,9 @@ const world = (x, y, z = 0) => new THREE.Vector3(x - W / 2, H / 2 - y, z);
 // One-point perspective. The old view was orthographic at 14° and 1400 units.
 // Shake amplitude stays in scene-motion.js; depth comes from this view and the taller rails.
 export const VIEW_PITCH_DEG = 36;
-export const VIEW_FOV = 44;
-export const VIEW_DISTANCE = 1550;
-export const VIEW_LOOK_Y = -50;
+export const VIEW_FOV = 40;
+export const VIEW_DISTANCE = 1600;
+export const VIEW_LOOK_Y = -40;
 export const WALL_HEIGHT = 58;
 export const RAIL_HEIGHT = 36;
 
@@ -157,58 +157,6 @@ function create3DRenderer(canvas) {
     // Recess the painted reel assembly so moving balls can cross its display.
     box(SLOT_DISPLAY.x, SLOT_DISPLAY.y, SLOT_DISPLAY.width, SLOT_DISPLAY.height, 3, goldSide, -1, 8);
     for (const spinner of game.spinners) disc(spinner.position.x, spinner.position.y, 15, 5, goldSide, 12);
-    decorate();
-  }
-  let decorCount = 0;
-  function decorate() {
-    const cream = material('#f7d6e2'), bear = material('#c4784a'), cat = material('#7d6bb5');
-    const cherry = material('#e36b78'), leaf = material('#5f8f55'), lemon = material('#e7b84a'), orange = material('#ef8d3a');
-    const head = new THREE.SphereGeometry(12, 12, 10);
-    const berry = new THREE.SphereGeometry(8, 10, 8);
-    const pip = new THREE.SphereGeometry(3.2, 8, 6);
-    const stem = new THREE.CylinderGeometry(1.1, 1.1, 8, 5);
-    const ear = new THREE.CylinderGeometry(2.6, 3, 14, 6);
-    const cone = new THREE.ConeGeometry(6, 13, 6);
-    function sit(x, y, z, scale, build) {
-      const group = new THREE.Group();
-      build(group);
-      group.position.copy(world(x, y, z));
-      group.scale.setScalar(scale);
-      group.traverse(object => { if (object.isMesh) { object.castShadow = false; object.receiveShadow = false; } });
-      table.add(group); decorCount++;
-    }
-    function ears(group, color, spread, height, tilt) {
-      for (const side of [-1, 1]) {
-        const mesh = new THREE.Mesh(ear, color);
-        mesh.position.set(side * spread, 0, height);
-        mesh.rotation.x = Math.PI / 2; mesh.rotation.z = side * tilt;
-        group.add(mesh);
-      }
-    }
-    sit(150, -24, 96, 3.4, group => {
-      const face = new THREE.Mesh(head, cream); face.position.z = 12; group.add(face); ears(group, cream, 5, 28, .35);
-    });
-    sit(380, -30, 110, 3.6, group => {
-      const face = new THREE.Mesh(head, bear); face.position.z = 12; group.add(face);
-      for (const side of [-1, 1]) { const mesh = new THREE.Mesh(pip, bear); mesh.position.set(side * 7, 0, 22); group.add(mesh); }
-    });
-    sit(610, -24, 96, 3.4, group => {
-      const face = new THREE.Mesh(head, cat); face.position.z = 12; group.add(face);
-      for (const side of [-1, 1]) {
-        const mesh = new THREE.Mesh(cone, cat); mesh.position.set(side * 6, 0, 24); mesh.rotation.x = Math.PI / 2; mesh.rotation.z = side * .2; group.add(mesh);
-      }
-    });
-    function fruit(x, y, z, color) {
-      sit(x, y, z, 2.6, group => {
-        const body = new THREE.Mesh(berry, color); body.position.z = 8; group.add(body);
-        const stalk = new THREE.Mesh(stem, leaf); stalk.position.z = 16; stalk.rotation.x = Math.PI / 2; group.add(stalk);
-        const cap = new THREE.Mesh(pip, leaf); cap.position.set(3, 0, 18); group.add(cap);
-      });
-    }
-    fruit(250, -18, 88, lemon); fruit(510, -18, 88, orange);
-    fruit(-6, 210, 64, cherry); fruit(766, 210, 64, cherry);
-    sit(300, -36, 70, 2.4, group => { const mesh = new THREE.Mesh(cone, leaf); mesh.rotation.x = Math.PI / 2; group.add(mesh); });
-    sit(470, -36, 70, 2.4, group => { const mesh = new THREE.Mesh(cone, leaf); mesh.rotation.x = Math.PI / 2; mesh.rotation.z = .4; group.add(mesh); });
   }
   let slotCount = 0;
   function updateLayout(game) {
@@ -249,9 +197,55 @@ function create3DRenderer(canvas) {
     }
     ctx.globalAlpha = 1; ctx.shadowBlur = 0; chargeTexture.needsUpdate = true;
   }
-  const starShape = new THREE.Shape();
-  for (let i = 0; i < 10; i++) { const a = Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 5 : 11; if (i) starShape.lineTo(Math.cos(a) * r, Math.sin(a) * r); else starShape.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
-  starShape.closePath(); const collectible = extrude(starShape, 5, goldSide, .7);
+  const starCanvas = document.createElement('canvas'); starCanvas.width = starCanvas.height = 256;
+  const starCtx = starCanvas.getContext('2d');
+  const starMap = new THREE.CanvasTexture(starCanvas); starMap.colorSpace = THREE.SRGBColorSpace;
+  const starMaterial = new THREE.SpriteMaterial({ map: starMap, transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending });
+  const starSprite = new THREE.Sprite(starMaterial); starSprite.scale.set(78, 78, 1); starSprite.renderOrder = 4; table.add(starSprite);
+  const sparkCanvas = document.createElement('canvas'); sparkCanvas.width = sparkCanvas.height = 64;
+  const sparkCtx = sparkCanvas.getContext('2d');
+  const sparkGlow = sparkCtx.createRadialGradient(32, 32, 2, 32, 32, 30);
+  sparkGlow.addColorStop(0, 'rgba(255,252,230,1)'); sparkGlow.addColorStop(1, 'rgba(255,220,140,0)');
+  sparkCtx.fillStyle = sparkGlow; sparkCtx.fillRect(0, 0, 64, 64);
+  const sparkMap = new THREE.CanvasTexture(sparkCanvas); sparkMap.colorSpace = THREE.SRGBColorSpace;
+  const sparkMaterial = new THREE.SpriteMaterial({ map: sparkMap, transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending });
+  const starSparks = Array.from({ length: 6 }, () => {
+    const spark = new THREE.Sprite(sparkMaterial); spark.scale.set(14, 14, 1); spark.renderOrder = 4; table.add(spark); return spark;
+  });
+  const flashCanvas = document.createElement('canvas'); flashCanvas.width = flashCanvas.height = 256;
+  const flashCtx = flashCanvas.getContext('2d');
+  const flashGradient = flashCtx.createRadialGradient(128, 128, 8, 128, 128, 120);
+  flashGradient.addColorStop(0, 'rgba(255,255,245,1)'); flashGradient.addColorStop(.35, 'rgba(255,220,140,.75)'); flashGradient.addColorStop(1, 'rgba(255,220,140,0)');
+  flashCtx.fillStyle = flashGradient; flashCtx.fillRect(0, 0, 256, 256);
+  const flashMap = new THREE.CanvasTexture(flashCanvas); flashMap.colorSpace = THREE.SRGBColorSpace;
+  const flashSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashMap, transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending }));
+  flashSprite.scale.set(40, 40, 1); flashSprite.visible = false; flashSprite.renderOrder = 5; table.add(flashSprite);
+  let starMemory = null, starFlash = null, starPaintKey = '';
+  function paintStar(multiplier, calm, label) {
+    const key = `${multiplier}:${calm ? 1 : 0}:${label}`;
+    if (key === starPaintKey) return;
+    starPaintKey = key;
+    const purple = multiplier === 5;
+    const ctx = starCtx; ctx.clearRect(0, 0, 256, 256);
+    const halo = ctx.createRadialGradient(128, 128, 8, 128, 128, 124);
+    halo.addColorStop(0, purple ? 'rgba(255,246,255,.95)' : 'rgba(255,250,220,.95)');
+    halo.addColorStop(.28, purple ? 'rgba(214,176,255,.55)' : 'rgba(255,214,120,.5)');
+    halo.addColorStop(.62, purple ? 'rgba(164,119,212,.16)' : 'rgba(216,174,88,.14)');
+    halo.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = halo; ctx.fillRect(0, 0, 256, 256);
+    ctx.save(); ctx.translate(128, 128); ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const angle = -Math.PI / 2 + i * Math.PI / 5, radius = i % 2 ? 24 : 68;
+      if (i) ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius); else ctx.moveTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+    }
+    ctx.closePath();
+    const fill = ctx.createRadialGradient(0, -12, 4, 0, 0, 68);
+    fill.addColorStop(0, '#fffef8'); fill.addColorStop(.45, purple ? '#f3e4ff' : '#ffe7a4'); fill.addColorStop(1, purple ? '#b58ae0' : '#f0c35a');
+    ctx.fillStyle = fill; ctx.shadowColor = purple ? '#e4c8ff' : '#ffe7a1'; ctx.shadowBlur = calm ? 0 : 18; ctx.fill(); ctx.restore();
+    ctx.font = 'bold 28px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = purple ? '#f7eaff' : '#fff6d4'; ctx.fillText(label, 128, 228);
+    starMap.needsUpdate = true;
+  }
   // Keep the table fixed. Shake translates the camera parallel to its view so the
   // orientation stays put and the taller rails parallax against the floor.
   const pitch = THREE.MathUtils.degToRad(VIEW_PITCH_DEG);
@@ -304,8 +298,39 @@ function create3DRenderer(canvas) {
     spring.scale.y = (52 - compression) / 52; springPlate.position.copy(world(TABLE.launchX, 811 + compression, 5));
     corona.visible = state.charging && readyBall.visible;
     if (corona.visible) { paintCharge(state); corona.position.copy(world(TABLE.launchX, TABLE.launchY + compression, 24)); }
-    collectible.visible = !!game.star;
-    if (game.star) { collectible.position.copy(world(game.star.x, game.star.y, 5)); const pulse = state.calm ? 1 : 1 + Math.sin(game.clock / 250) * .09; collectible.scale.setScalar(pulse); }
+    if (game.star) {
+      starMemory = { id: game.star.id, x: game.star.x, y: game.star.y, multiplier: game.star.multiplier };
+    } else if (starMemory) {
+      starFlash = { ...starMemory, at: game.clock };
+      starMemory = null;
+    }
+    const flicker = state.calm ? .92 : .7 + .3 * Math.sin(game.clock / 140) * (.65 + .35 * Math.sin(game.clock / 55));
+    starSprite.visible = !!game.star;
+    if (game.star) {
+      const seconds = Math.max(0, Math.ceil((game.star.expiresAt - game.clock) / 1000));
+      paintStar(game.star.multiplier, state.calm, `×${game.star.multiplier} · ${seconds}s`);
+      const pulse = state.calm ? 1 : 1 + Math.sin(game.clock / 220) * .08;
+      starSprite.position.copy(world(game.star.x, game.star.y, 18));
+      starSprite.scale.set(72 * pulse, 72 * pulse, 1);
+      starMaterial.opacity = flicker;
+      const sparkCount = state.calm ? 2 : starSparks.length;
+      starSparks.forEach((spark, i) => {
+        spark.visible = i < sparkCount;
+        if (!spark.visible) return;
+        const angle = game.clock / 420 + i * Math.PI * 2 / starSparks.length;
+        const radius = 16 + Math.sin(game.clock / 280 + i) * 5;
+        spark.position.copy(world(game.star.x + Math.cos(angle) * radius, game.star.y + Math.sin(angle) * radius, 22));
+        spark.scale.setScalar(8 + (i % 3));
+      });
+    } else starSparks.forEach(spark => { spark.visible = false; });
+    const flashAge = starFlash ? game.clock - starFlash.at : Infinity;
+    flashSprite.visible = flashAge >= 0 && flashAge < 420;
+    if (flashSprite.visible) {
+      const t = flashAge / 420;
+      flashSprite.position.copy(world(starFlash.x, starFlash.y, 24));
+      flashSprite.scale.setScalar(36 + t * 90);
+      flashSprite.material.opacity = (1 - t) * (state.calm ? .55 : 1);
+    } else if (flashAge >= 420) starFlash = null;
     motion = sceneMotionAt(game.clock, state, fx);
     const cameraOffset = new THREE.Vector3(-motion.x, motion.y * Math.cos(pitch), motion.y * Math.sin(pitch));
     camera.position.copy(cameraBase).add(cameraOffset);
@@ -317,13 +342,14 @@ function create3DRenderer(canvas) {
   }
   function snapshot() {
     const frame = [[12, 16], [748, 16], [12, 892], [748, 892]].flatMap(([x, y]) => [project(x, y, 0), project(x, y, WALL_HEIGHT)]);
-    return { mode: 'webgl', cameraAngle: 0, tableTransform: { position: table.position.toArray(), rotation: table.rotation.toArray().slice(0,3) }, cameraPosition: camera.position.toArray(), cameraBase: cameraBase.toArray(), cameraQuaternion: camera.quaternion.toArray(), motion: { ...motion }, pitch: VIEW_PITCH_DEG, fov: VIEW_FOV, decor: decorCount, frame, meshes: bodies.size, triangles: webgl.info.render.triangles, contextLost: webgl.getContext().isContextLost(),
+    return { mode: 'webgl', cameraAngle: 0, tableTransform: { position: table.position.toArray(), rotation: table.rotation.toArray().slice(0,3) }, cameraPosition: camera.position.toArray(), cameraBase: cameraBase.toArray(), cameraQuaternion: camera.quaternion.toArray(), motion: { ...motion }, pitch: VIEW_PITCH_DEG, fov: VIEW_FOV, distance: VIEW_DISTANCE, lookY: VIEW_LOOK_Y, frame, meshes: bodies.size, triangles: webgl.info.render.triangles, contextLost: webgl.getContext().isContextLost(),
+      star: currentGame?.star ? project(currentGame.star.x, currentGame.star.y, 18) : null,
       bodies: [...bodies.values()].map(({ body, mesh, height }) => ({ id: body.id, kind: body.label, x: mesh.position.x + W / 2, y: H / 2 - mesh.position.y, angle: -mesh.rotation.z, radius: body.plugin.radius, height, scale: mesh.scale.x, projected: project(body.position.x, body.position.y, height) })),
       balls: [...balls].map(([id, mesh]) => ({ id, x: mesh.position.x + W / 2, y: H / 2 - mesh.position.y, z: mesh.position.z })),
       samples: [[70,200,.8],[23,280,28.8],[150,155,18.8],[350,367,32.8],[350,465,2.8],[615,482,2]].map(([x,y,z]) => project(x,y,z)), readyBall: project(TABLE.launchX, TABLE.launchY, 12), textures: webgl.info.memory.textures, geometries: webgl.info.memory.geometries, alignmentError: Math.max(0, ...[...bodies.values()].map(({body, mesh}) => Math.hypot(mesh.position.x - (body.position.x - W / 2), mesh.position.y - (H / 2 - body.position.y)))) };
   }
   return { draw, resize, project, snapshot, dispose() {
-    observer.disconnect(); painter.dispose(); atlas.dispose(); chargeTexture.dispose(); environment.dispose(); wells.forEach(w => w.texture.dispose());
+    observer.disconnect(); painter.dispose(); atlas.dispose(); chargeTexture.dispose(); starMap.dispose(); sparkMap.dispose(); flashMap.dispose(); environment.dispose(); wells.forEach(w => w.texture.dispose());
     const geometries = new Set(), materials = new Set(); scene.traverse(object => { if (object.geometry) geometries.add(object.geometry); if (object.material) (Array.isArray(object.material) ? object.material : [object.material]).forEach(m => materials.add(m)); });
     geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); webgl.dispose(); webgl.forceContextLoss();
   } };

@@ -1,15 +1,18 @@
 export const MINI_DURATION = 30000;
-// Passing line for 消消乐. Reaching it ends the round early; the score is not clamped.
+// Shown on the 消消乐 board. The round still plays the full 30 seconds.
 export const BLOCK_TARGET = 1000;
+// Another correct click inside this window continues the 消消乐 streak.
+export const COMBO_WINDOW_MS = 500;
 // First clear is combo 1 at 1×. Each further clear in the streak adds half a multiplier.
 export const COMBO_MULTIPLIER_STEP = 0.5;
+// Cascade loop guard only. It is not a combo cap.
 export const MAX_BLOCK_CHAINS = 8;
 // Light hit shake, the same 1.5 step used for light reward shakes. Charge camera shake stays separate.
 export const MINI_HIT_SHAKE = 1.5;
 export const MINI_HIT_MS = 160;
 export const MINI_GAMES = Object.freeze({
   pairs: { title: '对对碰', rule: '找出相同图案，选中一对就会消失。每对 50 分，全部找完提前结束。连续配对会累加连击，翻错则连击重置。', columns: 8, rows: 5 },
-  blocks: { title: '消消乐', rule: `点击上下左右相连的同色方块，至少 3 块才能消除。每块 10 分，达到 ${BLOCK_TARGET} 分提前结束，得分可以更高。连续消除会累加连击；点不掉或断连会重置。掉落后新拼出的同色连接也算连击。`, columns: 10, rows: 10 },
+  blocks: { title: '消消乐', rule: `点击上下左右相连的同色方块，至少 3 块才能消除。每块 10 分，玩满 ${MINI_DURATION / 1000} 秒。${BLOCK_TARGET} 分只是目标线，不会提前结束，分数也不封顶。${COMBO_WINDOW_MS / 1000} 秒内再点出消除，连击 +1；超过 ${COMBO_WINDOW_MS / 1000} 秒，或点了消不掉的地方，连击归零。连击和倍率没有上限。掉落连锁只加基础分，不增加连击。结束时按本局最高连击一次性乘算。`, columns: 10, rows: 10 },
   moles: { title: '打地鼠', rule: '点击地鼠，白菜留着！每只 25 分，共 10 轮、40 只；每轮最多 3 秒，打完提前换轮。连续打中会累加连击；打到白菜、空洞，或这一轮有地鼠漏掉，连击重置。', columns: 4, rows: 4 },
 });
 export const PAIR_ICONS = Object.freeze(['🍒','🍊','🍇','🍍','🍓','🍋','🍉','🍎','🍐','🍑','🥝','🥭','🫐','🍈','🥥','🍌','🥕','🌽','🥑','🍅']);
@@ -43,14 +46,22 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
   if (!MINI_GAMES[kind]) throw new RangeError('Unknown mini-game');
   let nextId = 0, fxId = 0;
   const tile = (extra = {}) => ({ id: nextId++, color: integer(random,0,3), fall: 0, spawned: false, ...extra });
-  const state = { kind, status: 'playing', score: 0, combo: 0, multiplier: 1, startedAt: now, deadline: now + MINI_DURATION, revision: 0, selected: null, removed: 0, hit: 0, wave: 0, waveUntil: 0, board: [], molePlan: [], message: '', fx: null };
+  const state = { kind, status: 'playing', score: 0, combo: 0, multiplier: 1, bestCombo: 0, bestMultiplier: 1, baseScore: 0, lastClearAt: null, payoutSettled: false, startedAt: now, deadline: now + MINI_DURATION, revision: 0, selected: null, removed: 0, hit: 0, wave: 0, waveUntil: 0, board: [], molePlan: [], message: '', fx: null };
   function ensurePlayable() {
     if (state.board.some((_,i) => connectedBlocks(state.board,i).length >= 3)) return;
     const color = integer(random,0,3);
     for (let i=0;i<3;i++) state.board[i] = tile({ color });
     state.message = '新方块已补上，继续消除吧';
   }
-  function finish(status) { if (state.status !== 'playing') return; state.status = status; state.selected = null; state.revision++; }
+  function settleBlocks() {
+    if (kind !== 'blocks' || state.payoutSettled) return;
+    state.baseScore = state.score;
+    state.bestCombo = Math.max(state.bestCombo, state.combo);
+    state.bestMultiplier = comboMultiplier(state.bestCombo);
+    state.score = Math.round(state.baseScore * state.bestMultiplier);
+    state.payoutSettled = true;
+  }
+  function finish(status) { if (state.status !== 'playing') return; settleBlocks(); state.status = status; state.selected = null; state.revision++; }
   function missMoles() { return state.board.some(cell => cell?.type === 'mole' && !cell.hit); }
   function nextWave(at) {
     if (missMoles()) { state.combo = 0; state.multiplier = 1; }
@@ -70,13 +81,20 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
     }
     nextWave(now);
   }
+  function expireCombo(at) {
+    if (kind !== 'blocks' || state.combo <= 0 || state.lastClearAt == null) return;
+    if (at - state.lastClearAt > COMBO_WINDOW_MS) {
+      state.combo = 0; state.multiplier = 1; state.revision++;
+    }
+  }
   function tick(at) {
     if (state.status !== 'playing') return;
+    expireCombo(at);
     if (kind === 'moles' && state.status === 'playing' && at >= state.waveUntil) nextWave(state.waveUntil);
     if (state.status === 'playing' && at >= state.deadline) finish('timeout');
   }
   function breakCombo(message) {
-    state.combo = 0; state.multiplier = 1; state.message = message;
+    state.combo = 0; state.multiplier = 1; state.lastClearAt = null; state.message = message;
     state.fx = { id: ++fxId, kind, broken: true, points: 0, combo: 0, multiplier: 1, cells: [], chains: 0 };
     state.revision++;
   }
@@ -128,8 +146,13 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
       const cleared=[...group];
       state.removed += group.length;
       collapse(new Set(group));
-      state.combo += 1; state.multiplier = comboMultiplier(state.combo);
-      points = comboPoints(group.length * 10, state.combo);
+      const continuing = state.combo > 0 && state.lastClearAt != null && at - state.lastClearAt <= COMBO_WINDOW_MS;
+      state.combo = continuing ? state.combo + 1 : 1;
+      state.lastClearAt = at;
+      state.multiplier = comboMultiplier(state.combo);
+      state.bestCombo = Math.max(state.bestCombo, state.combo);
+      state.bestMultiplier = comboMultiplier(state.bestCombo);
+      points = group.length * 10;
       state.score += points;
       let chains=0;
       for (let step=0; step<MAX_BLOCK_CHAINS; step++) {
@@ -137,12 +160,11 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
         if (!chain) break;
         chains += 1; state.removed += chain.length; cleared.push(...chain);
         collapse(new Set(chain));
-        state.combo += 1; state.multiplier = comboMultiplier(state.combo);
-        const gained = comboPoints(chain.length * 10, state.combo);
+        const gained = chain.length * 10;
         points += gained; state.score += gained;
       }
       ensurePlayable();
-      state.message = `消除 ${cleared.length} 块！+${points}${chains?` · 连锁 ${chains}`:''} · ${state.combo} 连击 ${formatComboMultiplier(state.combo)}`;
+      state.message = `消除 ${cleared.length} 块！基础 +${points}${chains?` · 连锁 ${chains}`:''} · ${state.combo} 连击 ${formatComboMultiplier(state.combo)}`;
       state.fx = { id:++fxId, kind, broken:false, points, combo:state.combo, multiplier:state.multiplier, cells:cleared, chains };
     }
     if (kind === 'moles') {
@@ -158,7 +180,7 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
       state.fx = { id:++fxId, kind, broken:false, points, combo:state.combo, multiplier:state.multiplier, cells:[index], chains:0 };
     }
     state.revision++;
-    if ((kind === 'pairs' && state.removed === 40) || (kind === 'blocks' && state.score >= BLOCK_TARGET)) finish('complete');
+    if (kind === 'pairs' && state.removed === 40) finish('complete');
     if (kind === 'moles' && state.board.every(c=>c.type !== 'mole'||c.hit)) nextWave(at);
     return points;
   }

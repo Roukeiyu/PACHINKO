@@ -63,9 +63,17 @@ try {
  for(let i=0;i<4;i++)for(let j=i+1;j<4;j++)assert.ok(Math.max(...colors[i].map((v,k)=>Math.abs(v-colors[j][k])))>=10,'night puzzle colors remain visually distinct');
  await page.screenshot({path:'test-results/mini-blocks-night-mobile.png'});await page.screenshot({path:'test-results/mini-blocks-preview.jpg',type:'jpeg',quality:55});
  let moves=0;
- while((await mini()).status==='playing'&&moves++<100){const board=(await mini()).board;const index=board.findIndex((_,i)=>connectedBlocks(board,i).length>=3);assert.ok(index>=0);await cell(index);await page.clock.runFor(300);}
- const blocks=await mini();assert.equal(blocks.status,'complete');assert.ok(blocks.score>=BLOCK_TARGET);assert.equal(await score(),initial+blocks.score);
+ while((await mini()).status==='playing'&&(await mini()).score<BLOCK_TARGET&&moves++<80){const board=(await mini()).board;const index=board.findIndex((_,i)=>connectedBlocks(board,i).length>=3);assert.ok(index>=0);await cell(index);await page.clock.runFor(200);}
+ assert.equal((await mini()).status,'playing','消消乐 keeps going after the goal line');
+ assert.ok((await mini()).score>=BLOCK_TARGET);
+ const pending=await mini();
+ await page.clock.fastForward(30100);
+ const blocks=await mini();assert.equal(blocks.status,'timeout');
+ assert.equal(blocks.baseScore,pending.score);
+ assert.equal(blocks.score,Math.round(pending.score*pending.bestMultiplier));
+ assert.equal(await score(),initial+blocks.score);
  assert.equal(await page.locator('#mini-score').textContent(), await page.evaluate(n=>n.toLocaleString(), blocks.score));
+ assert.equal(await page.locator('#mini-result-math').textContent(), await page.evaluate(b=>{const text=Number.isInteger(b.bestMultiplier)?String(b.bestMultiplier):b.bestMultiplier.toFixed(1);return `${b.baseScore.toLocaleString()} × ${text} = ${b.score.toLocaleString()}`;}, blocks));
  assert.equal(await page.locator('#mini-result-score').textContent(), await page.evaluate(n=>`收下 ${n.toLocaleString()} 分快乐`, blocks.score));
  await back();
  await start('moles');initial=await score();assert.equal(await page.locator('#mini-grid button').count(),16);

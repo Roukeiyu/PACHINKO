@@ -30,29 +30,30 @@ try {
     await route.fulfill({response,body});
   });
   await page.goto(process.env.TEST_URL||'http://127.0.0.1:5173');await page.clock.runFor(50);
+  await page.evaluate(()=>window.__ponpon.setSlots(9));await page.clock.runFor(50);
   const snapshot=()=>page.evaluate(()=>({score:window.__ponpon.score,counts:window.__ponpon.collections,mode:window.__ponpon.rendering.mode,clock:window.__ponpon.gameClock}));
   assert.equal(await page.locator('[data-theme],.theme-choice').count(),0,'theme controls are removed');
   assert.equal(await page.locator('#settings [data-collection]').count(),0,'collections are separate from settings');
   assert.ok((await page.evaluate(()=>window.__collectionLabels)).some(l=>l.value==='🐰'),'legacy flower preference still renders animals');
   let total=0;
-  for(const [fruit,points,level] of [[2,20,1],[3,45,2],[5,100,3],[10,200,3]]) {
+  for(const [fruit,points] of [[2,20],[3,30],[5,50],[10,100]]) {
     await page.evaluate(fruit=>window.__collectionFixture.slot(fruit),fruit);await page.clock.runFor(50);total+=points;
     assert.equal((await snapshot()).score,total);
-    assert.match(await page.locator('#toast').textContent(),new RegExp(`Lv.${level}`));
+    assert.doesNotMatch(await page.locator('#toast').textContent(),/Lv\.|倍率/);
   }
-  await page.evaluate(()=>window.__collectionFixture.slot(2,true,2,true));await page.clock.runFor(50);total+=300;
+  await page.evaluate(()=>window.__collectionFixture.slot(2,true,2,true));await page.clock.runFor(50);total+=200;
   assert.equal((await snapshot()).score,total);assert.equal((await snapshot()).counts[2],21,'mirror slot and stacked bonuses still add one fruit');
   const counts=(await snapshot()).counts;
   await page.locator('#collection-button').click();assert.equal(await page.locator('#collection-book').evaluate(el=>el.open),true);
   assert.equal(await page.locator('#settings').evaluate(el=>el.open),false);
   const clock=(await snapshot()).clock;await page.clock.runFor(500);assert.equal((await snapshot()).clock,clock,'collection book pauses the game');
-  for(const [fruit,level,points] of [[2,1,30],[3,2,60],[5,3,150],[10,3,300]]) {
+  for(const [fruit,count] of [[2,21],[3,50],[5,100],[10,100],[20,0]]) {
     const item=page.locator(`[data-collection="${fruit}"]`);
-    assert.equal(await item.getAttribute('data-level'),String(level));
-    assert.match(await item.locator('.collection-reward').textContent(),new RegExp(`→ ${points} 分`));
-    assert.ok(await item.locator('progress').getAttribute('aria-label'));
+    assert.equal(await item.locator('.collection-reward').count(),0);
+    assert.equal(await item.locator('progress').count(),0);
+    assert.match(await item.locator('.collection-count').textContent(),new RegExp(`已收集 ${count.toLocaleString()} 个`));
+    assert.match(await item.getAttribute('aria-label'),/已收集/);
   }
-  assert.match(await page.locator('[data-collection="5"] .collection-count').textContent(),/已收集 100/);
   await page.screenshot({path:'test-results/collections-mobile-book.png',fullPage:true});
   await page.locator('#collection-return').click();
   for(const render3D of [false,true]) {
@@ -61,14 +62,14 @@ try {
     await page.evaluate(enabled=>{const input=document.querySelector('#three-d');if(input.checked!==enabled)input.click();},render3D);await page.clock.runFor(50);
     assert.equal((await snapshot()).mode,render3D?'webgl':'2d');assert.deepEqual((await snapshot()).counts,counts);
     for(const slots of [5,9,7]) {
-      await page.evaluate(slots=>document.querySelector(`[data-slots="${slots}"]`).click(),slots);await page.clock.runFor(50);
+      await page.evaluate(slots=>window.__ponpon.setSlots(slots),slots);await page.clock.runFor(50);
       assert.deepEqual((await snapshot()).counts,counts);
       const labels=await page.evaluate(()=>window.__collectionLabels);
-      const multipliers=slots===5?[2,3,10,3,2]:slots===9?[2,2,3,5,10,5,3,2,2]:[2,3,5,10,5,3,2];
-      const bonus={2:1.5,3:2,5:3,10:3},icons={2:'🍒',3:'🍊',5:'🍇',10:'🍍'};
-      assert.deepEqual(labels.filter(l=>l.y===851).map(l=>l.value),multipliers.map(m=>`×${m*bonus[m]*5}`),'displayed slot multipliers include collection and active global bonus');
-      assert.deepEqual(labels.filter(l=>l.y===820).map(l=>l.value),multipliers.map(m=>icons[m]),'upgrades preserve fruit identity');
-      assert.equal(labels.filter(l=>l.y===805).length,slots,'each slot shows a collection level');
+      const multipliers=slots===5?[2,3,5,3,2]:slots===9?[2,3,5,10,20,10,5,3,2]:[2,3,5,10,5,3,2];
+      const icons={2:'🍒',3:'🍊',5:'🍇',10:'🍍',20:'🍉'};
+      assert.deepEqual(labels.filter(l=>l.y===851).map(l=>l.value),multipliers.map(m=>`×${m*5}`),'displayed slot multipliers keep the global bonus and ignore the collection count');
+      assert.deepEqual(labels.filter(l=>l.y===820).map(l=>l.value),multipliers.map(m=>icons[m]),'each multiplier keeps its fruit');
+      assert.equal(labels.filter(l=>l.y===805).length,0,'slots no longer print a collection level');
     }
     await page.locator('#done-settings').click();await page.clock.runFor(50);
     assert.equal(await page.locator('#settings').evaluate(el=>el.open),false,'collection book returns directly to the table');
@@ -85,7 +86,7 @@ try {
   await page.screenshot({path:'test-results/collections-night-book.png',fullPage:true});
   assert.equal(await page.locator('.collection-icon').first().evaluate(el=>getComputedStyle(el).filter),'none');
   await page.reload();await page.clock.runFor(50);assert.deepEqual((await snapshot()).counts,counts,'reload restores counts');
-  await page.locator('#collection-button').click();assert.equal(await page.locator('[data-collection="10"]').getAttribute('data-level'),'3');
+  await page.locator('#collection-button').click();assert.match(await page.locator('[data-collection="10"] .collection-count').textContent(),/已收集 100 个/);
   await page.locator('#collection-return').click();
   await page.locator('#settings-button').click();await page.locator('#three-d').uncheck();await page.locator('#done-settings').click();await page.clock.runFor(50);
   await page.locator('#collection-button').click();

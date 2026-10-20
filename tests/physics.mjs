@@ -106,7 +106,7 @@ for (const slots of [5, 7, 9]) for (const seedOffset of [0, 100, 200]) {
     let factor = r.scoreFactor;
     if (!Number.isInteger(factor) || factor < 1) return false;
     for (const prime of [2, 5]) while (factor % prime === 0) factor /= prime;
-    return factor === 1 && [1, 2, 5].includes(r.globalMultiplier) && r.points === r.basePoints * r.scoreFactor * r.globalMultiplier && (r.kind === 'jackpot' ? r.basePoints === 500 : [2, 3, 5, 10].includes(r.multiplier) && r.basePoints === r.multiplier * 10);
+    return factor === 1 && [1, 2, 5].includes(r.globalMultiplier) && r.points === r.basePoints * r.scoreFactor * r.globalMultiplier && (r.kind === 'jackpot' ? r.basePoints === 500 : [2, 3, 5, 10, 20].includes(r.multiplier) && r.basePoints === r.multiplier * 10);
   }));
   assert.equal(game.slotMachine.entries, game.stats.scored, 'each actual scoring entry advances the slot machine once');
   for (const k of Object.keys(totals)) totals[k] += game.stats[k];
