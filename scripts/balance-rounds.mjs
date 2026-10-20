@@ -102,7 +102,7 @@ function playRound(seed) {
     if (stock <= 0 && stored === 0 && pending === 0 && game.pendingLaunches === 0 && game.balls.length === 0 && !secretWait) break;
   }
   const physicsMs = steps * STEP;
-  return { score, launches, slots, jackpots, bestSlot, physicsMs, playMs: launches * SHOT_GAP_MS + miniMs, capped: steps >= STEP_CAP, ballHits, reelSpins, reelPaid };
+  return { score, launches, slots, jackpots, bestSlot, physicsMs, playMs: launches * SHOT_GAP_MS + miniMs, capped: steps >= STEP_CAP, ballHits, reelSpins, reelPaid, randomShots: game.stats.randomShots, enlargements: game.stats.enlargements, clockBursts: game.stats.clockBursts };
 }
 
 const results = [];
@@ -133,6 +133,9 @@ console.log(JSON.stringify({
   ballOutcomes: [1, 2, 3].map(count => ({ count, n: results.reduce((sum, row) => sum + row.ballHits[count], 0) })),
   reelSpins: results.reduce((sum, row) => sum + row.reelSpins, 0),
   reelPaid: results.reduce((sum, row) => sum + row.reelPaid, 0),
+  randomShots: results.reduce((sum, row) => sum + row.randomShots, 0),
+  enlargements: results.reduce((sum, row) => sum + row.enlargements, 0),
+  clockBursts: results.reduce((sum, row) => sum + row.clockBursts, 0),
   meanReelSpins: +mean(results.map(row => row.reelSpins)).toFixed(2),
   hist,
 }, null, 2));

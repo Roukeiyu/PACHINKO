@@ -19,7 +19,7 @@ try {
     const response=await route.fetch(); let body=await response.text();
     assert.ok(body.includes('return { engine, balls'));
     body=body.replace('return { engine, balls',`window.__modelFixture = {
-      enlarge() { for(let i=0;i<10;i++) recordBumperHit(bumpers[1]); },
+      enlarge() { for(let i=0;i<5;i++) recordBumperHit(bumpers[1]); },
       settle() { const ball=balls.find(b=>!b.bonus)||launch(); ball.entered=true;Body.setPosition(ball.body,{x:90,y:TABLE.scoreLine-1});Body.setVelocity(ball.body,{x:0,y:6});step(); }
     }; return { engine, balls`);
     await route.fulfill({response,body});

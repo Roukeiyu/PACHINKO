@@ -12,6 +12,9 @@ export const TABLE = Object.freeze({ width: 760, height: 900, left: SLOT_ROW_LEF
 // the same offset so the released ball does not pop above the plunger.
 export const LAUNCH_SQUASH = 22;
 export const STEP = 1000 / 120;
+export const DRUM_SIDE_HITS = 5;
+export const DRUM_CENTER_HITS = 30;
+export const ENLARGE_MS = 10000;
 const FILTER = { world: 1, ascending: 2, playing: 4, returnRamp: 8, launchDoor: 16 };
 // The cup's inner wall sits near r=28. A center that reaches the sink has passed
 // that lip, so the rim can no longer push it back out between checks.
@@ -32,7 +35,7 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   const pendingShots = [], pendingDrops = [], pendingLaunches = [];
   let emissionPaused = false;
   const collector = { x: 100, y: 650, radius: 26, capacity: 20, stored: [], remaining: 0, glow: 0, outlets: [] };
-  const rewards = { hits: [0, 0, 0], goals: [10, 10, 30], enlargedUntil: 0, burstUntil: 0, burstStep: -1, gateGlow: 0, ordinaryStars: 0 };
+  const rewards = { hits: [0, 0, 0], goals: [DRUM_SIDE_HITS, DRUM_SIDE_HITS, DRUM_CENTER_HITS], enlargedUntil: 0, burstUntil: 0, burstStep: -1, gateGlow: 0, ordinaryStars: 0 };
   const slotMachine = createSlotMachine({ random: slotRandom, onEvent: event => onSurprise({ ...event, x: SLOT_DISPLAY.x, y: SLOT_DISPLAY.y }) });
   const stats = { launches: 0, entered: 0, scored: 0, jackpots: 0, returns: 0, drains: 0, timeouts: 0, redirected: 0, bonusBalls: 0, randomShots: 0, clockBursts: 0, enlargements: 0, absorbed: 0, storageBursts: 0, storageDrops: 0, impacts: 0, hits: { pin: 0, kicker: 0, bumper: 0, rail: 0, spinner: 0, diamond: 0, wall: 0, deflector: 0 } };
   const add = (body, group, extra = {}) => { body.plugin = { glow: 0, ...extra }; group.push(body); Composite.add(engine.world, body); return body; };
@@ -287,7 +290,7 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
       pendingShots.push({ due: clock, index: 0, angle: random() * Math.PI * 2, kind: 'random', ordinal: 0 });
       onSurprise({ kind: 'random', x: bumper.position.x, y: bumper.position.y });
     } else if (index === 1) {
-      stats.enlargements++; rewards.enlargedUntil = clock + 10000;
+      stats.enlargements++; rewards.enlargedUntil = clock + ENLARGE_MS;
       resizeCenter(true);
       onSurprise({ kind: 'enlarge', x: bumpers[2].position.x, y: bumpers[2].position.y });
     } else {

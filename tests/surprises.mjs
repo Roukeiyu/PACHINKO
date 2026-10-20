@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import Matter from 'matter-js';
-import { createTable, TABLE, STEP, LAUNCH_SQUASH } from '../src/physics.js';
+import { createTable, TABLE, STEP, LAUNCH_SQUASH, DRUM_SIDE_HITS, DRUM_CENTER_HITS, ENLARGE_MS } from '../src/physics.js';
 import { CANON_NOTES, createCanon, noteFrequency } from '../src/canon.js';
 import { chargeAt, chargePercent, CHARGE_DURATION } from '../src/charge.js';
 
@@ -66,25 +66,28 @@ assert.ok(exited); assert.equal(returnGame.stats.redirected, 1); assert.equal(re
 assert.ok(returnBall.body.velocity.y > 0, 'return gate directs the ball down into play');
 console.log('PASS: 0–60% launch heights increase with charge, 1% only hops, weak shots return, and the one-way gate redirects without re-acceleration.');
 
+assert.deepEqual(createTable().rewards.goals, [DRUM_SIDE_HITS, DRUM_SIDE_HITS, DRUM_CENTER_HITS]);
+assert.equal(DRUM_SIDE_HITS, 5); assert.equal(DRUM_CENTER_HITS, 30); assert.equal(ENLARGE_MS, 10000);
 const leftEvents = [], left = createTable({ random: () => .25, onSurprise: e => leftEvents.push(e) });
-for (let i = 0; i < 9; i++) hit(left, 0);
+for (let i = 0; i < DRUM_SIDE_HITS - 1; i++) hit(left, 0);
 assert.equal(left.stats.randomShots, 0); hit(left, 0); left.step();
 assert.equal(left.stats.randomShots, 1); assert.equal(left.stats.bonusBalls, 1);
 assert.equal(leftEvents.filter(e => e.kind === 'emit').length, 1);
 assert.equal(leftEvents.find(e => e.kind === 'emit').angle, Math.PI / 2);
 assert.ok(left.balls[0].bonus && left.balls[0].entered);
-remove(left, left.balls[0]); for (let i = 0; i < 10; i++) hit(left, 0); left.step();
+remove(left, left.balls[0]); for (let i = 0; i < DRUM_SIDE_HITS; i++) hit(left, 0); left.step();
 assert.equal(left.stats.randomShots, 2, 'repeat milestones work without manual reset');
 
-const right = createTable(); for (let i = 0; i < 9; i++) hit(right, 1);
+const right = createTable(); for (let i = 0; i < DRUM_SIDE_HITS - 1; i++) hit(right, 1);
 assert.equal(right.bumpers[2].circleRadius, 39); hit(right, 1);
 assert.equal(right.stats.enlargements, 1); assert.equal(right.bumpers[2].circleRadius, 58.5); assert.equal(right.bumpers[2].plugin.radius, 58.5);
 const startedAt = right.clock;
-for (let i = 0; i < 1199; i++) right.step();
+const enlargeSteps = Math.round(ENLARGE_MS / STEP);
+for (let i = 0; i < enlargeSteps - 1; i++) right.step();
 assert.equal(right.bumpers[2].circleRadius, 58.5, 'growth lasts the full ten active seconds'); right.step();
-assert.ok(Math.abs(right.clock - startedAt - 10000) < 1e-6); assert.equal(right.bumpers[2].circleRadius, 39);
+assert.ok(Math.abs(right.clock - startedAt - ENLARGE_MS) < 1e-6); assert.equal(right.bumpers[2].circleRadius, 39);
 assert.equal(right.rewards.enlargedUntil, 0);
-console.log('PASS: left bumper grants one real ball every 10 hits; right bumper physically grows the center 1.5× for exactly 10 seconds.');
+console.log('PASS: left bumper grants one real ball every 5 hits; right bumper physically grows the center 1.5× for exactly 10 seconds.');
 
 const events = [], center = createTable({ onSurprise: e => events.push(e) });
 for (let i = 0; i < 29; i++) hit(center, 2);

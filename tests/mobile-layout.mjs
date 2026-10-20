@@ -91,6 +91,39 @@ try {
   assert.equal(desktopScore.local, false, 'desktop shows the total only in the sidebar');
   const desktopPad = await page.locator('.machine').evaluate(el => parseFloat(getComputedStyle(el).paddingLeft));
   assert.ok(desktopPad > 8, 'desktop card padding stays in place');
+  const inset2d = await page.evaluate(() => document.querySelector('.machine').getBoundingClientRect().left - document.querySelector('.intro').getBoundingClientRect().left);
+  assert.ok(inset2d > 20, `2D machine stays inset from the title (${inset2d}px)`);
+  await page.waitForFunction(() => window.__ponpon.star);
+  const reward = await page.evaluate(() => {
+    const star = window.__ponpon.star;
+    const label = document.querySelector('#reward-star-label').textContent;
+    return {
+      goals: window.__ponpon.rewards.goals,
+      counts: [0, 1, 2].map(i => document.querySelector(`#reward-${i}`).textContent),
+      timer: document.querySelector('#reward-timer').textContent,
+      how: document.querySelector('.how-card').textContent,
+      starVisible: !document.querySelector('#reward-star').hidden,
+      starLabel: label,
+      starMultiplier: star.multiplier,
+    };
+  });
+  assert.deepEqual(reward.goals, [5, 5, 30]);
+  assert.deepEqual(reward.counts, ['0/5', '0/5', '0/30']);
+  assert.match(reward.timer, /满 5 次放大 10 秒/);
+  assert.match(reward.how, /左右鼓满 5 次/);
+  assert.equal(reward.starVisible, true, 'the live star row is shown');
+  assert.match(reward.starLabel, new RegExp(`^×${reward.starMultiplier} · \\d+s$`));
+  await page.evaluate(() => window.__ponpon.previewReels([5, 1, 2], 17));
+  await page.waitForFunction(() => document.querySelector('#reward-slot-count').textContent.startsWith('17/50'));
+  assert.equal(await page.locator('.reward-reels i.is-ball').count(), 1, 'the sidebar reel mirrors the ball icon');
+  await page.evaluate(() => window.__ponpon.previewReelSpin([0, 1, 2], 1, 'spin', 5));
+  await page.waitForFunction(() => document.querySelector('.reward-reels i[data-reel="1"]').classList.contains('is-spinning'));
+  assert.equal(await page.locator('.reward-reels i.is-spinning').count(), 1);
+  await page.evaluate(() => window.__ponpon.previewJar(7));
+  await page.waitForFunction(() => document.querySelector('#reward-jar').textContent === '7/20');
+  await page.evaluate(() => window.__ponpon.setSlotMultiplier(2));
+  await page.waitForFunction(() => document.querySelector('#reward-hole').textContent === '+1000 分');
+  assert.equal(await page.locator('#hole-points').textContent(), '+1000');
   await page.locator('#settings-button').click();
   await page.locator('#three-d').check();
   await page.locator('#done-settings').click();
@@ -100,12 +133,17 @@ try {
     const board = document.querySelector('#board').getBoundingClientRect();
     const rendering = window.__ponpon.rendering;
     const sidebar = document.querySelector('.sidebar').getBoundingClientRect();
-    return { rendering, margin: rendering.near.minX * board.width, sidebar: sidebar.width, aspect: board.width / board.height };
+    const intro = document.querySelector('.intro').getBoundingClientRect();
+    const machine = document.querySelector('.machine').getBoundingClientRect();
+    return { rendering, boardWidth: board.width, margin: rendering.near.minX * board.width, sidebar: sidebar.width, aspect: board.width / board.height, machineLeft: machine.left, introLeft: intro.left, introRight: intro.right, sidebarRight: sidebar.right, sidebarLeft: sidebar.left, machineRight: machine.right };
   });
   assert.equal(desktop.rendering.distance, VIEW_DISTANCE);
   assert.equal(desktop.rendering.lookY, VIEW_LOOK_Y);
   assert.ok(desktop.rendering.near.width >= 0.95, `desktop near edge covers ${desktop.rendering.near.width}`);
-  assert.ok(desktop.margin >= 4 && desktop.margin <= 8, `desktop side margin is ${desktop.margin}px`);
+  assert.ok(desktop.margin >= 4 && desktop.margin <= desktop.boardWidth * 0.02, `desktop side margin is ${desktop.margin}px`);
+  assert.ok(Math.abs(desktop.machineLeft - desktop.introLeft) <= 1, '3D board starts at the title edge');
+  assert.ok(Math.abs(desktop.sidebarRight - desktop.introRight) <= 1, '3D sidebar ends with the title');
+  assert.ok(Math.abs(desktop.sidebarLeft - desktop.machineRight - 22) <= 2, '3D keeps the sidebar gutter');
   assert.ok(desktop.rendering.frame.every(p => p.x > 0.004 && p.x < 0.996 && p.y > 0.004 && p.y < 0.996), 'desktop keeps the whole table inside the canvas');
   assert.ok(Math.abs(desktop.aspect - 1.24) < 0.04, `desktop 3D canvas aspect is ${desktop.aspect}`);
   assert.ok(desktop.sidebar > 200, 'the score sidebar stays beside the table');
