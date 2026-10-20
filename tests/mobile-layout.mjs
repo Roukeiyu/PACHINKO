@@ -64,9 +64,19 @@ try {
   await page.locator('#done-settings').click();
   await page.waitForFunction(() => document.querySelector('#board')?.dataset.renderer === 'webgl');
   await page.waitForTimeout(120);
-  const desktop = await page.evaluate(() => window.__ponpon.rendering);
-  assert.equal(desktop.distance, VIEW_DISTANCE);
-  assert.equal(desktop.lookY, VIEW_LOOK_Y);
+  const desktop = await page.evaluate(() => {
+    const board = document.querySelector('#board').getBoundingClientRect();
+    const rendering = window.__ponpon.rendering;
+    const sidebar = document.querySelector('.sidebar').getBoundingClientRect();
+    return { rendering, margin: rendering.near.minX * board.width, sidebar: sidebar.width, aspect: board.width / board.height };
+  });
+  assert.equal(desktop.rendering.distance, VIEW_DISTANCE);
+  assert.equal(desktop.rendering.lookY, VIEW_LOOK_Y);
+  assert.ok(desktop.rendering.near.width >= 0.95, `desktop near edge covers ${desktop.rendering.near.width}`);
+  assert.ok(desktop.margin >= 4 && desktop.margin <= 8, `desktop side margin is ${desktop.margin}px`);
+  assert.ok(desktop.rendering.frame.every(p => p.x > 0.004 && p.x < 0.996 && p.y > 0.004 && p.y < 0.996), 'desktop keeps the whole table inside the canvas');
+  assert.ok(Math.abs(desktop.aspect - 1.24) < 0.04, `desktop 3D canvas aspect is ${desktop.aspect}`);
+  assert.ok(desktop.sidebar > 200, 'the score sidebar stays beside the table');
   assert.deepEqual(errors, []);
-  console.log('PASS: portrait score row stays fixed, and the 3D near edge fills the phone canvas without changing desktop.');
+  console.log('PASS: portrait score row stays fixed, and the 3D near edge fills both the phone and the desktop canvas.');
 } finally { await browser.close(); }

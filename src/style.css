@@ -21,6 +21,7 @@ header{height:76px}.intro{padding:20px 0}.intro h1{font-size:27px;margin:6px 0}.
 .game-layout{grid-template-columns:minmax(0,clamp(360px,calc(84svh - 340px),620px)) 260px;justify-content:center;gap:22px}
 .machine{padding:12px;border-radius:23px}.machine-top{font-size:8px;padding:2px 5px 9px;letter-spacing:1.4px}
 .board-wrap{touch-action:pan-y}.board-wrap canvas{aspect-ratio:760/900;height:auto}
+.board-wrap:has(canvas[data-renderer="webgl"]),.board-wrap canvas[data-renderer="webgl"]{aspect-ratio:1.24/1}
 .mobile-hud{display:flex;align-items:center;justify-content:space-between;gap:9px;font-size:10px;padding:0 4px 11px;color:var(--flow-ink-6f8061,#6f8061)}
 .mobile-hud strong{font-size:19px;font-variant-numeric:tabular-nums;color:var(--flow-ink-34543d,#34543d);margin-left:5px}.bonus-label{color:var(--flow-ink-a17d3d,#a17d3d);font-size:9px}.bonus-label b{font-size:12px}
 .hud-best{display:none;white-space:nowrap;font-size:9px}.hud-best strong{font-size:12px;margin-left:3px}

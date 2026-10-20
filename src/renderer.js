@@ -12,13 +12,13 @@ const world = (x, y, z = 0) => new THREE.Vector3(x - W / 2, H / 2 - y, z);
 // Shake amplitude stays in scene-motion.js; depth comes from this view and the taller rails.
 export const VIEW_PITCH_DEG = 36;
 export const VIEW_FOV = 40;
-export const VIEW_DISTANCE = 1600;
-export const VIEW_LOOK_Y = -40;
+export const VIEW_DISTANCE = 1150;
+export const VIEW_LOOK_Y = -80;
 export const WALL_HEIGHT = 58;
 export const RAIL_HEIGHT = 36;
-// Portrait phones use a shorter, full-width canvas. These values keep the near
-// edge about 5px inside that canvas while the whole table, including the rail
-// tops, stays on screen. Desktop keeps VIEW_DISTANCE and VIEW_LOOK_Y.
+// Every 3D canvas uses this shorter aspect. The distance and look point keep the
+// near edge a few pixels inside the frame and the whole table, including the
+// rail tops, on screen. Desktop and portrait share one width-fit.
 export const MOBILE_LAYOUT_QUERY = '(max-width: 740px) and (orientation: portrait)';
 export const MOBILE_VIEW_ASPECT = 1.24;
 export const MOBILE_VIEW_DISTANCE = 1150;
@@ -302,7 +302,7 @@ function create3DRenderer(canvas) {
     viewDistance = mobile ? MOBILE_VIEW_DISTANCE : VIEW_DISTANCE;
     viewLookY = mobile ? MOBILE_VIEW_LOOK_Y : VIEW_LOOK_Y;
     const rect = canvas.getBoundingClientRect();
-    const aspect = rect.width > 0 && rect.height > 0 ? rect.width / rect.height : (mobile ? MOBILE_VIEW_ASPECT : W / H);
+    const aspect = rect.width > 0 && rect.height > 0 ? rect.width / rect.height : MOBILE_VIEW_ASPECT;
     camera.fov = VIEW_FOV;
     camera.aspect = aspect;
     camera.updateProjectionMatrix();
