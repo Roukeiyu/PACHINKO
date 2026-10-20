@@ -1,6 +1,8 @@
 export const MINI_DURATION = 30000;
-// Shown on the 消消乐 board. The round still plays the full 30 seconds.
-export const BLOCK_TARGET = 1000;
+// 消消乐 ends at this many cleared blocks, or when the 30 second timer runs out.
+// The last clear that crosses the line only scores the blocks that fit.
+export const BLOCK_CLEAR_TARGET = 50;
+export const BLOCK_POINT = 10;
 // Another correct click inside this window continues the 消消乐 streak.
 export const COMBO_WINDOW_MS = 500;
 // First clear is combo 1 at 1×. Each further clear in the streak adds half a multiplier.
@@ -12,7 +14,7 @@ export const MINI_HIT_SHAKE = 1.5;
 export const MINI_HIT_MS = 160;
 export const MINI_GAMES = Object.freeze({
   pairs: { title: '对对碰', rule: '找出相同图案，选中一对就会消失。每对 50 分，全部找完提前结束。连续配对会累加连击，翻错则连击重置。', columns: 8, rows: 5 },
-  blocks: { title: '消消乐', rule: `点击上下左右相连的同色方块，至少 3 块才能消除。每块 10 分，玩满 ${MINI_DURATION / 1000} 秒。${BLOCK_TARGET} 分只是目标线，不会提前结束，分数也不封顶。${COMBO_WINDOW_MS / 1000} 秒内再点出消除，连击 +1；超过 ${COMBO_WINDOW_MS / 1000} 秒，或点了消不掉的地方，连击归零。连击和倍率没有上限。掉落连锁只加基础分，不增加连击。结束时按本局最高连击一次性乘算。`, columns: 10, rows: 10 },
+  blocks: { title: '消消乐', rule: `点击上下左右相连的同色方块，至少 3 块才能消除。每块 ${BLOCK_POINT} 分。累计消除 ${BLOCK_CLEAR_TARGET} 块，或玩满 ${MINI_DURATION / 1000} 秒，先到先结算。最后一次超过 ${BLOCK_CLEAR_TARGET} 块时只算到 ${BLOCK_CLEAR_TARGET} 块，基础分最多 ${BLOCK_CLEAR_TARGET * BLOCK_POINT}。${COMBO_WINDOW_MS / 1000} 秒内再点出消除，连击 +1；超过 ${COMBO_WINDOW_MS / 1000} 秒，或点了消不掉的地方，连击归零。连击和倍率没有上限。掉落连锁只加基础分，不增加连击。结束时按本局最高连击一次性乘算。`, columns: 10, rows: 10 },
   moles: { title: '打地鼠', rule: '点击地鼠，白菜留着！每只 25 分，共 10 轮、40 只；每轮最多 3 秒，打完提前换轮。连续打中会累加连击；打到白菜、空洞，或这一轮有地鼠漏掉，连击重置。', columns: 4, rows: 4 },
 });
 export const PAIR_ICONS = Object.freeze(['🍒','🍊','🍇','🍍','🍓','🍋','🍉','🍎','🍐','🍑','🥝','🥭','🫐','🍈','🥥','🍌','🥕','🌽','🥑','🍅']);
@@ -143,28 +145,39 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
     if (kind === 'blocks') {
       const group = connectedBlocks(state.board,index);
       if (group.length < 3) { breakCombo('至少 3 块同色相连才能消除'); return 0; }
-      const cleared=[...group];
-      state.removed += group.length;
-      collapse(new Set(group));
+      const cleared = [];
+      let counted = 0;
+      const take = (cells) => {
+        const room = BLOCK_CLEAR_TARGET - state.removed;
+        const used = Math.max(0, Math.min(cells.length, room));
+        state.removed += used;
+        counted += used;
+        const gained = used * BLOCK_POINT;
+        points += gained;
+        state.score += gained;
+        cleared.push(...cells);
+        collapse(new Set(cells));
+        return state.removed >= BLOCK_CLEAR_TARGET;
+      };
+      let capped = take(group);
       const continuing = state.combo > 0 && state.lastClearAt != null && at - state.lastClearAt <= COMBO_WINDOW_MS;
       state.combo = continuing ? state.combo + 1 : 1;
       state.lastClearAt = at;
       state.multiplier = comboMultiplier(state.combo);
       state.bestCombo = Math.max(state.bestCombo, state.combo);
       state.bestMultiplier = comboMultiplier(state.bestCombo);
-      points = group.length * 10;
-      state.score += points;
-      let chains=0;
-      for (let step=0; step<MAX_BLOCK_CHAINS; step++) {
-        const chain=chainGroup();
-        if (!chain) break;
-        chains += 1; state.removed += chain.length; cleared.push(...chain);
-        collapse(new Set(chain));
-        const gained = chain.length * 10;
-        points += gained; state.score += gained;
+      let chains = 0;
+      if (!capped) {
+        for (let step = 0; step < MAX_BLOCK_CHAINS; step++) {
+          const chain = chainGroup();
+          if (!chain) break;
+          chains += 1;
+          capped = take(chain);
+          if (capped) break;
+        }
       }
-      ensurePlayable();
-      state.message = `消除 ${cleared.length} 块！基础 +${points}${chains?` · 连锁 ${chains}`:''} · ${state.combo} 连击 ${formatComboMultiplier(state.combo)}`;
+      if (!capped) ensurePlayable();
+      state.message = `消除 ${counted} 块！基础 +${points}${chains ? ` · 连锁 ${chains}` : ''}${capped ? ' · 已到 50 块' : ''} · ${state.combo} 连击 ${formatComboMultiplier(state.combo)}`;
       state.fx = { id:++fxId, kind, broken:false, points, combo:state.combo, multiplier:state.multiplier, cells:cleared, chains };
     }
     if (kind === 'moles') {
@@ -180,6 +193,7 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
       state.fx = { id:++fxId, kind, broken:false, points, combo:state.combo, multiplier:state.multiplier, cells:[index], chains:0 };
     }
     state.revision++;
+    if (kind === 'blocks' && state.removed >= BLOCK_CLEAR_TARGET) finish('complete');
     if (kind === 'pairs' && state.removed === 40) finish('complete');
     if (kind === 'moles' && state.board.every(c=>c.type !== 'mole'||c.hit)) nextWave(at);
     return points;

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_TARGET, COMBO_WINDOW_MS, COMBO_MULTIPLIER_STEP, comboMultiplier, comboPoints, connectedBlocks, randomMiniGame } from '../src/mini-games.js';
+import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_POINT, COMBO_WINDOW_MS, COMBO_MULTIPLIER_STEP, comboMultiplier, comboPoints, connectedBlocks, randomMiniGame } from '../src/mini-games.js';
 import { secretPayout } from '../src/secret-wave.js';
 assert.equal(COMBO_MULTIPLIER_STEP,.5);
 assert.deepEqual([0,1,2,3,4].map(comboMultiplier),[1,1,1.5,2,2.5]);
@@ -27,7 +27,7 @@ for(let seed=0;seed<25;seed++) {
   }
   const pairTotal=Array.from({length:20},(_,i)=>comboPoints(50,i+1)).reduce((a,b)=>a+b);
   assert.equal(pairs.state.score,pairTotal);assert.equal(pairs.state.status,'complete');
-  assert.ok(pairTotal>BLOCK_TARGET,'matched pairs are not capped at the 1000 passing line');
+  assert.ok(pairTotal>1000,'matched pairs are not capped');
   assert.equal(pairs.select(0,1001),0);assert.equal(pairs.state.score,pairTotal);
   const blocks=createMiniGame('blocks',{random:seeded(seed),now:100});
   let moves=0;
@@ -35,18 +35,19 @@ for(let seed=0;seed<25;seed++) {
     const index=blocks.state.board.findIndex((_,i)=>connectedBlocks(blocks.state.board,i).length>=3);
     assert.ok(index>=0,'refilled boards always have a legal move');
     const before=blocks.snapshot(),group=connectedBlocks(before.board,index);
+    const room=BLOCK_CLEAR_TARGET-before.removed;
     const points=blocks.select(index,1000+moves);
-    assert.ok(points>=group.length*10);
-    assert.equal(blocks.state.score,before.score+points);
+    assert.ok(points>=Math.min(group.length,room)*BLOCK_POINT);
+    assert.ok(points<=room*BLOCK_POINT);
+    assert.ok(blocks.state.removed<=BLOCK_CLEAR_TARGET);
+    if(blocks.state.status==='playing') assert.equal(blocks.state.score,before.score+points);
     assert.equal(blocks.state.board.length,100);
     assert.ok(blocks.state.board.every(c=>c.color>=0&&c.color<4));
   }
-  assert.equal(blocks.state.status,'playing','1000 is a goal line, not an early finish');assert.ok(blocks.state.score>=BLOCK_TARGET,'base points can pass 1000 before the timer');
-  const base=blocks.state.score, best=blocks.state.bestCombo;
-  blocks.tick(blocks.state.deadline);
-  assert.equal(blocks.state.status,'timeout');
-  assert.equal(blocks.state.baseScore,base);
-  assert.equal(blocks.state.score,Math.round(base*comboMultiplier(best)));
+  assert.equal(blocks.state.status,'complete','50 cleared blocks end the round before the timer');
+  assert.equal(blocks.state.removed,BLOCK_CLEAR_TARGET);
+  assert.equal(blocks.state.baseScore,BLOCK_CLEAR_TARGET*BLOCK_POINT);
+  assert.equal(blocks.state.score,Math.round(blocks.state.baseScore*blocks.state.bestMultiplier));
   const moles=createMiniGame('moles',{random:seeded(seed),now:100});
   assert.equal(moles.state.molePlan.length,10);assert.equal(moles.state.molePlan.reduce((a,b)=>a+b),40);
   assert.ok(moles.state.molePlan.every(n=>n>=2&&n<=6));
@@ -95,11 +96,27 @@ function isolatedTrio(score) {
   game.state.board[90].color=3; game.state.board[91].color=3; game.state.board[92].color=3;
   return game;
 }
-const cross=isolatedTrio(990);
-assert.equal(cross.select(90,1),30);
-assert.equal(cross.state.score,1020);assert.equal(cross.state.status,'playing','passing 1000 does not end the round');
-const lonely=cross.state.board.findIndex((_,i)=>connectedBlocks(cross.state.board,i).length<3);
-assert.ok(lonely>=0);assert.equal(cross.select(lonely,2),0);assert.equal(cross.state.score,1020,'a miss adds nothing and does not clamp');
+const cross=isolatedTrio(0);
+cross.state.removed=47; cross.state.score=470;
+cross.state.board.forEach(cell => { cell.color = 0; });
+for (const index of [90, 91, 92, 93, 94, 95]) cross.state.board[index].color = 3;
+assert.equal(connectedBlocks(cross.state.board,90).length,6);
+assert.equal(cross.select(90,1),30,'a clear past 50 scores only the blocks that fit');
+assert.equal(cross.state.removed,BLOCK_CLEAR_TARGET);
+assert.equal(cross.state.baseScore,500);
+assert.equal(cross.state.status,'complete');
+assert.equal(cross.state.score,Math.round(500*cross.state.bestMultiplier));
+const lonely=isolatedTrio(0);
+lonely.select(90,1);
+const missIndex=lonely.state.board.findIndex((_,i)=>connectedBlocks(lonely.state.board,i).length<3);
+assert.ok(missIndex>=0);assert.equal(lonely.select(missIndex,2),0);assert.equal(lonely.state.score,30,'a miss adds nothing');
+const early=isolatedTrio(0);
+assert.equal(early.select(90,10),30);
+assert.equal(early.state.status,'playing');
+early.tick(early.state.deadline);
+assert.equal(early.state.status,'timeout','the timer ends a round that has not cleared 50 blocks');
+assert.equal(early.state.removed,3);
+assert.equal(early.state.baseScore,30);
 const streak=isolatedTrio(0);
 assert.equal(streak.select(90,1000),30);assert.equal(streak.state.combo,1);
 streak.state.board[80].color=3;streak.state.board[81].color=3;streak.state.board[82].color=3;
@@ -144,4 +161,4 @@ for (let x=0;x<10;x++) {
   const after=gravity.state.board.filter((cell,index)=>index%10===x).slice(10-kept.length).map(cell=>cell.id);
   assert.deepEqual(after,kept,'gravity keeps the remaining column in its original order');
 }
-console.log('PASS: combo multipliers, broken streaks, uncapped scores past 1000, drop chains, gravity, and secret ×2 on the full total.');
+console.log('PASS: combo multipliers, broken streaks, a 50-block cap, timer finish, drop chains, gravity, and secret ×2 on the full total.');

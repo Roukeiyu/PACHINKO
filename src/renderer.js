@@ -204,9 +204,16 @@ function create3DRenderer(canvas) {
     }
     ctx.globalAlpha = 1; ctx.shadowBlur = 0; chargeTexture.needsUpdate = true;
   }
-  const starCanvas = document.createElement('canvas'); starCanvas.width = starCanvas.height = 256;
+  const starResolution = Math.max(1, Math.min(globalThis.devicePixelRatio || 1, 2));
+  const starCanvas = document.createElement('canvas');
+  const starPixels = Math.round(256 * starResolution);
+  starCanvas.width = starCanvas.height = starPixels;
   const starCtx = starCanvas.getContext('2d');
   const starMap = new THREE.CanvasTexture(starCanvas); starMap.colorSpace = THREE.SRGBColorSpace;
+  starMap.generateMipmaps = true;
+  starMap.minFilter = THREE.LinearMipmapLinearFilter;
+  starMap.magFilter = THREE.LinearFilter;
+  starMap.anisotropy = Math.min(8, webgl.capabilities.getMaxAnisotropy());
   const starMaterial = new THREE.SpriteMaterial({ map: starMap, transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending });
   const starSprite = new THREE.Sprite(starMaterial); starSprite.scale.set(78, 78, 1); starSprite.renderOrder = 4; table.add(starSprite);
   const sparkCanvas = document.createElement('canvas'); sparkCanvas.width = sparkCanvas.height = 64;
@@ -228,29 +235,58 @@ function create3DRenderer(canvas) {
   const flashSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashMap, transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending }));
   flashSprite.scale.set(40, 40, 1); flashSprite.visible = false; flashSprite.renderOrder = 5; table.add(flashSprite);
   let starMemory = null, starFlash = null, starPaintKey = '';
-  function paintStar(multiplier, calm, label) {
-    const key = `${multiplier}:${calm ? 1 : 0}:${label}`;
+  function paintStar(multiplier, calm, label, daylight) {
+    const key = `${multiplier}:${calm ? 1 : 0}:${daylight ? 1 : 0}:${label}:${starPixels}`;
     if (key === starPaintKey) return;
     starPaintKey = key;
     const purple = multiplier === 5;
-    const ctx = starCtx; ctx.clearRect(0, 0, 256, 256);
-    const halo = ctx.createRadialGradient(128, 128, 8, 128, 128, 124);
-    halo.addColorStop(0, purple ? 'rgba(255,246,255,.95)' : 'rgba(255,250,220,.95)');
-    halo.addColorStop(.28, purple ? 'rgba(214,176,255,.55)' : 'rgba(255,214,120,.5)');
-    halo.addColorStop(.62, purple ? 'rgba(164,119,212,.16)' : 'rgba(216,174,88,.14)');
-    halo.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = halo; ctx.fillRect(0, 0, 256, 256);
-    ctx.save(); ctx.translate(128, 128); ctx.beginPath();
-    for (let i = 0; i < 10; i++) {
-      const angle = -Math.PI / 2 + i * Math.PI / 5, radius = i % 2 ? 24 : 68;
-      if (i) ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius); else ctx.moveTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+    const ctx = starCtx;
+    ctx.setTransform(starResolution, 0, 0, starResolution, 0, 0);
+    ctx.clearRect(0, 0, 256, 256);
+    ctx.lineJoin = 'round';
+    if (daylight) {
+      const halo = ctx.createRadialGradient(128, 128, 8, 128, 128, 78);
+      halo.addColorStop(0, purple ? 'rgba(210,170,240,.4)' : 'rgba(232,164,42,.42)');
+      halo.addColorStop(1, 'rgba(232,164,42,0)');
+      ctx.fillStyle = halo; ctx.fillRect(0, 0, 256, 256);
+      ctx.save(); ctx.translate(128, 128); ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const angle = -Math.PI / 2 + i * Math.PI / 5, radius = i % 2 ? 24 : 68;
+        if (i) ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius); else ctx.moveTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+      }
+      ctx.closePath();
+      ctx.shadowColor = purple ? 'rgba(70,40,100,.4)' : 'rgba(90,50,10,.45)';
+      ctx.shadowBlur = calm ? 0 : 8; ctx.shadowOffsetY = 5;
+      const fill = ctx.createRadialGradient(0, -12, 4, 0, 0, 68);
+      fill.addColorStop(0, purple ? '#fff8ff' : '#fff4c8');
+      fill.addColorStop(.42, purple ? '#e4c8ff' : '#f6c453');
+      fill.addColorStop(1, purple ? '#9a6cc8' : '#e0941c');
+      ctx.fillStyle = fill; ctx.fill();
+      ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+      ctx.strokeStyle = purple ? '#5c3484' : '#8a4e08'; ctx.lineWidth = 8; ctx.stroke();
+      ctx.restore();
+      ctx.font = 'bold 28px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 6; ctx.strokeStyle = '#fff8e8'; ctx.strokeText(label, 128, 228);
+      ctx.fillStyle = purple ? '#5c3484' : '#7a4208'; ctx.fillText(label, 128, 228);
+    } else {
+      const halo = ctx.createRadialGradient(128, 128, 8, 128, 128, 124);
+      halo.addColorStop(0, purple ? 'rgba(255,246,255,.95)' : 'rgba(255,250,220,.95)');
+      halo.addColorStop(.28, purple ? 'rgba(214,176,255,.55)' : 'rgba(255,214,120,.5)');
+      halo.addColorStop(.62, purple ? 'rgba(164,119,212,.16)' : 'rgba(216,174,88,.14)');
+      halo.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = halo; ctx.fillRect(0, 0, 256, 256);
+      ctx.save(); ctx.translate(128, 128); ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const angle = -Math.PI / 2 + i * Math.PI / 5, radius = i % 2 ? 24 : 68;
+        if (i) ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius); else ctx.moveTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+      }
+      ctx.closePath();
+      const fill = ctx.createRadialGradient(0, -12, 4, 0, 0, 68);
+      fill.addColorStop(0, '#fffef8'); fill.addColorStop(.45, purple ? '#f3e4ff' : '#ffe7a4'); fill.addColorStop(1, purple ? '#b58ae0' : '#f0c35a');
+      ctx.fillStyle = fill; ctx.shadowColor = purple ? '#e4c8ff' : '#ffe7a1'; ctx.shadowBlur = calm ? 0 : 18; ctx.fill(); ctx.restore();
+      ctx.font = 'bold 28px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = purple ? '#f7eaff' : '#fff6d4'; ctx.fillText(label, 128, 228);
     }
-    ctx.closePath();
-    const fill = ctx.createRadialGradient(0, -12, 4, 0, 0, 68);
-    fill.addColorStop(0, '#fffef8'); fill.addColorStop(.45, purple ? '#f3e4ff' : '#ffe7a4'); fill.addColorStop(1, purple ? '#b58ae0' : '#f0c35a');
-    ctx.fillStyle = fill; ctx.shadowColor = purple ? '#e4c8ff' : '#ffe7a1'; ctx.shadowBlur = calm ? 0 : 18; ctx.fill(); ctx.restore();
-    ctx.font = 'bold 28px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = purple ? '#f7eaff' : '#fff6d4'; ctx.fillText(label, 128, 228);
     starMap.needsUpdate = true;
   }
   // Keep the table fixed. Shake translates the camera parallel to its view so the
@@ -328,14 +364,17 @@ function create3DRenderer(canvas) {
     }
     const flicker = state.calm ? .92 : .7 + .3 * Math.sin(game.clock / 140) * (.65 + .35 * Math.sin(game.clock / 55));
     starSprite.visible = !!game.star;
+    const daylight = palette?.phase?.id !== 'night';
+    starMaterial.blending = daylight ? THREE.NormalBlending : THREE.AdditiveBlending;
+    sparkMaterial.blending = daylight ? THREE.NormalBlending : THREE.AdditiveBlending;
     if (game.star) {
       const seconds = Math.max(0, Math.ceil((game.star.expiresAt - game.clock) / 1000));
-      paintStar(game.star.multiplier, state.calm, `×${game.star.multiplier} · ${seconds}s`);
+      paintStar(game.star.multiplier, state.calm, `×${game.star.multiplier} · ${seconds}s`, daylight);
       const pulse = state.calm ? 1 : 1 + Math.sin(game.clock / 220) * .08;
       starSprite.position.copy(world(game.star.x, game.star.y, 18));
       starSprite.scale.set(72 * pulse, 72 * pulse, 1);
-      starMaterial.opacity = flicker;
-      const sparkCount = state.calm ? 2 : starSparks.length;
+      starMaterial.opacity = daylight ? (state.calm ? 1 : .96) : flicker;
+      const sparkCount = state.calm ? 2 : daylight ? 3 : starSparks.length;
       starSparks.forEach((spark, i) => {
         spark.visible = i < sparkCount;
         if (!spark.visible) return;
@@ -366,7 +405,7 @@ function create3DRenderer(canvas) {
     const frame = [[12, 16], [748, 16], [12, 892], [748, 892]].flatMap(([x, y]) => [project(x, y, 0), project(x, y, WALL_HEIGHT)]);
     const nearEdge = [[3, 897, 0], [757, 897, 0], [3, 897, WALL_HEIGHT], [757, 897, WALL_HEIGHT]].map(([x, y, z]) => project(x, y, z));
     const nearMinX = Math.min(...nearEdge.map(p => p.x)), nearMaxX = Math.max(...nearEdge.map(p => p.x));
-    return { mode: 'webgl', cameraAngle: 0, tableTransform: { position: table.position.toArray(), rotation: table.rotation.toArray().slice(0,3) }, cameraPosition: camera.position.toArray(), cameraBase: cameraBase.toArray(), cameraQuaternion: camera.quaternion.toArray(), motion: { ...motion }, pitch: VIEW_PITCH_DEG, fov: camera.fov, distance: viewDistance, lookY: viewLookY, aspect: camera.aspect, near: { minX: nearMinX, maxX: nearMaxX, width: nearMaxX - nearMinX }, frame, meshes: bodies.size, triangles: webgl.info.render.triangles, contextLost: webgl.getContext().isContextLost(),
+    return { mode: 'webgl', cameraAngle: 0, tableTransform: { position: table.position.toArray(), rotation: table.rotation.toArray().slice(0,3) }, cameraPosition: camera.position.toArray(), cameraBase: cameraBase.toArray(), cameraQuaternion: camera.quaternion.toArray(), motion: { ...motion }, pitch: VIEW_PITCH_DEG, fov: camera.fov, distance: viewDistance, lookY: viewLookY, aspect: camera.aspect, near: { minX: nearMinX, maxX: nearMaxX, width: nearMaxX - nearMinX }, starSprite: { blending: starMaterial.blending === THREE.AdditiveBlending ? 'additive' : 'normal', anisotropy: starMap.anisotropy, size: starPixels, mipmaps: starMap.generateMipmaps }, frame, meshes: bodies.size, triangles: webgl.info.render.triangles, contextLost: webgl.getContext().isContextLost(),
       star: currentGame?.star ? project(currentGame.star.x, currentGame.star.y, 18) : null,
       bodies: [...bodies.values()].map(({ body, mesh, height }) => ({ id: body.id, kind: body.label, x: mesh.position.x + W / 2, y: H / 2 - mesh.position.y, angle: -mesh.rotation.z, radius: body.plugin.radius, height, scale: mesh.scale.x, projected: project(body.position.x, body.position.y, height) })),
       balls: [...balls].map(([id, mesh]) => ({ id, x: mesh.position.x + W / 2, y: H / 2 - mesh.position.y, z: mesh.position.z })),

@@ -1,4 +1,4 @@
-import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_TARGET, BLOCK_COLORS, BLOCK_SYMBOLS, MINI_HIT_SHAKE, MINI_HIT_MS, comboMultiplier, formatComboMultiplier } from './mini-games.js';
+import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_COLORS, BLOCK_SYMBOLS, MINI_HIT_SHAKE, MINI_HIT_MS, comboMultiplier, formatComboMultiplier } from './mini-games.js';
 import { secretPayout } from './secret-wave.js';
 
 export const miniGameMarkup = `<dialog id="mini-game" class="mini-dialog" aria-labelledby="mini-title" aria-describedby="mini-rule"><div class="mini-inner"><div class="mini-heading"><span class="mini-eyebrow">秘密小游戏</span><span id="mini-round"></span></div><h2 id="mini-title"></h2><p id="mini-rule"></p><div class="mini-hud"><span>剩余 <strong id="mini-time">30</strong> 秒</span><span id="mini-combo" class="mini-combo" aria-live="polite"></span><span>本局 <strong id="mini-score">0</strong> 分<span id="mini-bonus" class="mini-bonus">×2</span></span></div><progress id="mini-progress" max="${MINI_DURATION}" value="${MINI_DURATION}" aria-label="小游戏剩余时间"></progress><div id="mini-stage"><div id="mini-fx" class="mini-fx" aria-hidden="true"></div><div id="mini-grid" class="mini-grid"></div></div><p id="mini-message" role="status"></p><div id="mini-result" hidden><div class="mini-result-mark">✦</div><h3 id="mini-result-title"></h3><p id="mini-result-math" class="mini-result-math" hidden></p><p id="mini-result-score"></p><button class="done-button" id="mini-return">返回球台</button></div></div></dialog>`;
@@ -69,8 +69,18 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     combo.classList.toggle('is-on', s.combo>0);
     $('#mini-bonus').classList.toggle('is-on', scoreMultiplier > 1);
     $('#mini-bonus').textContent=`×${scoreMultiplier}`;
-    $('#mini-progress').value=game.remaining(visibleAt);
-    $('#mini-round').textContent=s.kind==='moles'?`第 ${s.wave}/10 轮 · ${s.hit}/40 只`:s.kind==='pairs'?`${s.removed/2}/20 对`:`目标 ${BLOCK_TARGET.toLocaleString()} 分`;
+    const progress=$('#mini-progress');
+    if (s.kind==='blocks') {
+      progress.max=BLOCK_CLEAR_TARGET;
+      progress.value=Math.min(s.removed, BLOCK_CLEAR_TARGET);
+      progress.setAttribute('aria-label','已消除方块');
+      $('#mini-round').textContent=`已消除 ${Math.min(s.removed, BLOCK_CLEAR_TARGET)}/${BLOCK_CLEAR_TARGET}`;
+    } else {
+      progress.max=MINI_DURATION;
+      progress.value=game.remaining(visibleAt);
+      progress.setAttribute('aria-label','小游戏剩余时间');
+      $('#mini-round').textContent=s.kind==='moles'?`第 ${s.wave}/10 轮 · ${s.hit}/40 只`:`${s.removed/2}/20 对`;
+    }
     if (revision !== s.revision) {
       revision=s.revision;$('#mini-message').textContent=s.message;
       s.board.forEach((cell,index)=>{

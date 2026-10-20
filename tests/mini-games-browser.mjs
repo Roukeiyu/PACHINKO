@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { connectedBlocks, BLOCK_TARGET, comboPoints, formatComboMultiplier } from '../src/mini-games.js';
+import { connectedBlocks, BLOCK_CLEAR_TARGET, comboPoints, formatComboMultiplier } from '../src/mini-games.js';
 const executablePath=process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined);
 const browser=await chromium.launch({executablePath,args:process.platform==='linux'?['--no-sandbox']:[]});
 await mkdir('test-results',{recursive:true});
@@ -57,20 +57,19 @@ try {
  await page.screenshot({path:'test-results/mini-pairs-night-mobile.png'});await page.screenshot({path:'test-results/mini-pairs-preview.jpg',type:'jpeg',quality:55});
  for(const group of Object.values(groups).slice(1)){await cell(group[0].index);await cell(group[1].index);}
  const pairTotal=Array.from({length:20},(_,i)=>comboPoints(50,i+1)).reduce((a,b)=>a+b);
- assert.equal((await mini()).status,'complete');assert.equal((await mini()).score,pairTotal);assert.ok(pairTotal>BLOCK_TARGET);assert.equal(await score(),initial+pairTotal);await back();
+ assert.equal((await mini()).status,'complete');assert.equal((await mini()).score,pairTotal);assert.ok(pairTotal>1000);assert.equal(await score(),initial+pairTotal);await back();
  await start('blocks');assert.equal(await page.locator('#mini-grid button').count(),100);initial=await score();
  const colors=await page.evaluate(()=>[0,1,2,3].map(i=>{const el=document.querySelector(`.mini-color-${i}`),c=document.createElement('canvas').getContext('2d');c.fillStyle=getComputedStyle(el).backgroundColor;c.fillRect(0,0,1,1);return [...c.getImageData(0,0,1,1).data].slice(0,3);}));
  for(let i=0;i<4;i++)for(let j=i+1;j<4;j++)assert.ok(Math.max(...colors[i].map((v,k)=>Math.abs(v-colors[j][k])))>=10,'night puzzle colors remain visually distinct');
  await page.screenshot({path:'test-results/mini-blocks-night-mobile.png'});await page.screenshot({path:'test-results/mini-blocks-preview.jpg',type:'jpeg',quality:55});
  let moves=0;
- while((await mini()).status==='playing'&&(await mini()).score<BLOCK_TARGET&&moves++<80){const board=(await mini()).board;const index=board.findIndex((_,i)=>connectedBlocks(board,i).length>=3);assert.ok(index>=0);await cell(index);await page.clock.runFor(200);}
- assert.equal((await mini()).status,'playing','消消乐 keeps going after the goal line');
- assert.ok((await mini()).score>=BLOCK_TARGET);
- const pending=await mini();
- await page.clock.fastForward(30100);
- const blocks=await mini();assert.equal(blocks.status,'timeout');
- assert.equal(blocks.baseScore,pending.score);
- assert.equal(blocks.score,Math.round(pending.score*pending.bestMultiplier));
+ while((await mini()).status==='playing'&&(await mini()).removed<BLOCK_CLEAR_TARGET&&moves++<80){const board=(await mini()).board;const index=board.findIndex((_,i)=>connectedBlocks(board,i).length>=3);assert.ok(index>=0);await cell(index);await page.clock.runFor(200);}
+ const blocks=await mini();
+ assert.equal(blocks.status,'complete','50 cleared blocks end 消消乐');
+ assert.equal(blocks.removed,BLOCK_CLEAR_TARGET);
+ assert.equal(blocks.baseScore,BLOCK_CLEAR_TARGET*10);
+ assert.equal(blocks.score,Math.round(blocks.baseScore*blocks.bestMultiplier));
+ assert.equal(await page.locator('#mini-round').textContent(),`已消除 ${BLOCK_CLEAR_TARGET}/${BLOCK_CLEAR_TARGET}`);
  assert.equal(await score(),initial+blocks.score);
  assert.equal(await page.locator('#mini-score').textContent(), await page.evaluate(n=>n.toLocaleString(), blocks.score));
  assert.equal(await page.locator('#mini-result-math').textContent(), await page.evaluate(b=>{const text=Number.isInteger(b.bestMultiplier)?String(b.bestMultiplier):b.bestMultiplier.toFixed(1);return `${b.baseScore.toLocaleString()} × ${text} = ${b.score.toLocaleString()}`;}, blocks));
@@ -129,7 +128,7 @@ try {
  assert.equal(await page.locator('#mini-bonus').textContent(),'×2');
  assert.equal(await page.locator('#mini-bonus').evaluate(el=>el.classList.contains('is-on')),true);
  const kind=(await mini()).kind;
- for(let step=0;step<40 && (await mini()).status==='playing' && (await mini()).score<=BLOCK_TARGET;step++){
+ for(let step=0;step<40 && (await mini()).status==='playing' && (kind==='blocks'?(await mini()).removed<BLOCK_CLEAR_TARGET:(await mini()).score<1000);step++){
   const board=(await mini()).board;
   if(kind==='pairs'){
    const open=board.flatMap((cell,index)=>cell?[{...cell,index}]:[]);
@@ -148,7 +147,8 @@ try {
  }
  const mid=await mini();
  const raw=mid.score;
- assert.ok(raw>=BLOCK_TARGET,'the 1000 line ends 消消乐 early and does not clamp the score');
+ if(kind==='blocks'){assert.equal(mid.status,'complete');assert.equal(mid.removed,BLOCK_CLEAR_TARGET);assert.equal(mid.baseScore,500);}
+ else assert.ok(raw>=1000,'pairs and moles can still pass 1000');
  assert.equal(await page.locator('#mini-score').textContent(),await page.evaluate(n=>n.toLocaleString(),raw));
  const alreadyPaid=mid.status!=='playing';
  assert.equal(await score(),holeBase+3000+(alreadyPaid?raw*2:0),'mini-game points are credited when the round ends');
@@ -156,7 +156,6 @@ try {
  const done=await mini();
  assert.notEqual(done.status,'playing');
  assert.ok(done.score>=raw);
- assert.ok(done.score>=BLOCK_TARGET);
  const paid=done.score*2;
  assert.equal(await score(),holeBase+3000+paid);
  const moleNote=done.kind==='moles'?` · 打中 ${done.hit}/40 只`:'';

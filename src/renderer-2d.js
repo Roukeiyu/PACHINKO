@@ -232,39 +232,78 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     if (game.star) starMemory = { id: game.star.id, x: game.star.x, y: game.star.y, multiplier: game.star.multiplier };
     else if (starMemory) { starFlash = { ...starMemory, at: game.clock }; starMemory = null; }
     if (game.star && !textureMode) {
-      const s = game.star, purple = s.multiplier === 5;
+      const s = game.star, purple = s.multiplier === 5, daylight = activePalette?.phase?.id !== 'night';
       const pulse = state.calm ? 1 : 1 + Math.sin(t * 4) * .08;
       const flicker = state.calm ? .9 : .72 + .28 * Math.sin(game.clock / 140);
       const remaining = Math.max(0, s.expiresAt - game.clock);
-      const core = purple ? '#f4e8ff' : '#fff6d0', mid = purple ? '#c9a0ee' : '#f5cd70', edge = purple ? '#8d62c4' : '#e0b04a';
-      ctx.save(); ctx.translate(s.x, s.y); ctx.globalAlpha = flicker;
-      const halo = ctx.createRadialGradient(0, 0, 2, 0, 0, 30 * pulse);
-      halo.addColorStop(0, core); halo.addColorStop(.35, mid); halo.addColorStop(1, edge + '00');
-      ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(0, 0, 30 * pulse, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.beginPath(); ctx.arc(0, 0, 16, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * remaining / (s.expiresAt - s.born));
-      ctx.strokeStyle = paintColor(purple ? '#a477d4' : '#d8ae58', 'line'); ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.save(); ctx.scale(pulse, pulse); ctx.shadowColor = paintColor(purple ? '#e7d4ff' : '#ffe7a1', 'glow'); ctx.shadowBlur = state.calm ? 0 : 16;
-      ctx.beginPath();
-      for (let i = 0; i < 10; i++) {
-        const angle = -Math.PI / 2 + i * Math.PI / 5, radius = i % 2 ? 5 : 11;
-        if (i) ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius); else ctx.moveTo(0, -radius);
+      const label = `×${s.multiplier} · ${Math.ceil(remaining / 1000)}s`;
+      ctx.save(); ctx.translate(s.x, s.y); ctx.globalCompositeOperation = 'source-over';
+      if (daylight) {
+        const halo = ctx.createRadialGradient(0, 0, 2, 0, 0, 16 * pulse);
+        halo.addColorStop(0, purple ? 'rgba(196,150,230,.45)' : 'rgba(232,164,42,.5)');
+        halo.addColorStop(1, 'rgba(232,164,42,0)');
+        ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(0, 0, 16 * pulse, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, 16, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * remaining / (s.expiresAt - s.born));
+        ctx.strokeStyle = purple ? '#6d4c93' : '#8a4e08'; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.save(); ctx.scale(pulse, pulse);
+        ctx.shadowColor = purple ? 'rgba(70,40,100,.35)' : 'rgba(90,50,10,.4)';
+        ctx.shadowBlur = state.calm ? 0 : 3; ctx.shadowOffsetY = 1.5;
+        ctx.beginPath();
+        for (let i = 0; i < 10; i++) {
+          const angle = -Math.PI / 2 + i * Math.PI / 5, radius = i % 2 ? 5 : 11;
+          if (i) ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius); else ctx.moveTo(0, -radius);
+        }
+        ctx.closePath();
+        const fill = ctx.createRadialGradient(0, -3, 1, 0, 0, 12);
+        fill.addColorStop(0, purple ? '#fff8ff' : '#fff4c8');
+        fill.addColorStop(.45, purple ? '#e4c8ff' : '#f6c453');
+        fill.addColorStop(1, purple ? '#9a6cc8' : '#e0941c');
+        ctx.fillStyle = fill; ctx.fill();
+        ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+        ctx.strokeStyle = purple ? '#5c3484' : '#8a4e08'; ctx.lineWidth = 1.6; ctx.stroke();
+        ctx.restore();
+        const sparks = state.calm ? 2 : 3;
+        for (let i = 0; i < sparks; i++) {
+          const angle = game.clock / 420 + i * Math.PI * 2 / sparks, radius = 15 + Math.sin(game.clock / 260 + i) * 2;
+          ctx.globalAlpha = .8;
+          ctx.fillStyle = purple ? '#8d62c4' : '#c47a12';
+          ctx.beginPath(); ctx.arc(Math.cos(angle) * radius, Math.sin(angle) * radius, 1.2, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.strokeStyle = '#fff8e8'; ctx.strokeText(label, 0, 29);
+        ctx.fillStyle = purple ? '#5c3484' : '#7a4208'; ctx.fillText(label, 0, 29);
+      } else {
+        const core = purple ? '#f4e8ff' : '#fff6d0', mid = purple ? '#c9a0ee' : '#f5cd70', edge = purple ? '#8d62c4' : '#e0b04a';
+        ctx.globalAlpha = flicker;
+        const halo = ctx.createRadialGradient(0, 0, 2, 0, 0, 30 * pulse);
+        halo.addColorStop(0, core); halo.addColorStop(.35, mid); halo.addColorStop(1, edge + '00');
+        ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(0, 0, 30 * pulse, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.arc(0, 0, 16, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * remaining / (s.expiresAt - s.born));
+        ctx.strokeStyle = paintColor(purple ? '#a477d4' : '#d8ae58', 'line'); ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.save(); ctx.scale(pulse, pulse); ctx.shadowColor = paintColor(purple ? '#e7d4ff' : '#ffe7a1', 'glow'); ctx.shadowBlur = state.calm ? 0 : 16;
+        ctx.beginPath();
+        for (let i = 0; i < 10; i++) {
+          const angle = -Math.PI / 2 + i * Math.PI / 5, radius = i % 2 ? 5 : 11;
+          if (i) ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius); else ctx.moveTo(0, -radius);
+        }
+        ctx.closePath();
+        const fill = ctx.createRadialGradient(0, -3, 1, 0, 0, 12);
+        fill.addColorStop(0, '#fffef8'); fill.addColorStop(.5, core); fill.addColorStop(1, mid);
+        ctx.fillStyle = fill; ctx.fill(); ctx.shadowBlur = 0;
+        ctx.strokeStyle = paintColor(purple ? '#f7eaff' : '#fff8dc', 'line'); ctx.lineWidth = 1.2; ctx.stroke();
+        const sparks = state.calm ? 3 : 6;
+        for (let i = 0; i < sparks; i++) {
+          const angle = game.clock / 420 + i * Math.PI * 2 / sparks, radius = 15 + Math.sin(game.clock / 260 + i) * 3;
+          ctx.globalAlpha = flicker * (.45 + .55 * ((i + game.clock / 80) % 1));
+          ctx.fillStyle = i % 2 ? '#fff' : mid;
+          ctx.beginPath(); ctx.arc(Math.cos(angle) * radius, Math.sin(angle) * radius, 1.4, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+        ctx.globalAlpha = 1;
+        text(label, 0, 29, 10, purple ? '#8b59b5' : '#b58b42', 'bold');
       }
-      ctx.closePath();
-      const fill = ctx.createRadialGradient(0, -3, 1, 0, 0, 12);
-      fill.addColorStop(0, '#fffef8'); fill.addColorStop(.5, core); fill.addColorStop(1, mid);
-      ctx.fillStyle = fill; ctx.fill(); ctx.shadowBlur = 0;
-      ctx.strokeStyle = paintColor(purple ? '#f7eaff' : '#fff8dc', 'line'); ctx.lineWidth = 1.2; ctx.stroke();
-      const sparks = state.calm ? 3 : 6;
-      for (let i = 0; i < sparks; i++) {
-        const angle = game.clock / 420 + i * Math.PI * 2 / sparks, radius = 15 + Math.sin(game.clock / 260 + i) * 3;
-        ctx.globalAlpha = flicker * (.45 + .55 * ((i + game.clock / 80) % 1));
-        ctx.fillStyle = i % 2 ? '#fff' : mid;
-        ctx.beginPath(); ctx.arc(Math.cos(angle) * radius, Math.sin(angle) * radius, 1.4, 0, Math.PI * 2); ctx.fill();
-      }
-      ctx.restore();
-      ctx.globalAlpha = 1;
-      text(`×${s.multiplier} · ${Math.ceil(remaining / 1000)}s`, 0, 29, 10, purple ? '#8b59b5' : '#b58b42', 'bold');
       ctx.restore();
     }
     if (!textureMode && starFlash && game.clock - starFlash.at < 420) {
