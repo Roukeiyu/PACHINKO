@@ -412,9 +412,9 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     // any rewards those balls earn during the wait. Inventory is never lost.
     if (emissionPaused) {
       for (const queue of [pendingShots, pendingDrops]) for (const shot of queue) shot.due += dt;
-      // Drum-reward countdowns share that freeze. Otherwise the center shrinks
-      // and the clock-burst pips vanish while their shots are still waiting.
-      if (rewards.enlargedUntil) rewards.enlargedUntil += dt;
+      // Queued clock-burst shots stay on hold, so their pips do too. The center
+      // drum does not: its 10s enlarge keeps expiring, or a secret wait leaves
+      // the grown drum sitting on the spinner until every ball has drained.
       if (rewards.burstUntil) rewards.burstUntil += dt;
     }
     slotMachine.advance(clock);
@@ -567,6 +567,30 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     }
   }
   function setScoreHoles(enabled) { scoreHoles = enabled !== false; }
+  // Wall-clock pauses (settings, a mini-game, a hidden tab) never call step, so
+  // the enlarge deadline has to move on its own. Balls stay where they are.
+  function advanceEnlarge(dt) {
+    if (!rewards.enlargedUntil || !(dt > 0) || !Number.isFinite(dt)) return false;
+    rewards.enlargedUntil -= dt;
+    if (clock + 1e-6 >= rewards.enlargedUntil) { rewards.enlargedUntil = 0; resizeCenter(false); return true; }
+    return false;
+  }
+  function forceEnlarge() {
+    rewards.hits[1] = rewards.goals[1] - 1;
+    recordBumperHit(bumpers[1], null);
+    return bumpers[2].plugin.radius;
+  }
+  // Park one ball so a secret wait can be observed without the field draining
+  // into the mini-game. The ball stays in the plunger lane, clear of the drum.
+  function pinBall(x = TABLE.launchX, y = TABLE.launchY - 120) {
+    const ball = balls[0] || launch(1);
+    if (!ball) return false;
+    ball.entered = true;
+    Body.setPosition(ball.body, { x, y });
+    Body.setVelocity(ball.body, { x: 0, y: 0 });
+    Body.setStatic(ball.body, true);
+    return true;
+  }
   function queueClock(valueFactor = 1) {
     const scale = ballValue(valueFactor);
     const bumper = bumpers[2];
@@ -609,5 +633,5 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     });
     return items.length;
   }
-  return { engine, balls, walls, pins, kickers, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, collector, slotMachine: slotMachine.state, stats, rewards, launch, launchBurst, queueClock, queueJar, setScoreHoles, setEmissionPaused, takeStored, resetRound, restoreCarried, nudge, get emissionPaused() { return emissionPaused; }, get pendingLaunches() { return pendingLaunches.length; }, get pendingShotCount() { return pendingShots.length; }, get pendingDropCount() { return pendingDrops.length; }, get carriedBalls() { return [...balls.map(ball => ({ scoreFactor: ball.scoreFactor, valueFactor: ballValue(ball.valueFactor) })), ...pendingLaunches.map(shot => ({ scoreFactor: 1, valueFactor: ballValue(shot.valueFactor) }))]; }, step, setSlots, get star() { return activeStar; }, get clock() { return clock; }, get slots() { return slots; } };
+  return { engine, balls, walls, pins, kickers, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, collector, slotMachine: slotMachine.state, stats, rewards, launch, launchBurst, queueClock, queueJar, setScoreHoles, setEmissionPaused, advanceEnlarge, forceEnlarge, pinBall, takeStored, resetRound, restoreCarried, nudge, get emissionPaused() { return emissionPaused; }, get pendingLaunches() { return pendingLaunches.length; }, get pendingShotCount() { return pendingShots.length; }, get pendingDropCount() { return pendingDrops.length; }, get carriedBalls() { return [...balls.map(ball => ({ scoreFactor: ball.scoreFactor, valueFactor: ballValue(ball.valueFactor) })), ...pendingLaunches.map(shot => ({ scoreFactor: 1, valueFactor: ballValue(shot.valueFactor) }))]; }, step, setSlots, get star() { return activeStar; }, get clock() { return clock; }, get slots() { return slots; } };
 }

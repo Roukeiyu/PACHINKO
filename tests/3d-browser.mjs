@@ -101,7 +101,11 @@ try {
   await page.keyboard.up('Space');await page.clock.runFor(550);
   assert.equal(await page.evaluate(()=>window.__ponpon.stats.launches),7,'the initial ball, scored fixture and full-charge burst are independent launches');
   await page.evaluate(()=>document.querySelector('#settings-button').click());
-  const afterBurst=await physical();await mode(false);assert.deepEqual(await physical(),afterBurst);
+  const afterBurst=await physical();await mode(false);const switched=await physical();
+  const aged=afterBurst.rewards.enlargedUntil-switched.rewards.enlargedUntil;
+  assert.ok(aged>0&&aged<=50,`center enlarge keeps counting while settings are open (${aged}ms)`);
+  const frozen=structuredClone(switched);frozen.rewards.enlargedUntil=afterBurst.rewards.enlargedUntil;
+  assert.deepEqual(frozen,afterBurst,'a display-mode switch still freezes balls, scores and the simulation clock');
   await page.evaluate(()=>document.querySelector('#calm').click());await page.clock.runFor(50);
   assert.equal(await page.evaluate(()=>window.__ponpon.rendering.motion.intensity),0);
   assert.equal(await page.evaluate(()=>document.querySelector('.game-layout').style.transform),'');
