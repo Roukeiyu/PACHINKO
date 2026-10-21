@@ -250,3 +250,34 @@ html:not(.calm) .ball-count.is-low{animation:ball-low 900ms ease-in-out infinite
   .board-wrap:has(canvas[data-renderer="webgl"]){width:min(100%,calc((100dvh - 96px) * 1.24));max-width:min(100%,calc((100dvh - 96px) * 1.24));aspect-ratio:1.24/1}
   .launch-control{grid-column:2;grid-row:2;align-self:center}
 }
+
+/* Portrait phones: the charge bar stays on the bottom safe area, and the board
+   uses whatever height is left between the HUD and that bar. */
+@media(max-width:740px) and (orientation:portrait){
+  html,body{height:100%;overflow:hidden}
+  .shell{height:100dvh;max-height:100dvh;display:flex;flex-direction:column;overflow:hidden;padding-bottom:0}
+  header{flex:0 0 40px;height:40px;min-height:40px}
+  .brand{gap:7px}
+  .brand-mark{width:28px;height:28px;border-radius:9px}
+  .brand-mark svg{width:20px;height:20px}
+  .mobile-title{font-size:15px}
+  header .icon-button,header .settings-button{width:32px;height:32px}
+  header .icon-button svg,header .settings-button svg{width:16px;height:16px}
+  .game-layout{flex:1 1 auto;width:100%;min-height:0;display:flex;flex-direction:column;align-items:stretch;margin:0;gap:0}
+  .machine{flex:1 1 auto;width:100%;min-height:0;display:flex;flex-direction:column;align-items:stretch;padding:0;overflow:hidden}
+  .mobile-hud{flex:0 0 32px;align-self:stretch;width:100%;height:32px;min-height:32px;max-height:32px;padding:0 8px}
+  .hud-score-row,.hud-meta-row{flex:0 0 16px;height:16px;min-height:16px;max-height:16px;gap:4px}
+  #mobile-score,#mobile-balls{font-size:15px;line-height:16px}
+  .hud-score-label,.hud-ball-label{font-size:10px;line-height:16px}
+  .hud-meta-row{font-size:9px}
+  .mobile-hud .collection-button,.info-toggle{height:16px;min-height:16px;padding:0 7px;line-height:16px}
+  .board-stage{display:flex;flex:1 1 auto;align-self:stretch;width:100%;min-width:0;min-height:0;align-items:center;justify-content:center;container-type:size}
+  .board-wrap{width:min(100cqw,calc(100cqh * 760 / 900));max-width:100cqw;height:auto;max-height:100cqh;margin:0;aspect-ratio:760/900}
+  .board-wrap canvas{width:100%;height:auto;aspect-ratio:760/900;max-height:none}
+  .board-wrap:has(canvas[data-renderer="webgl"]){width:100cqw;height:100cqh;max-width:100cqw;max-height:100cqh;aspect-ratio:auto}
+  .board-wrap canvas[data-renderer="webgl"]{width:100%;height:100%;aspect-ratio:auto;max-height:none}
+  .launch-control{flex:0 0 auto;align-self:stretch;width:100%;padding:4px 8px calc(4px + env(safe-area-inset-bottom,0px))}
+  .launch-mode,.launch-mode .launch-button{height:48px;min-height:48px}
+}
+.launch-control{position:relative}
+.toast{position:absolute;top:auto;bottom:calc(100% + 8px);max-width:min(280px,calc(100vw - 24px))}

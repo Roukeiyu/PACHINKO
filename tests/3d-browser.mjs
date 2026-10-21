@@ -44,7 +44,7 @@ try {
   assert.deepEqual(await physical(),preserved,'switching to 3D retains live balls, scores, rewards and clocks');
   let state=await page.evaluate(()=>window.__ponpon),r=state.rendering;
   assert.equal(r.mode,'webgl');assert.ok(r.meshes>80 && r.triangles>20000);assert.equal(r.alignmentError,0);
-  assert.equal(r.pitch,VIEW_PITCH_DEG);assert.equal(r.fov,VIEW_FOV);assert.equal(r.decor,undefined,'off-board scenery is gone');
+  assert.ok(r.pitch>=10&&r.pitch<=VIEW_PITCH_DEG+0.01,`pitch ${r.pitch} stays between the tall-phone fit and the desktop view`);assert.ok(r.fov>=VIEW_FOV-0.1&&r.fov<=90);assert.equal(r.decor,undefined,'off-board scenery is gone');
   assert.ok(r.bodies.filter(b=>b.kind==='wall').every(b=>b.height===WALL_HEIGHT));
   assert.ok(r.bodies.filter(b=>b.kind==='rail').every(b=>b.height===RAIL_HEIGHT));
   const fits=frame=>frame.every(p=>p.x>0.004&&p.x<0.996&&p.y>0.004&&p.y<0.996);

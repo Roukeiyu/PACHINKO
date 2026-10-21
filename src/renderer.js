@@ -18,13 +18,19 @@ export const VIEW_DISTANCE = 1150;
 export const VIEW_LOOK_Y = -80;
 export const WALL_HEIGHT = 58;
 export const RAIL_HEIGHT = 36;
-// Every 3D canvas uses this shorter aspect. The distance and look point keep the
-// near edge a few pixels inside the frame and the whole table, including the
-// rail tops, on screen. Desktop and portrait share one width-fit.
+// Width-fit for the perspective table. Desktop and landscape keep this canvas
+// ratio. A taller phone canvas keeps the same horizontal framing and opens the
+// vertical field so the extra height shows more scene instead of clipping the sides.
 export const MOBILE_LAYOUT_QUERY = '(max-width: 740px) and (orientation: portrait)';
 export const MOBILE_VIEW_ASPECT = 1.24;
 export const MOBILE_VIEW_DISTANCE = 1150;
 export const MOBILE_VIEW_LOOK_Y = -80;
+
+export function fittedFov(aspect) {
+  if (!(aspect > 0) || aspect + 1e-4 >= MOBILE_VIEW_ASPECT) return VIEW_FOV;
+  const half = Math.tan((VIEW_FOV * Math.PI) / 360);
+  return (Math.atan((half * MOBILE_VIEW_ASPECT) / aspect) * 360) / Math.PI;
+}
 
 // The simulation remains on the tabletop. Every solid is built from the same
 // Matter body, then follows its position, angle and size without a second world.
@@ -357,19 +363,72 @@ function create3DRenderer(canvas) {
   }
   // Keep the table fixed. Shake translates the camera parallel to its view so the
   // orientation stays put and the taller rails parallax against the floor.
-  const pitch = THREE.MathUtils.degToRad(VIEW_PITCH_DEG);
+  let pitchDeg = VIEW_PITCH_DEG;
+  let pitch = THREE.MathUtils.degToRad(pitchDeg);
   const cameraBase = new THREE.Vector3();
   const lookAt = new THREE.Vector3();
   let viewDistance = VIEW_DISTANCE, viewLookY = VIEW_LOOK_Y;
   const mobileQuery = window.matchMedia(MOBILE_LAYOUT_QUERY);
   const project = (x, y, z = 0) => { const p = world(x, y, z).applyMatrix4(table.matrixWorld).project(camera); return { x: (p.x + 1) / 2, y: (1 - p.y) / 2 }; };
+  const portraitFrames = new Map();
+  // A tall phone canvas keeps the near edge a few pixels inside. Straightening
+  // the pitch lets the same width-fit table use the extra height instead of
+  // sitting in a short band of background.
+  function portraitFrame(aspect, width) {
+    const key = `${aspect.toFixed(3)}:${Math.round(width)}`;
+    if (portraitFrames.has(key)) return portraitFrames.get(key);
+    const marginLo = 4.4 / width, marginHi = 7.4 / width;
+    const saved = { pitchDeg, pitch, viewDistance, viewLookY, fov: camera.fov, aspect: camera.aspect };
+    const score = (nextPitch, look, fov, ox = 0, oy = 0) => {
+      pitchDeg = nextPitch; pitch = THREE.MathUtils.degToRad(nextPitch);
+      viewDistance = MOBILE_VIEW_DISTANCE; viewLookY = look; camera.fov = fov; camera.aspect = aspect;
+      camera.updateProjectionMatrix();
+      cameraBase.set(0, -Math.sin(pitch) * viewDistance, Math.cos(pitch) * viewDistance);
+      const off = new THREE.Vector3(-ox, oy * Math.cos(pitch), oy * Math.sin(pitch));
+      camera.position.copy(cameraBase).add(off);
+      camera.up.set(0, 1, 0); camera.lookAt(off.x, look + off.y, off.z); camera.updateMatrixWorld();
+      const frame = [[12, 16], [748, 16], [12, 892], [748, 892]].flatMap(([x, y]) => [project(x, y, 0), project(x, y, WALL_HEIGHT)]);
+      const near = [[3, 897, 0], [757, 897, 0], [3, 897, WALL_HEIGHT], [757, 897, WALL_HEIGHT]].map(([x, y, z]) => project(x, y, z));
+      const minX = Math.min(...near.map(p => p.x)), maxX = Math.max(...near.map(p => p.x));
+      const minY = Math.min(...frame.map(p => p.y)), maxY = Math.max(...frame.map(p => p.y));
+      const inside = frame.every(p => p.x > 0.01 && p.x < 0.99 && p.y > 0.01 && p.y < 0.99);
+      return { minX, nearW: maxX - minX, span: maxY - minY, mid: (minY + maxY) / 2, inside };
+    };
+    let best = null;
+    const consider = (nextPitch, look, fov) => {
+      const still = score(nextPitch, look, fov);
+      if (!still.inside || still.nearW < 0.95 || still.minX < marginLo || still.minX > marginHi) return;
+      if (Math.abs(still.mid - 0.5) > 0.06) return;
+      const shaken = [[5.5, 4], [-5.5, -4], [7, 5], [-7, -5]].every(([x, y]) => score(nextPitch, look, fov, x, y).inside);
+      if (!shaken) return;
+      if (!best || still.span > best.span) best = { pitchDeg: nextPitch, lookY: look, fov, span: still.span };
+    };
+    consider(VIEW_PITCH_DEG, MOBILE_VIEW_LOOK_Y, fittedFov(aspect));
+    for (let nextPitch = 10; nextPitch <= 36; nextPitch += 2) {
+      for (let look = -260; look <= 40; look += 20) {
+        for (let fov = 34; fov <= 84; fov += 2) consider(nextPitch, look, fov);
+      }
+    }
+    pitchDeg = saved.pitchDeg; pitch = saved.pitch; viewDistance = saved.viewDistance; viewLookY = saved.viewLookY;
+    camera.fov = saved.fov; camera.aspect = saved.aspect;
+    portraitFrames.set(key, best);
+    return best;
+  }
   function resize() {
     const mobile = mobileQuery.matches;
-    viewDistance = mobile ? MOBILE_VIEW_DISTANCE : VIEW_DISTANCE;
-    viewLookY = mobile ? MOBILE_VIEW_LOOK_Y : VIEW_LOOK_Y;
     const rect = canvas.getBoundingClientRect();
     const aspect = rect.width > 0 && rect.height > 0 ? rect.width / rect.height : MOBILE_VIEW_ASPECT;
-    camera.fov = VIEW_FOV;
+    table.updateMatrixWorld(true);
+    const fitted = mobile && aspect + 1e-3 < MOBILE_VIEW_ASPECT ? portraitFrame(aspect, rect.width) : null;
+    if (fitted) {
+      pitchDeg = fitted.pitchDeg; pitch = THREE.MathUtils.degToRad(pitchDeg);
+      viewDistance = MOBILE_VIEW_DISTANCE; viewLookY = fitted.lookY; camera.fov = fitted.fov;
+    } else {
+      pitchDeg = VIEW_PITCH_DEG; pitch = THREE.MathUtils.degToRad(pitchDeg);
+      viewDistance = mobile ? MOBILE_VIEW_DISTANCE : VIEW_DISTANCE;
+      viewLookY = mobile ? MOBILE_VIEW_LOOK_Y : VIEW_LOOK_Y;
+      camera.fov = fittedFov(aspect);
+    }
     camera.aspect = aspect;
     camera.updateProjectionMatrix();
     cameraBase.set(0, -Math.sin(pitch) * viewDistance, Math.cos(pitch) * viewDistance);
@@ -495,7 +554,7 @@ function create3DRenderer(canvas) {
     const frame = [[12, 16], [748, 16], [12, 892], [748, 892]].flatMap(([x, y]) => [project(x, y, 0), project(x, y, WALL_HEIGHT)]);
     const nearEdge = [[3, 897, 0], [757, 897, 0], [3, 897, WALL_HEIGHT], [757, 897, WALL_HEIGHT]].map(([x, y, z]) => project(x, y, z));
     const nearMinX = Math.min(...nearEdge.map(p => p.x)), nearMaxX = Math.max(...nearEdge.map(p => p.x));
-    return { mode: 'webgl', cameraAngle: 0, tableTransform: { position: table.position.toArray(), rotation: table.rotation.toArray().slice(0,3) }, cameraPosition: camera.position.toArray(), cameraBase: cameraBase.toArray(), cameraQuaternion: camera.quaternion.toArray(), motion: { ...motion }, pitch: VIEW_PITCH_DEG, fov: camera.fov, distance: viewDistance, lookY: viewLookY, aspect: camera.aspect, near: { minX: nearMinX, maxX: nearMaxX, width: nearMaxX - nearMinX }, starSprite: { blending: starMaterial.blending === THREE.AdditiveBlending ? 'additive' : 'normal', anisotropy: starMap.anisotropy, size: starPixels, mipmaps: starMap.generateMipmaps }, frame, meshes: bodies.size, triangles: webgl.info.render.triangles, contextLost: webgl.getContext().isContextLost(),
+    return { mode: 'webgl', cameraAngle: 0, tableTransform: { position: table.position.toArray(), rotation: table.rotation.toArray().slice(0,3) }, cameraPosition: camera.position.toArray(), cameraBase: cameraBase.toArray(), cameraQuaternion: camera.quaternion.toArray(), motion: { ...motion }, pitch: pitchDeg, fov: camera.fov, distance: viewDistance, lookY: viewLookY, aspect: camera.aspect, near: { minX: nearMinX, maxX: nearMaxX, width: nearMaxX - nearMinX }, starSprite: { blending: starMaterial.blending === THREE.AdditiveBlending ? 'additive' : 'normal', anisotropy: starMap.anisotropy, size: starPixels, mipmaps: starMap.generateMipmaps }, frame, meshes: bodies.size, triangles: webgl.info.render.triangles, contextLost: webgl.getContext().isContextLost(),
       star: currentGame?.star ? project(currentGame.star.x, currentGame.star.y, 18) : null,
       bodies: [...bodies.values()].map(({ body, mesh, height }) => ({ id: body.id, kind: body.label, x: mesh.position.x + W / 2, y: H / 2 - mesh.position.y, angle: -mesh.rotation.z, radius: body.plugin.radius, height, scale: mesh.scale.x, projected: project(body.position.x, body.position.y, height) })),
       balls: [...ballPositions].map(([id, point]) => ({ id, ...point })),
