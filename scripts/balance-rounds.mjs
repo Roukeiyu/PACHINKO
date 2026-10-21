@@ -1,14 +1,18 @@
 // Random-power physics rounds. Duration assumes a shot about every 1.5s, plus
 // one mini-game pause after each secret visit. Not part of npm test.
-// Policy: ×1 below 7 slots, ×2 from 7 slots, and at 9 slots ×8 when that shot
-// can be paid, otherwise ×4. Default is 100 rounds of the shipped rules.
+// Default policy: ×1 below 7 slots, ×2 from 7 slots, and at 9 slots ×8 when
+// that shot can be paid, otherwise ×4. Default is 100 rounds of the shipped
+// rules. --policy does not change the game:
+//   paid  ×2 from 7 slots, ×8 then ×4 at 9 slots (default)
+//   p1    ×2 from 7 slots, then ×1 only once 9 slots are open
+//   p2    ×1 for the whole round
 //
 // Named variants and --flags override the sim only. They do not change the
 // game. Extra drum/clock/enlarge balls are stock gifts on top of any real
 // balls the table already launches. valueScoreScale multiplies points of a
 // paid shot (valueFactor > 1) and leaves ×1 shots alone.
 //
-//   node scripts/balance-rounds.mjs [rounds] [main|a|b|c]
+//   node scripts/balance-rounds.mjs [rounds] [main|a|b|c] [--policy=paid|p1|p2]
 //   node scripts/balance-rounds.mjs 40 --unlock7=3000 --unlock9=11000
 import { createTable, STEP } from '../src/physics.js';
 import { SLOT_UNLOCK_7, SLOT_UNLOCK_9 } from '../src/slots.js';
@@ -28,6 +32,12 @@ const PRESETS = {
   b: { unlock7: 5000, unlock9: 20000, secretBalls: 28, miniBalls: 16, enlargeBalls: 2 },
   // Earlier gates, a larger opening stock, a small mini grant, paid shots score 1.45×.
   c: { unlock7: 3800, unlock9: 10000, startBalls: 160, secretBalls: 12, miniBalls: 8, valueScoreScale: 1.45 },
+};
+
+const POLICIES = {
+  paid: '7槽起用×2；9槽优先×8（这一发付得起时），否则×4',
+  p1: '7槽起用×2；9槽改回只打×1',
+  p2: '全程只打×1',
 };
 
 const BASE_TUNE = {
@@ -71,10 +81,19 @@ function parseInvocation(argv) {
   tune.leftDrumExtra = number(flags.drum, tune.leftDrumExtra);
   tune.clockExtra = number(flags.clock, tune.clockExtra);
   tune.valueScoreScale = number(flags.scale, tune.valueScoreScale);
-  return { rounds, preset, tune };
+  const policy = flags.policy || 'paid';
+  if (!Object.hasOwn(POLICIES, policy)) throw new Error(`Unknown policy "${policy}". Use paid, p1, or p2.`);
+  return { rounds, preset, tune, policy };
 }
 
-const { rounds: ROUNDS, preset: PRESET, tune: TUNE } = parseInvocation(process.argv.slice(2));
+const { rounds: ROUNDS, preset: PRESET, tune: TUNE, policy: POLICY } = parseInvocation(process.argv.slice(2));
+
+// p1 and p2 only change which tier chooseSpendFactor prefers. Fallback for a
+// short stock (unaffordable burst, last ball at ×1) stays the shipped rule.
+function spendFactor(slots, spendable, burst) {
+  const tier = POLICY === 'p2' ? 5 : POLICY === 'p1' && slots >= 9 ? 5 : slots;
+  return chooseSpendFactor(tier, spendable, burst);
+}
 
 function slotsForTune(score) {
   if (score >= TUNE.unlock9) return 9;
@@ -154,12 +173,16 @@ function playRound(seed) {
   let steps = 0;
   let lastShot = -SHOT_GAP_MS;
   let miniMs = 0;
+  let at9 = null;
   while (steps < STEP_CAP) {
     const next = slotsForTune(score);
     const idle = game.balls.length === 0 && game.collector.remaining === 0 && game.pendingLaunches === 0;
     if (next > slots && idle && !secretWait) {
       slots = next;
       game.setSlots(next);
+      if (slots >= 9 && !at9) {
+        at9 = { score, ballsSpent, launches, miniMs, steps };
+      }
     }
     if (secretWait && idle && !miniAwarded) {
       const performanceScore = random() * MINI_BALLS_FULL_SCORE;
@@ -175,7 +198,7 @@ function playRound(seed) {
     const clock = steps * STEP;
     const spendable = stock + game.collector.stored.length;
     const burstWanted = random() < 0.12;
-    const used = chooseSpendFactor(slots, spendable, burstWanted);
+    const used = spendFactor(slots, spendable, burstWanted);
     const burst = burstWanted && used > 0;
     const cost = used ? shotCost(used, burst) : 0;
     if (!secretWait && used && clock - lastShot >= 900 && game.balls.length < 10) {
@@ -201,9 +224,18 @@ function playRound(seed) {
     if (stock <= 0 && stored === 0 && pending === 0 && game.pendingLaunches === 0 && game.balls.length === 0 && !secretWait) break;
   }
   const physicsMs = steps * STEP;
+  const after9 = at9 ? {
+    playMs: (launches - at9.launches) * SHOT_GAP_MS + (miniMs - at9.miniMs),
+    physicsMs: (steps - at9.steps) * STEP,
+    score: score - at9.score,
+    ballsSpent: ballsSpent - at9.ballsSpent,
+    launches: launches - at9.launches,
+    scoreAt: at9.score,
+    ballsAt: at9.ballsSpent,
+  } : null;
   return {
     score, launches, ballsSpent, doubleShots, tierShots, slots, jackpots, bestSlot, physicsMs,
-    playMs: launches * SHOT_GAP_MS + miniMs, capped: steps >= STEP_CAP, ballHits, reelSpins, reelPaid,
+    playMs: launches * SHOT_GAP_MS + miniMs, capped: steps >= STEP_CAP, ballHits, reelSpins, reelPaid, after9,
     randomShots: game.stats.randomShots, enlargements: game.stats.enlargements, clockBursts: game.stats.clockBursts,
     jarReleases: game.stats.storageBursts, jarBalls: game.stats.storageDrops,
     secretGranted, miniGranted, enlargeGranted, drumExtraGranted, clockExtraGranted,
@@ -235,11 +267,35 @@ const hist = buckets.slice(0, -1).map((lo, i) => {
   return { lo, hi, n: scores.filter(score => score >= lo && score < hi).length };
 });
 const capped = results.filter(row => row.capped);
+const reached9Rows = results.filter(row => row.after9);
+const summarizeMinutes = rows => ({
+  mean: round2(mean(minutes(rows))),
+  median: round2(pick(minutes(rows), 0.5)),
+  p90: round2(pick(minutes(rows), 0.9)),
+});
+const summarizeCount = rows => ({
+  mean: Math.round(mean(rows)),
+  median: pick(rows, 0.5),
+});
+const after9 = reached9Rows.length ? {
+  n: reached9Rows.length,
+  playMin: summarizeMinutes(reached9Rows.map(row => row.after9.playMs)),
+  physicsMin: summarizeMinutes(reached9Rows.map(row => row.after9.physicsMs)),
+  ballsSpent: summarizeCount(reached9Rows.map(row => row.after9.ballsSpent)),
+  scoreGained: {
+    ...summarizeCount(reached9Rows.map(row => row.after9.score)),
+    max: Math.max(...reached9Rows.map(row => row.after9.score)),
+  },
+  scoreAtUnlock: summarizeCount(reached9Rows.map(row => row.after9.scoreAt)),
+  meanLaunches: Math.round(mean(reached9Rows.map(row => row.after9.launches))),
+  capped: reached9Rows.filter(row => row.capped).length,
+} : { n: 0 };
 console.log(JSON.stringify({
   rounds: ROUNDS,
   variant: PRESET,
   tune: TUNE,
-  policy: '7槽起用×2；9槽优先×8（这一发付得起时），否则×4',
+  policy: POLICY,
+  policyText: POLICIES[POLICY],
   elapsedSec: Math.round((Date.now() - started) / 1000),
   startBalls: TUNE.startBalls,
   playMin: { mean: round2(mean(play)), median: round2(pick(play, 0.5)), p90: round2(pick(play, 0.9)) },
@@ -271,6 +327,18 @@ console.log(JSON.stringify({
   },
   meanLaunches: Math.round(mean(results.map(row => row.launches))),
   meanTierShots: { x1: meanTier(1), x2: meanTier(2), x4: meanTier(4), x8: meanTier(8) },
+  after9,
+  nine: results.flatMap((row, i) => row.after9 ? [{
+    i,
+    scoreAt: row.after9.scoreAt,
+    scoreAfter: row.after9.score,
+    playAfterMs: row.after9.playMs,
+    physicsAfterMs: row.after9.physicsMs,
+    ballsAfter: row.after9.ballsSpent,
+    launchesAfter: row.after9.launches,
+    finalScore: row.score,
+    capped: row.capped,
+  }] : []),
   cappedRuns: capped.length,
   capped: capped.map(row => ({ score: row.score, launches: row.launches, slots: row.slots, jackpots: row.jackpots })),
   compareToPrevious40: { meanPlayMin: 7.99, meanScore: 20643, medianScore: 16902, maxScore: 57581, reached50k: 3, reached9: 8, reached7: 28 },
