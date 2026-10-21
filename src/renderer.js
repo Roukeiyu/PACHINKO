@@ -242,7 +242,7 @@ function create3DRenderer(canvas) {
   const sphere = new THREE.SphereGeometry(11, 24, 16);
   const burstSphere = new THREE.SphereGeometry(11, 16, 12);
   const ballMaterial = new THREE.MeshStandardMaterial({ color: '#ffedb0', metalness: .6, roughness: .2, envMapIntensity: 1.4 });
-  const burstMaterial = new THREE.MeshLambertMaterial({ color: '#ffedb0' });
+  const burstMaterial = new THREE.MeshLambertMaterial({ color: '#f4f1ff', emissive: '#b7a4e6', emissiveIntensity: 0.55 });
   const ballDummy = new THREE.Object3D();
   function makeBalls(geometry, material, shadows) {
     const mesh = new THREE.InstancedMesh(geometry, material, BALL_CAPACITY);

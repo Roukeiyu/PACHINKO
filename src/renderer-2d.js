@@ -29,19 +29,26 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     ctx.save(); if (shadow) { ctx.shadowColor = paintColor('#45523d35', 'glow'); ctx.shadowBlur = 0; ctx.shadowOffsetY = 5; }
     ctx.beginPath(); body.vertices.forEach((v, i) => { if (!i) ctx.moveTo(v.x, v.y); else ctx.lineTo(v.x, v.y); }); ctx.closePath(); ctx.fillStyle = paintColor(color, 'object'); ctx.fill(); ctx.shadowOffsetY = 0; ctx.lineWidth = 2; ctx.strokeStyle = paintColor(stroke, 'line'); ctx.stroke(); ctx.restore();
   }
-  function ball(x, y, opacity = 1, cheap = false) {
+  function ball(x, y, opacity = 1, cheap = false, gift = false) {
     if (textureMode) return;
     paintingBall = true;
     ctx.save(); ctx.globalAlpha = opacity;
+    // Gift balls (clock, drum, jar, restore) stay pearly lavender so they
+    // read apart from the gold launched balls, including the cheap crowd path.
+    const flat = gift ? '#e4dcff' : '#ffdb76';
+    const glow = gift ? '#d7ccf6' : '#ffd862';
+    const rim = gift ? '#c9b6ea' : '#a4425d';
+    const mid = gift ? '#f7f4ff' : '#fffde8';
+    const edge = gift ? '#c5b4f0' : '#ffdb76';
     if (cheap) {
-      circle(x, y, 11.5, paintColor('#ffdb76'));
+      circle(x, y, 11.5, paintColor(flat));
       ctx.restore();
       paintingBall = false;
       return;
     }
-    ctx.shadowColor = paintColor('#ffd862', 'glow'); ctx.shadowBlur = 25;
-    circle(x, y, 14, '#a4425d'); ctx.shadowBlur = 0;
-    const g = ctx.createRadialGradient(x - 3, y - 4, 0, x, y, 12); g.addColorStop(0, paintColor('#ffffff')); g.addColorStop(.6, paintColor('#fffde8')); g.addColorStop(1, paintColor('#ffdb76'));
+    ctx.shadowColor = paintColor(glow, 'glow'); ctx.shadowBlur = 25;
+    circle(x, y, 14, rim); ctx.shadowBlur = 0;
+    const g = ctx.createRadialGradient(x - 3, y - 4, 0, x, y, 12); g.addColorStop(0, paintColor('#ffffff')); g.addColorStop(.6, paintColor(mid)); g.addColorStop(1, paintColor(edge));
     circle(x, y, 11.5, g); circle(x - 3, y - 4, 3.5, '#fff'); ctx.restore(); paintingBall = false;
   }
   function mixHex(from, to, t) {
@@ -533,8 +540,8 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     }
     const crowded = game.balls.length >= BOARD_CROWD_LOCK;
     for (const b of game.balls) {
-      if (!state.calm && !(crowded && b.bonus)) b.trail.forEach((pos, i) => { ctx.save(); ctx.globalAlpha = i / b.trail.length * .5; circle(pos.x, pos.y, 3 + i / b.trail.length * 7, '#f7b863'); ctx.restore(); });
-      ball(b.body.position.x, b.body.position.y, 1, crowded && b.bonus);
+      if (!state.calm && !(crowded && b.bonus)) b.trail.forEach((pos, i) => { ctx.save(); ctx.globalAlpha = i / b.trail.length * .5; circle(pos.x, pos.y, 3 + i / b.trail.length * 7, b.bonus ? '#d9cff6' : '#f7b863'); ctx.restore(); });
+      ball(b.body.position.x, b.body.position.y, 1, crowded && b.bonus, b.bonus);
       if (b.scoreFactor > 1) {
         circle(b.body.position.x, b.body.position.y, 18, null, '#e8b446b0', 1.5);
         text(`×${b.scoreFactor}`, b.body.position.x, b.body.position.y - 25, 13, '#a87535', 'bold');
