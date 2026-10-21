@@ -37,7 +37,8 @@ export function reelBox(index) {
 const REEL_TOTAL = REEL_WEIGHTS.reduce((sum, weight) => sum + weight, 0);
 const PAIR_MS = 180000;
 const TRIPLE_MS = 60000;
-// Reel ball gifts are a fixed ball count. A ball's paid ×N never scales them.
+// Base reel gift before the triggering ball's ×N. The table multiplies this
+// count when the ball that earned the spin is paid; the icons themselves stay ×1.
 export function ballPayout(count) {
   if (count >= 3) return BALL_JACKPOT;
   if (count === 2) return BALL_PAIR;

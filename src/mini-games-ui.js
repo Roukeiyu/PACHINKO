@@ -6,7 +6,7 @@ import { SECRET_BALLS } from './round.js';
 export const miniGameMarkup = `<dialog id="mini-game" class="mini-dialog" aria-labelledby="mini-title" aria-describedby="mini-rule"><div class="mini-inner"><div class="mini-heading"><span class="mini-eyebrow">秘密小游戏</span><span id="mini-round"></span></div><h2 id="mini-title"></h2><p id="mini-rule"></p><div class="mini-hud"><span>剩余 <strong id="mini-time">30</strong> 秒</span><span id="mini-combo" class="mini-combo" aria-live="polite"></span><span>本局 <strong id="mini-score">0</strong> 分<span id="mini-bonus" class="mini-bonus">×2</span></span></div><progress id="mini-progress" max="${MINI_DURATION}" value="${MINI_DURATION}" aria-label="小游戏剩余时间"></progress><div id="mini-stage"><div id="mini-fx" class="mini-fx" aria-hidden="true"></div><div id="mini-grid" class="mini-grid"></div></div><p id="mini-message" role="status"></p><div id="mini-result" hidden><div class="mini-result-mark">✦</div><h3 id="mini-result-title"></h3><p id="mini-result-math" class="mini-result-math" hidden></p><p id="mini-result-score"></p><p id="mini-result-balls" class="mini-result-balls" hidden></p><button class="done-button" id="mini-return">返回球台</button></div></div></dialog>`;
 export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {}, vibrate = () => {} }) {
   const $ = selector => root.querySelector(selector);
-  let game=null, source=null, scoreMultiplier=1, revision=-1, fxId=0, settled=false, buttons=[];
+  let game=null, source=null, scoreMultiplier=1, revision=-1, fxId=0, settled=false, buttons=[], ballGrant=SECRET_BALLS;
   const calm = () => document.documentElement.classList.contains('calm');
   // Play time follows foreground frames only. A hidden tab must not spend the 30s.
   let visibleAt=0, lastWall=0;
@@ -134,15 +134,15 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
       const doubleNote=scoreMultiplier>1?' · 双球入洞 ×2':'';
       $('#mini-result-score').textContent=`收下 ${paid.toLocaleString()} 分快乐${moleNote}${doubleNote}`;
       const ballLine = $('#mini-result-balls');
-      if (source === 'secret') { ballLine.hidden = false; ballLine.textContent = `+${SECRET_BALLS} 球`; }
+      if (source === 'secret') { ballLine.hidden = false; ballLine.textContent = `+${ballGrant} 球`; }
       else { ballLine.hidden = true; ballLine.textContent = ''; }
       onFinish({kind:s.kind,score:paid,baseScore:s.score,multiplier:scoreMultiplier,source,status:s.status,bestCombo:s.bestCombo});
       $('#mini-return').focus();
     }
   }
-  function start(kind, origin='secret', multiplier=1) {
+  function start(kind, origin='secret', multiplier=1, holeBalls=SECRET_BALLS) {
     if (root.open) return false;
-    source=origin;scoreMultiplier=origin==='secret'&&multiplier>=2?2:1;const now=performance.now();visibleAt=now;lastWall=now;game=createMiniGame(kind,{now});settled=false;revision=-1;fxId=0;
+    source=origin;scoreMultiplier=origin==='secret'&&multiplier>=2?2:1;ballGrant=Math.max(0, Math.floor(Number(holeBalls)) || 0) || SECRET_BALLS;const now=performance.now();visibleAt=now;lastWall=now;game=createMiniGame(kind,{now});settled=false;revision=-1;fxId=0;
     const definition=MINI_GAMES[kind];$('#mini-title').textContent=definition.title;$('#mini-rule').textContent=definition.rule;
     root.dataset.kind=kind;$('#mini-grid').hidden=false;$('#mini-message').hidden=false;$('#mini-result').hidden=true;
     $('#mini-grid').style.setProperty('--columns',definition.columns);

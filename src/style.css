@@ -212,3 +212,8 @@ html:not(.calm) .ball-count.is-low{animation:ball-low 900ms ease-in-out infinite
   html.full-window .score-value{font-size:32px;margin:2px 0}
 }
 .collection-dialog .collection-book{margin:16px 0 0;padding:0;border:0;background:transparent}.collection-dialog .dialog-head{position:sticky;top:0;background:var(--flow-surface-fffdf5,#fffdf5);z-index:1;padding-bottom:8px}.collection-dialog .collection-book>p{margin:0 0 14px}.collection-dialog .collection-note{margin-top:14px}.collection-dialog .icon-button{flex-shrink:0}
+#crowd-fireworks{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4}
+#crowd-banner{position:absolute;left:50%;top:11%;transform:translateX(-50%);z-index:5;pointer-events:none;padding:8px 16px;border-radius:999px;background:rgba(255,248,230,.94);color:#8a5a12;font-weight:700;letter-spacing:.08em;border:1px solid #e2ae48;white-space:nowrap;font-size:14px}
+.launch-button.is-crowd-locked{background:#8d7344;color:#fff8e8;box-shadow:0 0 0 3px #e2ae48,0 3px 0 #6d5428;cursor:not-allowed}
+#plunger.is-crowd-locked{cursor:not-allowed}
+@media(prefers-reduced-motion:reduce){#crowd-fireworks{display:none}}

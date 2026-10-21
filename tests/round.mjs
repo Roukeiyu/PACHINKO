@@ -6,6 +6,7 @@ import {
   START_BALLS, LOW_BALLS, LAUNCH_COST, BURST_COST, SECRET_BALLS, LUCKY_BALLS, SLOT_MACHINE_BALLS,
   DRUM_ENLARGE_BALLS, MINI_BALLS_FULL_SCORE, DRAIN_MIN_OPENING, DRAIN_WIDTH_SCALE, DRAIN_WALL, POCKET_WIDTH,
   slotFrame, classifyBottom, pocketCenter, secretHoleBalls, shotCost, nextBallCost, clampBallCost, chooseSpendFactor, roundCanEnd,
+  BOARD_CROWD_LOCK, boardCrowdUnlock, crowdLaunchLocked, triggeringGiftScale,
   qualifiesForLeaderboard, freshRound, restoreRun,
 } from '../src/round.js';
 
@@ -22,6 +23,17 @@ for (const score of [0, 1400, 5600, 1e9]) {
   assert.equal(secretHoleBalls(score).holeBalls, SECRET_BALLS);
   assert.equal(secretHoleBalls(score).miniBalls, 0, 'a secret visit pays the hole balls only');
 }
+assert.equal(secretHoleBalls({ valueFactor: 1 }).holeBalls, SECRET_BALLS);
+assert.equal(secretHoleBalls({ valueFactor: 8 }).holeBalls, SECRET_BALLS * 8);
+assert.equal(secretHoleBalls({ valueFactor: 8 }).miniBalls, 0, 'a multiplied secret visit still pays no mini-game balls');
+assert.equal(BOARD_CROWD_LOCK >= 40 && BOARD_CROWD_LOCK <= 60, true, 'the crowd lock stays in the measured smooth band');
+assert.equal(boardCrowdUnlock(), Math.floor(BOARD_CROWD_LOCK / 2));
+assert.equal(crowdLaunchLocked(false, BOARD_CROWD_LOCK - 1), false);
+assert.equal(crowdLaunchLocked(false, BOARD_CROWD_LOCK), true);
+assert.equal(crowdLaunchLocked(true, boardCrowdUnlock()), true);
+assert.equal(crowdLaunchLocked(true, boardCrowdUnlock() - 1), false);
+assert.equal(triggeringGiftScale({ valueFactor: 4 }), 4);
+assert.equal(triggeringGiftScale(null), 1);
 
 for (const count of [5, 7, 9]) {
   const frame = slotFrame(count);

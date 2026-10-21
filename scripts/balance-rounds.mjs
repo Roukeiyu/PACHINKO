@@ -6,10 +6,11 @@
 //   paid (a)  ×2 from 7 slots, ×8 then ×4 at 9 slots (default)
 //   p1 (b)    ×2 from 7 slots, then ×1 only once 9 slots are open
 //   p2 (c)    ×1 for the whole round
-// --gifts multiplies ball gifts by the ball that triggered them. It does not
-// change the game. off leaves gifts alone. full uses that ball's own ×N.
-// x2 gives every multiplier ball a flat ×2 gift. Both of those also advance
-// the center drum (index 2, the 30-hit clock meter) by the ball's own ×N.
+// --gifts multiplies ball gifts by the ball that triggered them.
+// full (the shipped default) uses that ball's own ×N.
+// off leaves gifts alone. x2 gives every multiplier ball a flat ×2 gift.
+// full and x2 also advance the center drum (index 2, the 30-hit clock meter)
+// by the ball's own ×N. The player cannot shoot while the board is crowd-locked.
 // Left drum, right drum, and the reel progress stay at +1 per hit.
 // Clock-burst and jar balls stay ×1; only how many of them appear changes.
 // Secret +20 and reel ball payouts are stock, scaled by the triggering ball.
@@ -26,6 +27,7 @@ import { SLOT_UNLOCK_7, SLOT_UNLOCK_9 } from '../src/slots.js';
 import {
   START_BALLS, BURST_COST, SECRET_BALLS, DRUM_RANDOM_BALLS, DRUM_ENLARGE_BALLS, DRUM_CLOCK_BALLS,
   chooseSpendFactor, shotCost, ballValue, MINI_BALLS_FULL_SCORE,
+  BOARD_CROWD_LOCK, boardCrowdUnlock, crowdLaunchLocked,
 } from '../src/round.js';
 
 // Probed proposals. `main` is empty: the shipped rules. Flags can still override a preset.
@@ -96,7 +98,7 @@ function parseInvocation(argv) {
   tune.valueScoreScale = number(flags.scale, tune.valueScoreScale);
   const policy = POLICY_ALIASES[flags.policy || 'paid'];
   if (!policy) throw new Error(`Unknown policy "${flags.policy}". Use paid, p1, p2, a, b, or c.`);
-  const gifts = flags.gifts || 'off';
+  const gifts = flags.gifts || 'full';
   if (!Object.hasOwn(GIFT_MODES, gifts)) throw new Error(`Unknown gifts "${gifts}". Use off, full, or x2.`);
   return { rounds, preset, tune, policy, gifts };
 }
@@ -155,6 +157,8 @@ function playRound(seed) {
   let jarScheduled = 0;
   let secretScale = 1;
   let peakBalls = 0;
+  let crowdLocked = false;
+  let crowdBlocks = 0;
   const reelGranted = { 1: 0, 2: 0, 3: 0 };
   const pendingAll = [];
   const pendingReel = [];
@@ -252,7 +256,10 @@ function playRound(seed) {
     const used = spendFactor(slots, spendable, burstWanted);
     const burst = burstWanted && used > 0;
     const cost = used ? shotCost(used, burst) : 0;
+    crowdLocked = crowdLaunchLocked(crowdLocked, game.balls.length);
     if (!secretWait && used && clock - lastShot >= 900 && game.balls.length < 10) {
+      if (crowdLocked) crowdBlocks += 1;
+      else {
       const ball = burst ? game.launchBurst(used) : game.launch(random(), used);
       if (ball) {
         let need = cost;
@@ -266,6 +273,7 @@ function playRound(seed) {
         tierShots[used] += fired;
         if (used > 1) doubleShots += fired;
         lastShot = clock;
+      }
       }
     }
     game.step();
@@ -291,7 +299,7 @@ function playRound(seed) {
     randomShots: game.stats.randomShots, enlargements: game.stats.enlargements, clockBursts: game.stats.clockBursts,
     jarReleases: game.stats.storageBursts, jarBalls: game.stats.storageDrops,
     secretGranted, miniGranted, enlargeGranted, drumExtraGranted, clockExtraGranted, clockEmitted, jarScheduled, reelGranted,
-    peakBalls, stockLeft: stock, tableBalls: game.balls.length,
+    peakBalls, stockLeft: stock, tableBalls: game.balls.length, crowdBlocks,
   };
 }
 
@@ -351,6 +359,9 @@ console.log(JSON.stringify({
   policyText: POLICIES[POLICY],
   gifts: GIFTS,
   giftsText: GIFT_MODES[GIFTS],
+  launchLock: BOARD_CROWD_LOCK,
+  launchUnlock: boardCrowdUnlock(),
+  launchLockBlocked: results.reduce((sum, row) => sum + row.crowdBlocks, 0),
   elapsedSec: Math.round((Date.now() - started) / 1000),
   startBalls: TUNE.startBalls,
   playMin: { mean: round2(mean(play)), median: round2(pick(play, 0.5)), p90: round2(pick(play, 0.9)) },

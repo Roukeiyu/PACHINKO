@@ -60,12 +60,35 @@ export function tablePoints(basePoints, scoreFactor = 1, valueFactor = 1, global
   return basePoints * scoreFactor * ballValue(valueFactor) * globalMultiplier;
 }
 
-// Ball gifts ignore the paid multiplier. Reel icons pay +1 / +10 / +100.
-// Entering the secret hole always pays a fixed SECRET_BALLS. The mini-game
-// that follows adds happiness points only, so miniBalls stays 0: that fixed
-// grant is the whole package. None of the ball gifts scale with ×N.
-export function secretHoleBalls() {
-  return { holeBalls: SECRET_BALLS, miniBalls: 0 };
+// Ball gifts follow the ball that triggered them. Reel icons pay +1 / +10 / +100
+// before that multiplier. The secret hole pays SECRET_BALLS times the opening
+// ball's ×N. The mini-game still adds happiness points only, so miniBalls stays 0.
+// A numeric argument is a legacy score and does not scale the package.
+// Pass { valueFactor } for the ball that opened the visit.
+export function secretHoleBalls(scoreOrOptions) {
+  const factor = scoreOrOptions && typeof scoreOrOptions === 'object'
+    ? ballValue(scoreOrOptions.valueFactor)
+    : 1;
+  return { holeBalls: SECRET_BALLS * factor, miniBalls: 0 };
+}
+
+// Live balls at or above this count lock the player's launch until the board
+// drains below half of it. Gift and burst balls are not refused.
+export const BOARD_CROWD_LOCK = 48;
+
+export function boardCrowdUnlock() {
+  return Math.floor(BOARD_CROWD_LOCK / 2);
+}
+
+export function crowdLaunchLocked(locked, ballCount) {
+  const n = Math.max(0, Math.floor(Number(ballCount) || 0));
+  if (locked) return n >= boardCrowdUnlock();
+  return n >= BOARD_CROWD_LOCK;
+}
+
+// Center-drum progress and drum/jar gift counts use the triggering ball's ×N.
+export function triggeringGiftScale(ball) {
+  return ballValue(ball?.valueFactor);
 }
 
 // Scoring slots pay happiness points only. They do not put balls back.

@@ -155,6 +155,16 @@ assert.equal(leftScaled.stats.bonusBalls, 2);
 assert.equal(leftScaled.balls.filter(ball => ball.kind === 'random').every(ball => ball.valueFactor === 1), true);
 console.log('PASS: sim hooks scale center progress and gift counts without changing ×1 balls or the left-drum meter.');
 
+const queued = createTable();
+assert.equal(queued.queueClock(8), 96);
+assert.equal(queued.pendingShotCount, 96, 'a ×8 clock queues every ball');
+assert.equal(queued.queueJar(8), 160);
+assert.equal(queued.pendingDropCount, 160, 'a ×8 jar release queues every drop');
+assert.ok(queued.launch(1), 'player shots still launch while gifts are only queued');
+queued.step();
+assert.equal(queued.pendingShotCount + queued.stats.bonusBalls >= 96, true, 'queued clock balls are not discarded');
+console.log('PASS: multiplied clock and jar gifts stay queued, and a player shot does not drop them.');
+
 const canon = createCanon();
 assert.deepEqual(Array.from({ length: 8 }, () => canon.next().name), ['F#5','E5','D5','C#5','B4','A4','B4','C#5']);
 for (let i = 8; i < CANON_NOTES.length; i++) canon.next();

@@ -34,6 +34,7 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   let clock = 0, nextId = 1;
   const pendingShots = [], pendingDrops = [], pendingLaunches = [];
   let emissionPaused = false;
+  let scoreHoles = true;
   const collector = { x: 100, y: 650, radius: 26, capacity: 20, stored: [], remaining: 0, glow: 0, outlets: [] };
   const rewards = { hits: [0, 0, 0], goals: [DRUM_SIDE_HITS, DRUM_SIDE_HITS, DRUM_CENTER_HITS], enlargedUntil: 0, burstUntil: 0, burstStep: -1, gateGlow: 0, ordinaryStars: 0 };
   const slotMachine = createSlotMachine({ random: slotRandom, onEvent: event => onSurprise({ ...event, x: SLOT_DISPLAY.x, y: SLOT_DISPLAY.y }) });
@@ -179,6 +180,8 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   const laneOccupied = () => balls.some(ball => !ball.entered && ball.body.position.x > 688 && ball.body.position.y > 675);
   function launch(power = .65, valueFactor = 1) {
     if (emissionPaused) return null;
+    // Player shots stop at 24 so the lane stays readable. Gift shots waiting in
+    // pendingShots and pendingDrops are not refused and are never discarded.
     if (balls.length >= 24 || pendingLaunches.length || laneOccupied()) return null;
     const ball = launchBall(power, 'launch', true);
     ball.valueFactor = ballValue(valueFactor);
@@ -494,7 +497,7 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
         // Phasing through the ring is an escape, not a second chance to score.
         // A ball that is not in play yet is pushed back out instead of trapped on the lip.
         if (ball.ignoreHoleUntil > clock) continue;
-        if (!ball.entered) { pushOut(ball, hole); continue; }
+        if (!ball.entered || !scoreHoles) { pushOut(ball, hole); continue; }
         hole.glow = 1; stats.jackpots++; remove(ball, i); settleScore({ kind: 'jackpot', basePoints: 500, x: hole.x, y: hole.y }, ball); continue;
       }
       if (ball.entered && y >= TABLE.scoreLine) {
@@ -540,6 +543,33 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
       }
     }
   }
+  function setScoreHoles(enabled) { scoreHoles = enabled !== false; }
+  function queueClock(valueFactor = 1) {
+    const scale = ballValue(valueFactor);
+    const bumper = bumpers[2];
+    const count = 12 * scale;
+    stats.clockBursts++;
+    rewards.burstUntil = Math.max(rewards.burstUntil, clock + Math.max(1200, (count - 1) * 1000 / 12));
+    for (let i = 0; i < count; i++) {
+      pendingShots.push({ due: clock + i * 1000 / 12, index: 2, angle: -Math.PI / 2 + (i % 12) * Math.PI / 6, kind: 'clock', ordinal: i % 12 });
+    }
+    onSurprise({ kind: 'clock', x: bumper.position.x, y: bumper.position.y, valueFactor: scale, balls: count });
+    return count;
+  }
+  function queueJar(valueFactor = 1) {
+    const scale = ballValue(valueFactor);
+    const amount = collector.capacity * scale;
+    const columns = shuffledColumns(amount);
+    let due = Math.max(clock + 250, (pendingDrops.at(-1)?.due ?? clock) + 100);
+    for (let i = 0; i < amount; i++) {
+      pendingDrops.push({ due, column: columns[i], scoreFactor: 1 });
+      due += 80;
+    }
+    collector.remaining = pendingDrops.length;
+    stats.storageBursts++;
+    onSurprise({ kind: 'storage-burst', x: collector.x, y: collector.y, amount, valueFactor: scale, scale });
+    return amount;
+  }
   function nudge(ball, x, y, vy = 6) {
     Body.setPosition(ball.body, { x, y });
     Body.setVelocity(ball.body, { x: 0, y: vy });
@@ -556,5 +586,5 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     });
     return items.length;
   }
-  return { engine, balls, walls, pins, kickers, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, collector, slotMachine: slotMachine.state, stats, rewards, launch, launchBurst, setEmissionPaused, takeStored, resetRound, restoreCarried, nudge, get emissionPaused() { return emissionPaused; }, get pendingLaunches() { return pendingLaunches.length; }, get carriedBalls() { return [...balls.map(ball => ({ scoreFactor: ball.scoreFactor, valueFactor: ballValue(ball.valueFactor) })), ...pendingLaunches.map(shot => ({ scoreFactor: 1, valueFactor: ballValue(shot.valueFactor) }))]; }, step, setSlots, get star() { return activeStar; }, get clock() { return clock; }, get slots() { return slots; } };
+  return { engine, balls, walls, pins, kickers, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, collector, slotMachine: slotMachine.state, stats, rewards, launch, launchBurst, queueClock, queueJar, setScoreHoles, setEmissionPaused, takeStored, resetRound, restoreCarried, nudge, get emissionPaused() { return emissionPaused; }, get pendingLaunches() { return pendingLaunches.length; }, get pendingShotCount() { return pendingShots.length; }, get pendingDropCount() { return pendingDrops.length; }, get carriedBalls() { return [...balls.map(ball => ({ scoreFactor: ball.scoreFactor, valueFactor: ballValue(ball.valueFactor) })), ...pendingLaunches.map(shot => ({ scoreFactor: 1, valueFactor: ballValue(shot.valueFactor) }))]; }, step, setSlots, get star() { return activeStar; }, get clock() { return clock; }, get slots() { return slots; } };
 }

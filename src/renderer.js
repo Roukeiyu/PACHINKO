@@ -364,7 +364,7 @@ function create3DRenderer(canvas) {
     }
     for (const ball of game.balls) {
       let mesh = balls.get(ball.id);
-      if (!mesh) { mesh = new THREE.Mesh(sphere, ballMaterial); mesh.castShadow = true; table.add(mesh); balls.set(ball.id, mesh); }
+      if (!mesh) { mesh = new THREE.Mesh(sphere, ballMaterial); mesh.castShadow = !ball.bonus; table.add(mesh); balls.set(ball.id, mesh); }
       mesh.position.copy(world(ball.body.position.x, ball.body.position.y, 12));
       mesh.rotation.set(ball.body.position.y / 11, ball.body.position.x / 11, ball.body.angle);
       const valued = ball.valueFactor > 1;

@@ -120,7 +120,8 @@ assert.equal(holeScores[0].basePoints, 500);
 assert.equal(holeScores[0].points, 1000);
 assert.equal(holeScores[0].valueFactor, 2);
 assert.equal(secretHoleBalls(1400).holeBalls, 20);
-assert.equal(secretHoleBalls(1400).miniBalls, 0, 'the mini-game score does not add balls, and ×N does not scale them');
+assert.equal(secretHoleBalls(1400).miniBalls, 0, 'a score does not add balls; the opening ball ×N does');
+assert.equal(secretHoleBalls({ valueFactor: 2 }).holeBalls, 40);
 
 function hit(game, index) {
   const ball = game.launch(1, 2);

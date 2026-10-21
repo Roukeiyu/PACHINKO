@@ -1,6 +1,7 @@
 import { chargeEffectsAt } from './charge.js';
 import { sceneMotionAt, project2DMotion } from './scene-motion.js';
 import { TABLE, slotMultipliers, LAUNCH_SQUASH } from './physics.js';
+import { BOARD_CROWD_LOCK } from './round.js';
 import { slotFrame } from './round.js';
 import { SLOT_DISPLAY, BALL_SYMBOL, REEL_WEIGHTS, reelBox, PROGRESS_TOP, PROGRESS_HEIGHT, slotBonusLabel } from './slot-machine.js';
 import { drawReelSymbol } from './reel-icons.js';
@@ -28,10 +29,17 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     ctx.save(); if (shadow) { ctx.shadowColor = paintColor('#45523d35', 'glow'); ctx.shadowBlur = 0; ctx.shadowOffsetY = 5; }
     ctx.beginPath(); body.vertices.forEach((v, i) => { if (!i) ctx.moveTo(v.x, v.y); else ctx.lineTo(v.x, v.y); }); ctx.closePath(); ctx.fillStyle = paintColor(color, 'object'); ctx.fill(); ctx.shadowOffsetY = 0; ctx.lineWidth = 2; ctx.strokeStyle = paintColor(stroke, 'line'); ctx.stroke(); ctx.restore();
   }
-  function ball(x, y, opacity = 1) {
+  function ball(x, y, opacity = 1, cheap = false) {
     if (textureMode) return;
     paintingBall = true;
-    ctx.save(); ctx.globalAlpha = opacity; ctx.shadowColor = paintColor('#ffd862', 'glow'); ctx.shadowBlur = 25;
+    ctx.save(); ctx.globalAlpha = opacity;
+    if (cheap) {
+      circle(x, y, 11.5, paintColor('#ffdb76'));
+      ctx.restore();
+      paintingBall = false;
+      return;
+    }
+    ctx.shadowColor = paintColor('#ffd862', 'glow'); ctx.shadowBlur = 25;
     circle(x, y, 14, '#a4425d'); ctx.shadowBlur = 0;
     const g = ctx.createRadialGradient(x - 3, y - 4, 0, x, y, 12); g.addColorStop(0, paintColor('#ffffff')); g.addColorStop(.6, paintColor('#fffde8')); g.addColorStop(1, paintColor('#ffdb76'));
     circle(x, y, 11.5, g); circle(x - 3, y - 4, 3.5, '#fff'); ctx.restore(); paintingBall = false;
@@ -465,9 +473,10 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       ctx.save(); ctx.globalAlpha = Math.min(1, p.life * 2); ctx.font = `bold ${p.size ?? (p.big ? 26 : 23)}px "Trebuchet MS", sans-serif`; ctx.textAlign = 'center'; ctx.lineWidth = 6; ctx.strokeStyle = paintColor('#fffbee', 'line');
       const x = Math.max(115, Math.min(550, p.x)); ctx.strokeText(p.text, x, p.y); ctx.fillStyle = paintColor(p.color || (p.big ? '#b67a26' : '#b1667b'), 'ink'); ctx.fillText(p.text, x, p.y); ctx.restore();
     }
+    const crowded = game.balls.length >= BOARD_CROWD_LOCK;
     for (const b of game.balls) {
-      if (!state.calm) b.trail.forEach((pos, i) => { ctx.save(); ctx.globalAlpha = i / b.trail.length * .5; circle(pos.x, pos.y, 3 + i / b.trail.length * 7, '#f7b863'); ctx.restore(); });
-      ball(b.body.position.x, b.body.position.y);
+      if (!state.calm && !(crowded && b.bonus)) b.trail.forEach((pos, i) => { ctx.save(); ctx.globalAlpha = i / b.trail.length * .5; circle(pos.x, pos.y, 3 + i / b.trail.length * 7, '#f7b863'); ctx.restore(); });
+      ball(b.body.position.x, b.body.position.y, 1, crowded && b.bonus);
       if (b.scoreFactor > 1) {
         circle(b.body.position.x, b.body.position.y, 18, null, '#e8b446b0', 1.5);
         text(`×${b.scoreFactor}`, b.body.position.x, b.body.position.y - 25, 13, '#a87535', 'bold');
