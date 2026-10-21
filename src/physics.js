@@ -3,7 +3,7 @@ import { collectSlot } from './collections.js';
 import { slotMultipliers } from './slots.js';
 export { slotMultipliers };
 import { createSlotMachine, SLOT_DISPLAY } from './slot-machine.js';
-import { SLOT_ROW_LEFT, SLOT_ROW_RIGHT, DRAIN_WALL, DRAIN_FLOOR, slotFrame, classifyBottom, ballValue, tablePoints } from './round.js';
+import { SLOT_ROW_LEFT, SLOT_ROW_RIGHT, DRAIN_WALL, DRAIN_FLOOR, NINE_LIP, slotFrame, classifyBottom, ballValue, tablePoints } from './round.js';
 export { slotFrame, classifyBottom };
 
 const { Engine, Bodies, Body, Composite, Events } = Matter;
@@ -27,7 +27,7 @@ const DWELL_RADIUS = 12, DWELL_LIMIT = 1500, COLLECTOR_HOLD = 48;
 // the same fixed time step used on desktop and mobile (including fast launches).
 export function createTable({ slots = 7, collections = null, random = Math.random, starRandom = Math.random, slotRandom = Math.random, onHit = () => {}, onScore = () => {}, onReturn = () => {}, onDrain = () => {}, onSurprise = () => {}, centerHitWeight = null, giftScale = null } = {}) {
   const engine = Engine.create({ gravity: { x: 0, y: 1.05 }, positionIterations: 8, velocityIterations: 8 });
-  const balls = [], walls = [], pins = [], kickers = [], bumpers = [], rails = [], diamonds = [], spinners = [], guards = [], dividers = [], gates = [];
+  const balls = [], walls = [], pins = [], kickers = [], bumpers = [], rails = [], diamonds = [], spinners = [], guards = [], dividers = [], aprons = [], gates = [];
   const holes = [{ x: 615, y: 482, facing: Math.PI, glow: 0 }];
   const deflectors = [], pendingDeflections = [];
   let activeStar = null, nextStarAt = 0, nextStarId = 1, lastStarLocation = -1, nextStarMultiplier = 2;
@@ -154,19 +154,41 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     if (!keepBalls) clearBalls();
     for (const body of dividers) Composite.remove(engine.world, body);
     dividers.length = 0;
+    for (const body of aprons) Composite.remove(engine.world, body);
+    aprons.length = 0;
     const frame = slotFrame(slots);
     // Lips sit inside the pocket, so the painted mouth stays fully open and a
     // ball that misses the lip falls through instead of being guided in.
-    for (const region of frame.regions) {
-      if (region.kind !== 'slot') continue;
-      const left = region.x0 + DRAIN_WALL / 2;
-      const right = region.x1 - DRAIN_WALL / 2;
-      segment(left, TABLE.slotTop, left, DRAIN_FLOOR, DRAIN_WALL, dividers, 'divider', .2);
-      segment(right, TABLE.slotTop, right, DRAIN_FLOOR, DRAIN_WALL, dividers, 'divider', .2);
+    const lip = slots === 9 ? NINE_LIP : DRAIN_WALL;
+    const slotRegions = frame.regions.filter(region => region.kind === 'slot');
+    for (const region of slotRegions) {
+      const outerLeft = slots === 9 && region.column === 0;
+      const outerRight = slots === 9 && region.column === slotRegions.length - 1;
+      if (!outerLeft) segment(region.x0 + lip / 2, TABLE.slotTop, region.x0 + lip / 2, DRAIN_FLOOR, lip, dividers, 'divider', .2);
+      if (!outerRight) segment(region.x1 - lip / 2, TABLE.slotTop, region.x1 - lip / 2, DRAIN_FLOOR, lip, dividers, 'divider', .2);
     }
     collector.outlets = frame.regions.filter(region => region.kind === 'slot').map(region => ({
       column: region.column, x: (region.x0 + region.x1) / 2, y: 74, glow: 0, pocket: region.x1 - region.x0,
     }));
+    // One solid wedge per side. The slope runs from the wall down into the
+    // outer pocket, so there is no flat ledge and no outer lip to sit on.
+    const firstSlot = slotRegions[0], lastSlot = slotRegions[slotRegions.length - 1];
+    const wedges = frame.regions.some(region => region.kind === 'apron') ? [
+      [{ x: 30, y: 728 }, { x: 30, y: DRAIN_FLOOR }, { x: firstSlot.x0 + 24, y: DRAIN_FLOOR }],
+      [{ x: 662, y: 728 }, { x: 662, y: DRAIN_FLOOR }, { x: lastSlot.x1 - 24, y: DRAIN_FLOOR }],
+    ] : [];
+    for (const points of wedges) {
+      let area = 0, cx = 0, cy = 0;
+      for (let i = 0; i < points.length; i++) {
+        const p = points[i], q = points[(i + 1) % points.length];
+        const cross = p.x * q.y - q.x * p.y;
+        area += cross; cx += (p.x + q.x) * cross; cy += (p.y + q.y) * cross;
+      }
+      area *= 0.5;
+      add(Bodies.fromVertices(cx / (6 * area), cy / (6 * area), [points], {
+        isStatic: true, label: 'apron', friction: .55, frictionStatic: .7, restitution: .02,
+      }), aprons);
+    }
     // Stored balls and drops that have not yet emerged survive a layout change.
     const columns = shuffledColumns(pendingDrops.length);
     pendingDrops.forEach((drop, i) => { drop.column = columns[i]; });
@@ -505,13 +527,15 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
       }
       if (ball.entered && y >= TABLE.scoreLine) {
         const region = classifyBottom(x, slots);
-        if (region?.kind === 'slot') {
-          const multiplier = slotMultipliers(slots)[region.column];
-          const lucky = region.column === (slots - 1) / 2;
+        const column = region?.kind === 'slot' ? region.column : region?.kind === 'apron' ? (region.side === 'left' ? 0 : slots - 1) : null;
+        if (column !== null) {
+          const multiplier = slotMultipliers(slots)[column];
+          const lucky = column === (slots - 1) / 2;
+          const slot = region.kind === 'slot' ? region : slotFrame(slots).regions.find(item => item.kind === 'slot' && item.column === column);
           remove(ball, i);
           // Points use the multiplier already on the board. The reel this
           // center ball starts cannot change that score.
-          settleScore({ kind: 'slot', column: region.column, multiplier, lucky, basePoints: multiplier * 10, x: (region.x0 + region.x1) / 2, y: TABLE.scoreLine }, ball);
+          settleScore({ kind: 'slot', column, multiplier, lucky, basePoints: multiplier * 10, x: (slot.x0 + slot.x1) / 2, y: TABLE.scoreLine }, ball);
           if (lucky) slotMachine.recordLucky(clock);
           continue;
         }
@@ -538,7 +562,22 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
       const adx = x - ball.anchorX, ady = y - ball.anchorY;
       if (held || adx * adx + ady * ady > DWELL_RADIUS * DWELL_RADIUS) { ball.anchorX = x; ball.anchorY = y; ball.stuck = 0; }
       else ball.stuck += dt;
-      if (ball.stuck > DWELL_LIMIT) {
+      // A ball parked on the slot lips is not the same as one caught on a pin.
+      // After a short rest, shove it toward the nearest mouth that can hold it
+      // instead of popping it straight up into the same notch.
+      const onFloor = y > TABLE.slotTop - 18 && y < 940;
+      if (onFloor && ball.stuck > 800 && body.speed < 0.9) {
+        let best = x, bestDist = Infinity;
+        for (const region of slotFrame(slots).regions) {
+          if (region.kind !== 'slot' && region.kind !== 'drain') continue;
+          const cx = (region.x0 + region.x1) / 2;
+          const dist = Math.abs(cx - x);
+          if (dist < bestDist) { bestDist = dist; best = cx; }
+        }
+        const dir = Math.abs(best - x) > 1 ? Math.sign(best - x) : (ball.id % 2 ? 1 : -1);
+        Body.setVelocity(body, { x: dir * 3.5, y: 7 });
+        ball.stuck = 0; ball.anchorX = x; ball.anchorY = y;
+      } else if (ball.stuck > DWELL_LIMIT) {
         const rim = holes.find(h => Math.hypot(x - h.x, y - h.y) < HOLE_RIM);
         if (rim) { ball.ignoreHoleUntil = clock + HOLE_IGNORE; body.collisionFilter.group = HOLE_GROUP; }
         Body.setVelocity(body, { x: (random() - .5) * 3, y: 5 });

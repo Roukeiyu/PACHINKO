@@ -14,40 +14,41 @@ function isLucky(count, column, multiplier) {
   return multiplier >= 10 || (count === 5 && column === (count - 1) / 2);
 }
 
+function describeSlot(count, column, multiplier, fresh, fromColumn, fromMultiplier) {
+  return {
+    kind: 'slot',
+    column,
+    fromColumn,
+    fresh,
+    fromMultiplier,
+    toMultiplier: multiplier,
+    luckyFrom: fromColumn === null ? false : isLucky(count, fromColumn, fromMultiplier),
+    luckyTo: isLucky(count, column, multiplier),
+  };
+}
+
 function paintRegions(count) {
   const multipliers = slotMultipliers(count);
   return slotFrame(count).regions.map(region => {
-    if (region.kind !== 'slot') {
-      return { kind: 'drain', fresh: false, x0: region.x0, x1: region.x1 };
-    }
+    if (region.kind === 'apron') return { kind: 'apron', side: region.side, fresh: false, x0: region.x0, x1: region.x1 };
+    if (region.kind !== 'slot') return { kind: 'drain', fresh: false, x0: region.x0, x1: region.x1 };
     const multiplier = multipliers[region.column];
-    const lucky = isLucky(count, region.column, multiplier);
-    return {
-      kind: 'slot',
-      column: region.column,
-      fromColumn: region.column,
-      fresh: false,
-      fromMultiplier: multiplier,
-      toMultiplier: multiplier,
-      luckyFrom: lucky,
-      luckyTo: lucky,
-      x0: region.x0,
-      x1: region.x1,
-    };
+    return { ...describeSlot(count, region.column, multiplier, false, region.column, multiplier), x0: region.x0, x1: region.x1 };
   });
 }
 
-// 5→7 and 7→9 each add one drain and one slot on both sides. A direct 5→9
-// adds two of each. Fresh mouths start shut against the side walls and grow
-// inward; the mouths that already existed slide and narrow toward the inner
-// part of the new row.
+// The old row is the middle of the new row. Anything added on the left grows
+// out of the left wall, and the same number of pieces grows out of the right
+// wall. 5→7 adds a drain and a slot per side. 7→9 and 5→9 add the nine-slot
+// aprons and the extra slots (and, for 5→9, the extra inner drains) the same way.
 function morphRegions(fromCount, toCount, eased) {
-  const side = (toCount - fromCount) / 2;
   const fromFrame = slotFrame(fromCount);
   const toFrame = slotFrame(toCount);
   const fromMult = slotMultipliers(fromCount);
   const toMult = slotMultipliers(toCount);
+  const fromRegions = fromFrame.regions;
   const toRegions = toFrame.regions;
+  const extra = (toRegions.length - fromRegions.length) / 2;
   const regions = [];
   const place = (fromX0, fromX1, toX0, toX1, fields) => {
     regions.push({
@@ -56,57 +57,26 @@ function morphRegions(fromCount, toCount, eased) {
       x1: fromX1 + (toX1 - fromX1) * eased,
     });
   };
-  for (let i = 0; i < side; i++) {
-    const drain = toRegions[i * 2];
-    const slot = toRegions[i * 2 + 1];
-    const multiplier = toMult[slot.column];
-    place(SLOT_ROW_LEFT, SLOT_ROW_LEFT, drain.x0, drain.x1, { kind: 'drain', fresh: true });
-    place(SLOT_ROW_LEFT, SLOT_ROW_LEFT, slot.x0, slot.x1, {
-      kind: 'slot',
-      column: slot.column,
-      fromColumn: null,
-      fresh: true,
-      fromMultiplier: multiplier,
-      toMultiplier: multiplier,
-      luckyFrom: false,
-      luckyTo: isLucky(toCount, slot.column, multiplier),
-    });
-  }
-  fromFrame.regions.forEach((region, index) => {
-    const target = toRegions[side * 2 + index];
-    if (region.kind === 'drain') {
-      place(region.x0, region.x1, target.x0, target.x1, { kind: 'drain', fresh: false });
-      return;
-    }
-    const fromMultiplier = fromMult[region.column];
+  const fieldsFor = (target, fresh, fromRegion) => {
+    if (target.kind === 'apron') return { kind: 'apron', side: target.side, fresh };
+    if (target.kind === 'drain') return { kind: 'drain', fresh };
     const toMultiplier = toMult[target.column];
-    place(region.x0, region.x1, target.x0, target.x1, {
-      kind: 'slot',
-      column: target.column,
-      fromColumn: region.column,
-      fresh: false,
-      fromMultiplier,
-      toMultiplier,
-      luckyFrom: isLucky(fromCount, region.column, fromMultiplier),
-      luckyTo: isLucky(toCount, target.column, toMultiplier),
-    });
+    const fromMultiplier = fromRegion ? fromMult[fromRegion.column] : toMultiplier;
+    const described = describeSlot(toCount, target.column, toMultiplier, fresh, fromRegion ? fromRegion.column : null, fromMultiplier);
+    if (fromRegion) described.luckyFrom = isLucky(fromCount, fromRegion.column, fromMultiplier);
+    return described;
+  };
+  for (let i = 0; i < extra; i++) {
+    const target = toRegions[i];
+    place(SLOT_ROW_LEFT, SLOT_ROW_LEFT, target.x0, target.x1, fieldsFor(target, true, null));
+  }
+  fromRegions.forEach((region, index) => {
+    const target = toRegions[extra + index];
+    place(region.x0, region.x1, target.x0, target.x1, fieldsFor(target, false, region.kind === 'slot' ? region : null));
   });
-  const rightStart = toRegions.length - side * 2;
-  for (let i = 0; i < side; i++) {
-    const slot = toRegions[rightStart + i * 2];
-    const drain = toRegions[rightStart + i * 2 + 1];
-    const multiplier = toMult[slot.column];
-    place(SLOT_ROW_RIGHT, SLOT_ROW_RIGHT, slot.x0, slot.x1, {
-      kind: 'slot',
-      column: slot.column,
-      fromColumn: null,
-      fresh: true,
-      fromMultiplier: multiplier,
-      toMultiplier: multiplier,
-      luckyFrom: false,
-      luckyTo: isLucky(toCount, slot.column, multiplier),
-    });
-    place(SLOT_ROW_RIGHT, SLOT_ROW_RIGHT, drain.x0, drain.x1, { kind: 'drain', fresh: true });
+  for (let i = 0; i < extra; i++) {
+    const target = toRegions[toRegions.length - extra + i];
+    place(SLOT_ROW_RIGHT, SLOT_ROW_RIGHT, target.x0, target.x1, fieldsFor(target, true, null));
   }
   return regions;
 }

@@ -42,16 +42,23 @@ for (const [from, to] of [[5, 7], [7, 9], [5, 9]]) {
     assert.ok(Math.abs(region.x0 - old.regions[index].x0) < 1e-6);
     assert.ok(Math.abs(region.x1 - old.regions[index].x1) < 1e-6);
   });
-  assert.equal(start.regions[0].kind, 'drain');
-  assert.ok(start.regions[0].x1 - start.regions[0].x0 < 1e-6, 'the new left drain starts shut');
-  assert.equal(start.regions.at(-1).kind, 'drain');
-  assert.ok(start.regions.at(-1).x1 - start.regions.at(-1).x0 < 1e-6, 'the new right drain starts shut');
-  assert.ok(mid.regions[0].x1 - mid.regions[0].x0 > 1, 'the new left drain has grown by halfway');
-  const oldDrains = old.regions.filter(region => region.kind === 'drain');
-  const midDrains = mid.regions.filter(region => region.kind === 'drain' && region.fresh === false);
-  assert.equal(midDrains.length, oldDrains.length);
-  midDrains.forEach((region, index) => {
-    assert.ok(region.x1 - region.x0 < oldDrains[index].x1 - oldDrains[index].x0 - 0.5, 'an existing drain narrows');
+  assert.equal(start.regions[0].kind, next.regions[0].kind);
+  assert.ok(start.regions[0].x1 - start.regions[0].x0 < 1e-6, 'the new left piece starts shut');
+  assert.equal(start.regions.at(-1).kind, next.regions.at(-1).kind);
+  assert.ok(start.regions.at(-1).x1 - start.regions.at(-1).x0 < 1e-6, 'the new right piece starts shut');
+  assert.ok(mid.regions[0].x1 - mid.regions[0].x0 > 1, 'the new left piece has grown by halfway');
+  const extra = (next.regions.length - old.regions.length) / 2;
+  old.regions.forEach((region, index) => {
+    const target = next.regions[extra + index];
+    assert.equal(target.kind, region.kind, `${from}→${to} keeps the old mouths in the middle`);
+    if (region.kind !== 'drain') return;
+    const before = region.x1 - region.x0;
+    const after = target.x1 - target.x0;
+    const width = mid.regions[extra + index].x1 - mid.regions[extra + index].x0;
+    const halfway = before + (after - before) * mid.eased;
+    assert.ok(Math.abs(width - halfway) < 0.6, `${from}→${to} eases an existing drain toward its new width`);
+    if (from === 7 && to === 9) assert.ok(after > before + 0.5, 'nine-slot drains are wider than the seven-slot drains they replace');
+    else if (to !== 9) assert.ok(after < before - 0.5, 'a smaller row narrows the drains it keeps');
   });
   let edge = start.regions[0].x0;
   for (const region of mid.regions) {

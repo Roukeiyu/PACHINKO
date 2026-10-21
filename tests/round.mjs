@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import Matter from 'matter-js';
-import { createTable, TABLE } from '../src/physics.js';
+import { createTable, TABLE, STEP } from '../src/physics.js';
 import { PRESET_BOARD } from '../src/leaderboard.js';
 import {
   START_BALLS, LOW_BALLS, LAUNCH_COST, BURST_COST, SECRET_BALLS, LUCKY_BALLS, SLOT_MACHINE_BALLS,
   DRUM_ENLARGE_BALLS, MINI_BALLS_FULL_SCORE, DRAIN_MIN_OPENING, DRAIN_WIDTH_SCALE, DRAIN_WALL, POCKET_WIDTH,
+  BALL_DIAMETER, NINE_DRAIN_OPENING, NINE_APRON,
   slotFrame, classifyBottom, pocketCenter, secretHoleBalls, shotCost, nextBallCost, clampBallCost, chooseSpendFactor, roundCanEnd,
   BOARD_CROWD_LOCK, boardCrowdUnlock, crowdLaunchLocked, triggeringGiftScale,
   qualifiesForLeaderboard, freshRound, restoreRun,
@@ -40,17 +41,41 @@ for (const count of [5, 7, 9]) {
   const frame = slotFrame(count);
   assert.equal(frame.regions[0].x0, TABLE.left);
   assert.equal(frame.regions.at(-1).x1, TABLE.right);
-  const mouths = count + 1;
-  const natural = (TABLE.right - TABLE.left - count * POCKET_WIDTH) / mouths;
-  const baseline = Math.max(natural, DRAIN_MIN_OPENING);
-  assert.ok(Math.abs(frame.opening - baseline * DRAIN_WIDTH_SCALE) < 1e-6, `${count} drain mouths are half of the previous width`);
-  assert.ok(Math.abs(frame.pocket * count + frame.opening * mouths - (TABLE.right - TABLE.left)) < 1e-6, `${count} slots still fill the row`);
-  assert.ok(frame.pocket > POCKET_WIDTH, `${count} slots receive the reclaimed drain width`);
-  assert.ok(frame.pocket - DRAIN_WALL * 2 >= 24, `${count} slots leave room for a ball`);
+  let edge = TABLE.left;
+  for (const region of frame.regions) {
+    assert.ok(Math.abs(region.x0 - edge) < 1e-6, `${count} regions tile`);
+    assert.ok(region.x1 > region.x0);
+    edge = region.x1;
+  }
+  assert.ok(Math.abs(edge - TABLE.right) < 1e-6);
   const slots = frame.regions.filter(region => region.kind === 'slot');
   const drains = frame.regions.filter(region => region.kind === 'drain');
   assert.equal(slots.length, count);
-  assert.equal(drains.length, count + 1);
+  assert.ok(frame.pocket - DRAIN_WALL * 2 >= 24, `${count} slots leave room for a ball`);
+  if (count === 9) {
+    assert.equal(frame.opening, NINE_DRAIN_OPENING);
+    assert.equal(frame.apron, NINE_APRON);
+    assert.ok(frame.opening >= BALL_DIAMETER + 6, 'nine-slot drains are wider than a ball');
+    assert.ok(frame.apron < BALL_DIAMETER, 'the side apron is too narrow to seat a ball');
+    assert.equal(drains.length, count - 1);
+    assert.equal(frame.regions[0].kind, 'apron');
+    assert.equal(frame.regions.at(-1).kind, 'apron');
+    assert.equal(frame.regions[0].side, 'left');
+    assert.equal(frame.regions.at(-1).side, 'right');
+    for (const drain of drains) {
+      assert.ok(drain.x0 >= TABLE.left + frame.apron - 1e-6);
+      assert.ok(drain.x1 <= TABLE.right - frame.apron + 1e-6);
+    }
+  } else {
+    const mouths = count + 1;
+    const natural = (TABLE.right - TABLE.left - count * POCKET_WIDTH) / mouths;
+    const baseline = Math.max(natural, DRAIN_MIN_OPENING);
+    assert.ok(Math.abs(frame.opening - baseline * DRAIN_WIDTH_SCALE) < 1e-6, `${count} drain mouths are half of the previous width`);
+    assert.ok(Math.abs(frame.pocket * count + frame.opening * mouths - (TABLE.right - TABLE.left)) < 1e-6, `${count} slots still fill the row`);
+    assert.ok(frame.pocket > POCKET_WIDTH, `${count} slots receive the reclaimed drain width`);
+    assert.equal(drains.length, count + 1);
+    assert.equal(frame.apron, 0);
+  }
   slots.forEach((slot, column) => {
     assert.equal(classifyBottom(pocketCenter(count, column), count).column, column);
     assert.equal(classifyBottom((slot.x0 + slot.x1) / 2, count).kind, 'slot');
@@ -60,6 +85,37 @@ for (const count of [5, 7, 9]) {
     assert.equal(classifyBottom(mid, count).kind, 'drain');
   }
   assert.equal(classifyBottom(347, count).column, (count - 1) / 2);
+}
+{
+  const frame = slotFrame(9);
+  const drop = (x, vx = 0) => {
+    const game = createTable({ slots: 9, random: () => 0.25 });
+    const ball = game.launch(1);
+    ball.entered = true;
+    Matter.Body.setPosition(ball.body, { x, y: 770 });
+    Matter.Body.setVelocity(ball.body, { x: vx, y: 1.4 });
+    for (let i = 0; i < Math.round(7000 / STEP) && game.balls.length; i++) game.step();
+    return game;
+  };
+  for (const drain of frame.regions.filter(region => region.kind === 'drain')) {
+    const straight = drop((drain.x0 + drain.x1) / 2, 0);
+    assert.equal(straight.balls.length, 0, `nine-slot drain ${drain.index} must not hold a ball`);
+    assert.equal(straight.stats.timeouts, 0);
+    assert.equal(straight.stats.drains, 1, `nine-slot drain ${drain.index} drops a centered ball`);
+    for (const vx of [-1.2, 1.2]) {
+      const game = drop((drain.x0 + drain.x1) / 2, vx);
+      assert.equal(game.balls.length, 0, `nine-slot drain ${drain.index} vx ${vx} must not hold a ball`);
+      assert.equal(game.stats.timeouts, 0);
+      assert.equal(game.stats.drains + game.stats.scored, 1);
+    }
+  }
+  for (const apron of frame.regions.filter(region => region.kind === 'apron')) {
+    const game = drop((apron.x0 + apron.x1) / 2);
+    assert.equal(game.balls.length, 0, `${apron.side} apron must not hold a ball`);
+    assert.equal(game.stats.timeouts, 0);
+    assert.equal(game.stats.drains, 0, `${apron.side} apron funnels into a slot`);
+    assert.equal(game.stats.scored, 1);
+  }
 }
 assert.equal(classifyBottom(TABLE.left - 1, 5), null);
 assert.equal(classifyBottom(TABLE.right, 5), null);

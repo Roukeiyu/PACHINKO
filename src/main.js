@@ -771,6 +771,10 @@ function applyCrowdLock() {
   else syncLaunchControls();
   return crowdLocked;
 }
+function avgOf(rows, key) {
+  if (!rows.length) return 0;
+  return rows.reduce((total, row) => total + (Number(row[key]) || 0), 0) / rows.length;
+}
 function bandStats(rows) {
   const frames = rows.map(row => row.dt).filter(dt => dt > 0).sort((a, b) => a - b);
   if (!frames.length) return null;
@@ -790,6 +794,11 @@ function bandStats(rows) {
     stepAvg: steps.length ? steps.reduce((total, value) => total + value, 0) / steps.length : 0,
     stepP95: stepPct(0.95),
     stepP99: stepPct(0.99),
+    renderAvg: avgOf(rows, 'render'),
+    jsAvg: avgOf(rows, 'js'),
+    callsAvg: avgOf(rows, 'calls'),
+    trianglesAvg: avgOf(rows, 'triangles'),
+    ballsAvg: avgOf(rows, 'balls'),
   };
 }
 function perfStart() {
@@ -815,9 +824,14 @@ function perfRead() {
   const spawned = (game.stats.bonusBalls - base.bonus) + (game.stats.launches - base.launches);
   const accounted = (game.balls.length - base.balls) + (game.stats.scored - base.scored) + (game.stats.drains - base.drains) + (game.stats.returns - base.returns) + (game.stats.absorbed - base.absorbed);
   const bands = [[0, 40], [40, 60], [60, 100], [100, 180], [180, 10000]].map(([min, max]) => ({ min, max, ...(bandStats(perf.samples.filter(sample => sample.balls >= min && sample.balls < max)) || {}) }));
+  const windows = [20, 50, 100, 150].map(center => {
+    const span = center <= 20 ? 5 : 10;
+    return { center, ...(bandStats(perf.samples.filter(sample => Math.abs(sample.balls - center) <= span)) || {}) };
+  });
   return {
     ...(bandStats(perf.samples) || {}),
     bands,
+    windows,
     heap: performance.memory ? performance.memory.usedJSHeapSize : null,
     peak: perf.peak,
     balls: game.balls.length,
@@ -834,12 +848,13 @@ function perfRead() {
   };
 }
 function tick(now) {
+  const frameStart = performance.now();
   updateTimeFlow(now);
   miniGames.update(now);
   const rawDelta = last ? now - last : 0; const delta = Math.min(rawDelta, 50); last = now;
+  let frameStep = 0;
   if (!document.hidden && !panelOpen() && !miniGames.open) {
     accumulator += delta;
-    let frameStep = 0;
     while (accumulator >= STEP) {
       if (perf.on) {
         const started = performance.now();
@@ -848,11 +863,6 @@ function tick(now) {
       } else game.step();
       updateEffects(STEP);
       accumulator -= STEP;
-    }
-    if (perf.on && rawDelta > 0) {
-      perf.samples.push({ dt: rawDelta, balls: game.balls.length, step: frameStep });
-      if (perf.samples.length > 4000) perf.samples.splice(0, perf.samples.length - 4000);
-      if (game.balls.length > perf.peak) perf.peak = game.balls.length;
     }
     applyCrowdLock();
     if (crowdLocked || fireworkAlive) fireworkAlive = fireworks.frame(delta || 16, crowdLocked, reducedMotion());
@@ -877,7 +887,24 @@ function tick(now) {
   if (motion.intensity) $('.game-layout').style.transform = `translate(${motion.uiX.toFixed(2)}px, ${motion.uiY.toFixed(2)}px)`;
   else $('.game-layout').style.removeProperty('transform');
   if (state.slotTransition && performance.now() >= state.slotTransition.startedAt + state.slotTransition.duration) state.slotTransition = null;
+  const drawStart = performance.now();
   renderer.draw(game, animalScene, state, fx, timePalette);
+  const drawEnd = performance.now();
+  if (perf.on && rawDelta > 0 && !document.hidden && !miniGames.open) {
+    const info = renderer.frameInfo?.() || {};
+    const render = drawEnd - drawStart;
+    perf.samples.push({
+      dt: rawDelta,
+      balls: game.balls.length,
+      step: frameStep,
+      render,
+      js: Math.max(0, drawStart - frameStart - frameStep),
+      calls: info.calls || 0,
+      triangles: info.triangles || 0,
+    });
+    if (perf.samples.length > 4000) perf.samples.splice(0, perf.samples.length - 4000);
+    if (game.balls.length > perf.peak) perf.peak = game.balls.length;
+  }
   const hitPoints = [[686,724],[741,724],[741,884],[686,884]].map(([x,y]) => renderer.project(x,y,12));
   const left = Math.min(...hitPoints.map(p=>p.x)), right = Math.max(...hitPoints.map(p=>p.x));
   const top = Math.max(0, Math.min(...hitPoints.map(p=>p.y))), bottom = Math.min(1, Math.max(...hitPoints.map(p=>p.y)));

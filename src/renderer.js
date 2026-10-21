@@ -53,29 +53,30 @@ export function createRenderer(initialCanvas) {
   }
   return {
     setMode, draw(...args) { setMode(args[2].render3D); renderer.draw(...args); },
+    frameInfo: () => renderer.frameInfo ? renderer.frameInfo() : { mode: canvas.dataset.renderer || '2d', calls: 0, triangles: 0, pixelRatio: 1, bufferWidth: canvas.width, bufferHeight: canvas.height },
     project: (...args) => renderer.project(...args), resize: () => renderer.resize(),
     snapshot: () => ({ ...renderer.snapshot(), threeDAvailable: available }), dispose: () => renderer.dispose(),
   };
 }
 function create3DRenderer(canvas) {
-  const context = canvas.getContext('webgl2', { antialias: true, alpha: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
+  const context = canvas.getContext('webgl2', { antialias: false, alpha: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
   if (!context) throw new Error('WebGL unavailable');
-  const webgl = new THREE.WebGLRenderer({ canvas, context, antialias: true, alpha: false, preserveDrawingBuffer: true });
+  const webgl = new THREE.WebGLRenderer({ canvas, context, antialias: false, alpha: false, preserveDrawingBuffer: true });
   canvas.dataset.renderer = 'webgl';
-  webgl.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
+  webgl.setPixelRatio(1);
   webgl.outputColorSpace = THREE.SRGBColorSpace;
   webgl.toneMapping = THREE.NeutralToneMapping;
   webgl.toneMappingExposure = 1;
   webgl.shadowMap.enabled = true;
-  webgl.shadowMap.type = THREE.PCFSoftShadowMap;
+  webgl.shadowMap.type = THREE.PCFShadowMap;
   const scene = new THREE.Scene(), table = new THREE.Group(); scene.add(table);
   const camera = new THREE.PerspectiveCamera(VIEW_FOV, W / H, 8, 5000);
   let motion = sceneMotionAt(0, {}, {}), currentGame, currentTheme, currentPalette, lastAtlas = -Infinity;
   const keyLight = new THREE.DirectionalLight('#ffffff', 1.35);
   keyLight.position.set(-360, 400, 650); keyLight.castShadow = true;
-  keyLight.shadow.mapSize.set(1024, 1024);
+  keyLight.shadow.mapSize.set(512, 512);
   Object.assign(keyLight.shadow.camera, { left: -500, right: 500, top: 570, bottom: -570, near: 20, far: 1500 });
-  keyLight.shadow.bias = -.00015; keyLight.shadow.normalBias = 1.5; keyLight.shadow.radius = 3;
+  keyLight.shadow.bias = -.00015; keyLight.shadow.normalBias = 1.5; keyLight.shadow.radius = 1;
   scene.add(keyLight, new THREE.HemisphereLight('#ffffff', '#9c91a7', .7));
   const fill = new THREE.DirectionalLight('#d6e8ff', .3); fill.position.set(350, -250, 450); scene.add(fill);
   const pmrem = new THREE.PMREMGenerator(webgl), room = new RoomEnvironment();
@@ -98,7 +99,9 @@ function create3DRenderer(canvas) {
       vMapUv = vec2(boardPosition.x / ${W.toFixed(1)} + 0.5, boardPosition.y / ${H.toFixed(1)} + 0.5);`);
   };
   cap.customProgramCacheKey = () => 'ponpon-tabletop-atlas';
-  const colored = [], bodies = new Map(), balls = new Map(), layoutModels = [];
+  const colored = [], bodies = new Map(), ballPositions = new Map(), layoutModels = [];
+  const unitBox = new THREE.BoxGeometry(1, 1, 1);
+  let tweeningLayout = false;
   function material(color, role = 'object', extra = {}) {
     const value = new THREE.MeshStandardMaterial({ color, roughness: .48, metalness: .12, envMapIntensity: .3, ...extra });
     colored.push({ value, color, role }); return value;
@@ -174,6 +177,13 @@ function create3DRenderer(canvas) {
   let layoutKey = '';
   function layoutBox(x, y, width, height, depth, side, z, radius) {
     if (width < 3 || height < 3) return;
+    if (tweeningLayout) {
+      const mesh = new THREE.Mesh(unitBox, side);
+      mesh.castShadow = false; mesh.receiveShadow = true;
+      mesh.scale.set(width, height, depth);
+      mesh.position.copy(world(x, y, z + depth / 2));
+      table.add(mesh); layoutModels.push(mesh); return;
+    }
     const fit = Math.min(radius, width / 2 - 0.4, height / 2 - 0.4);
     layoutModels.push(box(x, y, width, height, depth, side, z, Math.max(0.4, fit)));
   }
@@ -181,11 +191,12 @@ function create3DRenderer(canvas) {
     const shift = state?.slotTransition;
     const elapsed = shift ? (performance.now() - shift.startedAt) / shift.duration : 1;
     const animating = !!(shift && elapsed < 1);
+    tweeningLayout = animating;
     const ids = game.dividers.map(body => body.id).join(',');
     const quant = animating ? Math.round(elapsed * 24) : -1;
     const key = animating ? `blend:${shift.from}:${shift.to}:${quant}` : `${game.slots}:${ids}`;
     if (key === layoutKey) return;
-    for (const mesh of layoutModels.splice(0)) { table.remove(mesh); mesh.geometry.dispose(); }
+    for (const mesh of layoutModels.splice(0)) { table.remove(mesh); if (mesh.geometry !== unitBox) mesh.geometry.dispose(); }
     for (const [id, entry] of bodies) if (entry.body.label === 'divider') { table.remove(entry.mesh); entry.mesh.geometry.dispose(); bodies.delete(id); }
     layoutKey = key;
     const frame = animating ? blendSlotLayout(shift.from, shift.to, elapsed) : slotFrame(game.slots);
@@ -194,7 +205,23 @@ function create3DRenderer(canvas) {
       if (region.kind === 'drain') {
         if (width < 6) continue;
         layoutBox(cx, TABLE.slotTop + 50, Math.max(4, width - 2), 96, 2, hazardSide, -6, 2);
-      } else if (width >= 14) {
+      } else if (region.kind === 'apron') {
+        if (width < 4) continue;
+        const left = region.side === 'left' || (region.side !== 'right' && cx < W / 2);
+        const neighbor = left
+          ? frame.regions.find(item => item.kind === 'slot' && item.x0 >= region.x1 - 1)
+          : [...frame.regions].reverse().find(item => item.kind === 'slot' && item.x1 <= region.x0 + 1);
+        const reach = neighbor ? Math.min(24, (neighbor.x1 - neighbor.x0) * 0.55) : 0;
+        const foot = left ? region.x1 + reach : region.x0 - reach;
+        const outer = left ? region.x0 : region.x1;
+        const shape = new THREE.Shape();
+        const x0 = Math.min(outer, foot), x1 = Math.max(outer, foot);
+        shape.moveTo(x0, 0); shape.lineTo(x1, 0); shape.lineTo(outer, 78); shape.closePath();
+        const mesh = extrude(shape, 12, floorSide, 0);
+        mesh.material = floorSide; mesh.castShadow = false; mesh.receiveShadow = true;
+        mesh.position.copy(world(0, TABLE.slotTop + 90, -6));
+        layoutModels.push(mesh);
+      } else if (region.kind === 'slot' && width >= 14) {
         layoutBox(cx, TABLE.slotTop + 43, width - 4, 78, 3, goldSide, -.5, 6);
       }
     }
@@ -211,8 +238,20 @@ function create3DRenderer(canvas) {
       for (const b of game.dividers) bodyModel(b, hazardSide, 9);
     }
   }
+  const BALL_CAPACITY = 512;
   const sphere = new THREE.SphereGeometry(11, 24, 16);
+  const burstSphere = new THREE.SphereGeometry(11, 16, 12);
   const ballMaterial = new THREE.MeshStandardMaterial({ color: '#ffedb0', metalness: .6, roughness: .2, envMapIntensity: 1.4 });
+  const burstMaterial = new THREE.MeshLambertMaterial({ color: '#ffedb0' });
+  const ballDummy = new THREE.Object3D();
+  function makeBalls(geometry, material, shadows) {
+    const mesh = new THREE.InstancedMesh(geometry, material, BALL_CAPACITY);
+    mesh.count = 0; mesh.castShadow = shadows; mesh.receiveShadow = false; mesh.frustumCulled = false;
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    table.add(mesh); return mesh;
+  }
+  const playerBalls = makeBalls(sphere, ballMaterial, true);
+  const bonusBalls = makeBalls(burstSphere, burstMaterial, false);
   const valueRingGeometry = new THREE.RingGeometry(13.2, 15.6, 48);
   const valueRingMaterial = new THREE.MeshBasicMaterial({ color: '#f0c14a', side: THREE.DoubleSide, transparent: true, opacity: .95, depthWrite: false });
   const valueRings = new Map();
@@ -382,21 +421,30 @@ function create3DRenderer(canvas) {
       }
     }
     const activeIds = new Set(game.balls.map(b => b.id));
-    for (const [id, mesh] of balls) if (!activeIds.has(id)) {
-      table.remove(mesh); balls.delete(id);
-      const ring = valueRings.get(id);
-      if (ring) { table.remove(ring); valueRings.delete(id); }
-    }
+    for (const [id, ring] of valueRings) if (!activeIds.has(id)) { table.remove(ring); valueRings.delete(id); }
+    ballPositions.clear();
+    let playerCount = 0, bonusCount = 0;
     for (const ball of game.balls) {
-      let mesh = balls.get(ball.id);
-      if (!mesh) { mesh = new THREE.Mesh(sphere, ballMaterial); mesh.castShadow = !ball.bonus; table.add(mesh); balls.set(ball.id, mesh); }
-      mesh.position.copy(world(ball.body.position.x, ball.body.position.y, 12));
-      mesh.rotation.set(ball.body.position.y / 11, ball.body.position.x / 11, ball.body.angle);
+      const mesh = ball.bonus ? bonusBalls : playerBalls;
+      const index = ball.bonus ? bonusCount++ : playerCount++;
+      const place = world(ball.body.position.x, ball.body.position.y, 12);
+      if (index < BALL_CAPACITY) {
+        ballDummy.position.copy(place);
+        ballDummy.rotation.set(ball.body.position.y / 11, ball.body.position.x / 11, ball.body.angle);
+        ballDummy.scale.set(1, 1, 1);
+        ballDummy.updateMatrix();
+        mesh.setMatrixAt(index, ballDummy.matrix);
+      }
+      ballPositions.set(ball.id, { x: ball.body.position.x, y: ball.body.position.y, z: 12 });
       const valued = ball.valueFactor > 1;
       let ring = valueRings.get(ball.id);
       if (valued && !ring) { ring = new THREE.Mesh(valueRingGeometry, valueRingMaterial); table.add(ring); valueRings.set(ball.id, ring); }
-      if (ring) { ring.visible = valued; if (valued) ring.position.copy(mesh.position); }
+      if (ring) { ring.visible = valued; if (valued) ring.position.copy(place); }
     }
+    playerBalls.count = Math.min(playerCount, BALL_CAPACITY);
+    bonusBalls.count = Math.min(bonusCount, BALL_CAPACITY);
+    playerBalls.instanceMatrix.needsUpdate = true;
+    bonusBalls.instanceMatrix.needsUpdate = true;
     const compression = state.charging ? state.charge * LAUNCH_SQUASH : 0;
     readyBall.position.copy(world(TABLE.launchX, TABLE.launchY + compression, 12));
     readyBall.visible = !game.balls.some(b => b.body.position.x > 683 && b.body.position.y > 730);
@@ -447,7 +495,14 @@ function create3DRenderer(canvas) {
     camera.updateMatrixWorld();
     table.updateMatrixWorld(true); boardInverse.value.copy(table.matrixWorld).invert();
     webgl.render(scene, camera);
+    lastInfo.calls = webgl.info.render.calls;
+    lastInfo.triangles = webgl.info.render.triangles;
+    lastInfo.pixelRatio = webgl.getPixelRatio();
+    lastInfo.bufferWidth = canvas.width;
+    lastInfo.bufferHeight = canvas.height;
   }
+  const lastInfo = { mode: 'webgl', calls: 0, triangles: 0, pixelRatio: 1, bufferWidth: 0, bufferHeight: 0 };
+  function frameInfo() { return lastInfo; }
   function snapshot() {
     const frame = [[12, 16], [748, 16], [12, 892], [748, 892]].flatMap(([x, y]) => [project(x, y, 0), project(x, y, WALL_HEIGHT)]);
     const nearEdge = [[3, 897, 0], [757, 897, 0], [3, 897, WALL_HEIGHT], [757, 897, WALL_HEIGHT]].map(([x, y, z]) => project(x, y, z));
@@ -455,10 +510,10 @@ function create3DRenderer(canvas) {
     return { mode: 'webgl', cameraAngle: 0, tableTransform: { position: table.position.toArray(), rotation: table.rotation.toArray().slice(0,3) }, cameraPosition: camera.position.toArray(), cameraBase: cameraBase.toArray(), cameraQuaternion: camera.quaternion.toArray(), motion: { ...motion }, pitch: VIEW_PITCH_DEG, fov: camera.fov, distance: viewDistance, lookY: viewLookY, aspect: camera.aspect, near: { minX: nearMinX, maxX: nearMaxX, width: nearMaxX - nearMinX }, starSprite: { blending: starMaterial.blending === THREE.AdditiveBlending ? 'additive' : 'normal', anisotropy: starMap.anisotropy, size: starPixels, mipmaps: starMap.generateMipmaps }, frame, meshes: bodies.size, triangles: webgl.info.render.triangles, contextLost: webgl.getContext().isContextLost(),
       star: currentGame?.star ? project(currentGame.star.x, currentGame.star.y, 18) : null,
       bodies: [...bodies.values()].map(({ body, mesh, height }) => ({ id: body.id, kind: body.label, x: mesh.position.x + W / 2, y: H / 2 - mesh.position.y, angle: -mesh.rotation.z, radius: body.plugin.radius, height, scale: mesh.scale.x, projected: project(body.position.x, body.position.y, height) })),
-      balls: [...balls].map(([id, mesh]) => ({ id, x: mesh.position.x + W / 2, y: H / 2 - mesh.position.y, z: mesh.position.z })),
+      balls: [...ballPositions].map(([id, point]) => ({ id, ...point })),
       samples: [[70,200,.8],[23,280,28.8],[150,155,18.8],[350,410,32.8],[350,739,6],[615,482,2]].map(([x,y,z]) => project(x,y,z)), readyBall: project(TABLE.launchX, TABLE.launchY, 12), textures: webgl.info.memory.textures, geometries: webgl.info.memory.geometries, alignmentError: Math.max(0, ...[...bodies.values()].map(({body, mesh}) => Math.hypot(mesh.position.x - (body.position.x - W / 2), mesh.position.y - (H / 2 - body.position.y)))) };
   }
-  return { draw, resize, project, snapshot, dispose() {
+  return { draw, resize, project, snapshot, frameInfo, dispose() {
     observer.disconnect(); mobileQuery.removeEventListener('change', resize); painter.dispose(); atlas.dispose(); chargeTexture.dispose(); starMap.dispose(); sparkMap.dispose(); flashMap.dispose(); environment.dispose(); wells.forEach(w => w.texture.dispose());
     const geometries = new Set(), materials = new Set(); scene.traverse(object => { if (object.geometry) geometries.add(object.geometry); if (object.material) (Array.isArray(object.material) ? object.material : [object.material]).forEach(m => materials.add(m)); });
     geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); webgl.dispose(); webgl.forceContextLoss();

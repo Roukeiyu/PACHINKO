@@ -110,9 +110,15 @@ export const DRUM_ENLARGE_BALLS = 0;
 export const DRUM_CLOCK_BALLS = 0;
 
 // Bottom geometry. The slot row is TABLE.left … TABLE.right (616px).
-// The mouth budget starts from POCKET_WIDTH pockets and never begins below
+// Five and seven slots still alternate drain, slot, …, drain. The mouth
+// budget starts from POCKET_WIDTH pockets and never begins below
 // DRAIN_MIN_OPENING. DRAIN_WIDTH_SCALE then halves every mouth and returns
 // that width to the scoring slots, so the row still fills the span.
+// Nine slots do not put a drain against either wall. A ball is 22px across,
+// and halving ten mouths on this span left a 14.6px gap that the ball sits
+// on. Those two edge mouths are closed. Their width, plus a little taken
+// back from the pockets, widens the eight mouths between the slots. Each
+// wall keeps a narrow apron that a slope funnels into the outer ×2 slot.
 export const SLOT_ROW_LEFT = 39;
 export const SLOT_ROW_RIGHT = 655;
 export const POCKET_WIDTH = 36;
@@ -120,10 +126,38 @@ export const DRAIN_MIN_OPENING = 28;
 export const DRAIN_WIDTH_SCALE = 0.5;
 export const DRAIN_WALL = 6;
 export const DRAIN_FLOOR = 894;
+export const BALL_DIAMETER = 22;
+// Eight mouths at 28px clear a 22px ball with room to spare. Sixteen pixels
+// of apron remain at each wall. The pockets take exactly the rest (40px).
+export const NINE_DRAIN_OPENING = BALL_DIAMETER + 6;
+export const NINE_APRON = 16;
+export const NINE_LIP = 4;
 
 export function slotFrame(count) {
   if (count !== 5 && count !== 7 && count !== 9) throw new RangeError('Slots must be 5, 7, or 9');
   const span = SLOT_ROW_RIGHT - SLOT_ROW_LEFT;
+  if (count === 9) {
+    const mouths = count - 1;
+    const opening = NINE_DRAIN_OPENING;
+    const apron = NINE_APRON;
+    const pocket = (span - mouths * opening - apron * 2) / count;
+    const regions = [];
+    let x = SLOT_ROW_LEFT;
+    regions.push({ kind: 'apron', side: 'left', x0: x, x1: x + apron });
+    x += apron;
+    for (let column = 0; column < count; column++) {
+      const pocketEnd = x + pocket;
+      regions.push({ kind: 'slot', column, x0: x, x1: pocketEnd });
+      x = pocketEnd;
+      if (column < count - 1) {
+        const drainEnd = x + opening;
+        regions.push({ kind: 'drain', index: column, x0: x, x1: drainEnd });
+        x = drainEnd;
+      }
+    }
+    regions.push({ kind: 'apron', side: 'right', x0: x, x1: SLOT_ROW_RIGHT });
+    return { count, opening, pocket, mouths, apron, regions };
+  }
   const mouths = count + 1;
   let opening = (span - count * POCKET_WIDTH) / mouths;
   if (opening < DRAIN_MIN_OPENING) opening = DRAIN_MIN_OPENING;
@@ -139,7 +173,7 @@ export function slotFrame(count) {
     x = pocketEnd;
   }
   regions.push({ kind: 'drain', index: count, x0: x, x1: SLOT_ROW_RIGHT });
-  return { count, opening, pocket, mouths, regions };
+  return { count, opening, pocket, mouths, apron: 0, regions };
 }
 
 export function classifyBottom(x, count) {
