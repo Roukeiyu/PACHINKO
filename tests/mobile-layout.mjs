@@ -36,6 +36,18 @@ try {
     const box2d = await page.locator('#board').boundingBox();
     assert.ok(box2d.width >= width * 0.96, `${width}: 2D canvas is nearly full width (${box2d.width})`);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${width}: no horizontal overflow`);
+    assert.equal(await page.locator('.reward-card').isVisible(), false, `${width}: reward panel starts collapsed`);
+    assert.equal(await page.locator('#info-toggle').isVisible(), true, `${width}: the info toggle stays reachable`);
+    assert.equal(await page.locator('#double-ball-label').textContent(), '×1', `${width}: the cost badge shows only the factor`);
+    const beforeOpen = await page.locator('#board').boundingBox();
+    await page.locator('#info-toggle').click();
+    assert.equal(await page.locator('.reward-card').isVisible(), true, `${width}: the drawer shows the reward table`);
+    assert.equal(await page.locator('#leaderboard-button').isVisible(), true, `${width}: the drawer keeps the leaderboard`);
+    const opened = await page.locator('#board').boundingBox();
+    assert.equal(Math.round(opened.width), Math.round(beforeOpen.width), `${width}: opening the drawer does not resize the board`);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${width}: open drawer does not scroll sideways`);
+    await page.locator('#info-close').click();
+    assert.equal(await page.locator('.reward-card').isVisible(), false, `${width}: the drawer closes`);
     await page.locator('#settings-button').click();
     await page.locator('#three-d').check();
     await page.locator('#done-settings').click();

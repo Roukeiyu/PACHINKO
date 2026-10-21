@@ -19,7 +19,8 @@ try {
   }
   await page.waitForFunction(() => window.__ponpon?.pins === 28);
   assert.equal(await page.locator('#settings #auto[role="switch"]').count(), 1, 'automatic launch is a settings switch');
-  assert.equal(await page.locator('.launch-row button').count(), 1, 'only the manual launch button remains outside settings');
+  assert.equal(await page.locator('.launch-row #launch').count(), 1, 'only the manual launch button remains outside settings');
+  assert.equal(await page.locator('.launch-row #double-ball').count(), 1, 'the cost badge sits on the launch button');
   assert.equal(await page.locator('.theme-card, .theme-pill').count(), 0, 'the game has no sidebar theme card or shortcuts');
   assert.equal(await page.locator('[data-theme]').count(),0,'theme switching is removed');
   await page.screenshot({ path: 'test-results/desktop.png', fullPage: true });

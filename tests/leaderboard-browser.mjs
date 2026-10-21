@@ -17,6 +17,7 @@ try {
   await page.clock.pauseAt(Date.UTC(2026, 9, 10, 12) + 1000);
   await page.goto(process.env.TEST_URL || 'http://127.0.0.1:5173');
   await page.clock.runFor(50);
+  if (!(await page.locator('#leaderboard-button').isVisible())) await page.locator('#info-toggle').click();
   await page.locator('#leaderboard-button').click();
   await page.clock.runFor(30);
   assert.equal(await page.locator('#lb-list .lb-row').count(), 20);
@@ -28,6 +29,7 @@ try {
   await page.locator('#leaderboard-button').click();
   assert.deepEqual(await page.locator('.lb-score').allTextContents(), firstRead, 'preset scores do not reshuffle');
   await page.locator('#leaderboard-return').click();
+  if (await page.locator('#info-close').isVisible()) await page.locator('#info-close').click();
   await page.evaluate(amount => window.__ponpon.grant(amount), LEADERBOARD_QUALIFY_SCORE - 1);
   await page.clock.runFor(40);
   assert.equal(await page.locator('#name-entry').evaluate(el => el.open), false, '49999 does not ask for a name mid-round');
