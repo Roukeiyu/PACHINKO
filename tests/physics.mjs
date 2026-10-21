@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import Matter from 'matter-js';
 import { createTable, TABLE, STEP } from '../src/physics.js';
+import { reelBox } from '../src/slot-machine.js';
 
 function seeded(seed) { return () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 32; }; }
 // The two marked centerline positions always contain real, active spring studs.
@@ -27,7 +28,7 @@ console.log('PASS: both fixed centerline spring studs actively rebound balls and
 const fixedPositions = createTable({ random: seeded(1) }).pins.map(p => ({ ...p.position }));
 for (const seed of [0, 1, 100]) {
   const game = createTable({ random: seeded(seed) });
-  assert.equal(game.pins.length, 28);
+  assert.equal(game.pins.length, 26);
   const positions = game.pins.map(p => ({ ...p.position }));
   assert.deepEqual(positions, fixedPositions, 'random gameplay must not change pin placement');
   for (const p of positions) assert.ok(positions.some(q => q.x === 700 - p.x && q.y === p.y), 'each pin has a same-height counterpart across the vertical x=350 axis');
@@ -60,6 +61,60 @@ for (const seed of [0, 1, 100]) {
   assert.deepEqual(game.pins.map(p => p.position), positions, 'pins remain still during play');
 }
 console.log('PASS: fixed pins retain left/right mirror symmetry across new games and slot changes, and clear moving obstacles throughout their travel.');
+{
+  const game = createTable({ random: seeded(3) });
+  assert.equal(game.diamonds.length, 2);
+  assert.deepEqual(game.pins.map(p => [p.position.x, p.position.y]).filter(([x, y]) => y > 690 && x > 280 && x < 420), [], 'the two pegs beside the lower spring are gone');
+  const reels = [0, 1, 2].map(index => { const box = reelBox(index); return Matter.Bodies.rectangle(box.x, box.y, box.size, box.size, { isStatic: true }); });
+  const neighbours = [...game.pins, ...game.kickers, ...reels];
+  const limits = game.diamonds.map(() => ({ min: Infinity, max: -Infinity }));
+  const spins = game.diamonds.map(() => ({ first: null, last: null }));
+  for (let tick = 0; tick < Math.ceil(6000 / STEP); tick++) {
+    game.step();
+    game.diamonds.forEach((diamond, index) => {
+      const motion = diamond.plugin.motion;
+      const travel = diamond.position.y - motion.y;
+      limits[index].min = Math.min(limits[index].min, travel);
+      limits[index].max = Math.max(limits[index].max, travel);
+      assert.ok(Math.abs(diamond.position.x - motion.x) < 1e-6, 'diamonds travel vertically');
+      assert.ok(Math.abs(travel) <= motion.amplitude + 1e-6);
+      assert.equal(Matter.Query.collides(diamond, neighbours).length, 0, 'a moving diamond stays clear of pegs, the pink stud and the reels');
+      if (!spins[index].first) spins[index].first = diamond.angle;
+      spins[index].last = diamond.angle;
+    });
+    const travelSum = (game.diamonds[0].position.y - game.diamonds[0].plugin.motion.y) + (game.diamonds[1].position.y - game.diamonds[1].plugin.motion.y);
+    assert.ok(Math.abs(travelSum) < 1e-6, 'the two diamonds stay opposite in phase');
+  }
+  assert.ok(limits.every(limit => limit.min < -19 && limit.max > 19), 'both diamonds reach both ends of the ±20 travel');
+  const turned = spins.map(spin => spin.last - spin.first);
+  assert.ok(turned[0] > Math.PI * 2.5 && turned[1] < -Math.PI * 2.5, 'each diamond turns more than a full opposite rotation in 6s');
+  const rising = createTable({ random: seeded(3) });
+  while (rising.clock + STEP < 1500) rising.step();
+  const diamond = rising.diamonds[0];
+  const before = diamond.position.y;
+  const ball = rising.launch();
+  ball.entered = true;
+  const top = Math.min(...diamond.vertices.map(vertex => vertex.y));
+  Matter.Body.setPosition(ball.body, { x: diamond.position.x, y: top - 10 });
+  Matter.Body.setVelocity(ball.body, { x: 0, y: 0 });
+  const ballY = ball.body.position.y;
+  rising.step();
+  assert.ok(diamond.position.y < before, 'this sample is the upward stroke');
+  assert.ok(ball.body.position.y < ballY, 'the rising diamond carries the ball up instead of letting it sink through');
+  assert.ok(ball.body.velocity.y < 0, 'the kinematic velocity leaves the ball moving upward');
+  const parked = { y: diamond.position.y, angle: diamond.angle, clock: rising.clock };
+  rising.setEmissionPaused(true);
+  rising.step();
+  assert.notEqual(rising.diamonds[0].position.y, parked.y, 'secret drain still simulates, so the diamonds keep their cycle');
+  const frozenY = rising.diamonds[0].position.y;
+  const frozenAngle = rising.diamonds[0].angle;
+  const frozenClock = rising.clock;
+  rising.advanceEnlarge(4000);
+  assert.equal(rising.clock, frozenClock);
+  assert.equal(rising.diamonds[0].position.y, frozenY, 'a wall-clock pause does not move the diamonds without a physics step');
+  assert.equal(rising.diamonds[0].angle, frozenAngle);
+}
+console.log('PASS: lower diamonds travel ±20px out of phase, spin opposite ways, push a resting ball, and freeze when physics does.');
 {
   const game = createTable({ random: seeded(5) }), ball = game.launch();
   Matter.Body.setPosition(ball.body, { x: 713, y: 350 });

@@ -71,7 +71,7 @@ try {
   assert.equal(await count(), START_BALLS - 2, 'canceling the board hold spends nothing');
   const badgeBox = await page.locator('#double-ball').boundingBox();
   const launchBox = await page.locator('#launch').boundingBox();
-  assert.ok(badgeBox.width <= 52 && badgeBox.height <= 32, 'the cost badge stays a small corner chip');
+  assert.ok(Math.abs(badgeBox.width - badgeBox.height) <= 1 && badgeBox.width >= 40, 'the multiplier control is a round button at least 40px across');
   assert.ok(badgeBox.x < launchBox.x + 24 && badgeBox.y < launchBox.y + 8, 'the badge sits on the launch button’s top-left corner');
   await touchStart('#double-ball');
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });

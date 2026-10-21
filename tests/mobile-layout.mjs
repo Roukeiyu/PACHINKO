@@ -38,7 +38,10 @@ try {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${width}: no horizontal overflow`);
     assert.equal(await page.locator('.reward-card').isVisible(), false, `${width}: reward panel starts collapsed`);
     assert.equal(await page.locator('#info-toggle').isVisible(), true, `${width}: the info toggle stays reachable`);
-    assert.equal(await page.locator('#double-ball-label').textContent(), '×1', `${width}: the cost badge shows only the factor`);
+    assert.equal(await page.locator('#double-ball-label').textContent(), '', `${width}: ×1 leaves the round multiplier blank`);
+    assert.equal(await page.locator('#double-ball').getAttribute('data-factor'), '1', `${width}: the blank circle is still ×1`);
+    const badge = await page.locator('#double-ball').boundingBox();
+    assert.ok(badge.width >= 40 && Math.abs(badge.width - badge.height) <= 1, `${width}: the multiplier circle stays a 40px touch target`);
     const beforeOpen = await page.locator('#board').boundingBox();
     await page.locator('#info-toggle').click();
     assert.equal(await page.locator('.reward-card').isVisible(), true, `${width}: the drawer shows the reward table`);

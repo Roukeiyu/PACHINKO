@@ -78,7 +78,16 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     const rail = rails[index];
     rail.plugin.motion = { x: rail.position.x, y: rail.position.y, axisX: Math.cos(rail.angle), axisY: Math.sin(rail.angle), amplitude, period, direction };
   }
-  [[254, 668], [442, 695]].forEach(([x, y]) => add(Bodies.polygon(x, y, 4, 23, { isStatic: true, label: 'diamond', restitution: .95, friction: 0, angle: Math.PI / 4 }), diamonds));
+  // Lower pair, left and right of the pink stud above the reels. Each is a
+  // kinematic platform: static mass, but position and angle are prescribed and
+  // their step velocity is published so a contacting ball is pushed, not tunneled.
+  // Travel is ±20px over 3s, half a cycle apart. Spin is one turn per 4s, opposite ways.
+  // The left rest point sits 6px below the old 668 so the raised tip still clears
+  // the pin at (250, 600) by more than a ball.
+  [[254, 674, 1], [442, 695, -1]].forEach(([x, y, direction], index) => {
+    const diamond = add(Bodies.polygon(x, y, 4, 23, { isStatic: true, label: 'diamond', restitution: .95, friction: 0, angle: Math.PI / 4 }), diamonds, { radius: 23 });
+    diamond.plugin.motion = { x, y, amplitude: 20, period: 3000, phase: index * Math.PI, spin: direction * (Math.PI * 2 / 4000) };
+  });
   const spinner = add(Bodies.rectangle(351, 540, 122, 13, { isStatic: true, label: 'spinner', chamfer: { radius: 6 }, restitution: .85, friction: .01 }), spinners);
   spinner.plugin.radius = 61;
   // Tip and arrow share the outgoing direction. The launch tip has clearance
@@ -111,8 +120,9 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   // Coordinates leave space for moving rails, enlarged bumpers and the hole.
   const pinAnchors = [[150, 155], [280, 155], [110, 235], [320, 270],
     [250, 325], [95, 350], [190, 420], [250, 500], [250, 600],
-    // The lower-center pair now sits just above the outer reel squares.
-    [185, 640], [310, 640], [120, 730], [200, 730], [310, 704]];
+    // The two pegs that sat beside the lower spring, just above the outer reel
+    // squares, are gone. They crowded the reels without guiding a path.
+    [185, 640], [310, 640], [120, 730], [200, 730]];
   const pinPositions = pinAnchors.flatMap(([x, y]) => [[x, y], [700 - x, y]]);
   pinPositions.forEach(([x, y], index) => {
     add(Bodies.circle(x, y, 7.5, { isStatic: true, label: 'pin', restitution: .85, friction: 0 }), pins, { index });
@@ -128,6 +138,12 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
       const m = r.plugin.motion;
       return m && x > r.bounds.min.x - Math.abs(m.axisX * m.amplitude) - 26 && x < r.bounds.max.x + Math.abs(m.axisX * m.amplitude) + 26
         && y > r.bounds.min.y - Math.abs(m.axisY * m.amplitude) - 26 && y < r.bounds.max.y + Math.abs(m.axisY * m.amplitude) + 26;
+    })) continue;
+    if (diamonds.some(d => {
+      const m = d.plugin.motion;
+      const cx = m ? m.x : d.position.x, cy = m ? m.y : d.position.y, amp = m ? m.amplitude : 0;
+      const clamped = Math.max(cy - amp, Math.min(cy + amp, y));
+      return Math.hypot(x - cx, y - clamped) < (d.plugin.radius || 23) + 26;
     })) continue;
     if (bumpers.some(b => Math.hypot(x - b.position.x, y - b.position.y) < b.plugin.baseRadius * (b.plugin.index === 2 ? 1.5 : 1) + 26)) continue;
     if (Math.hypot(x - 351, y - 540) < 94 || Math.hypot(x - 99, y - 466) < 64 || holes.some(h => Math.hypot(x - h.x, y - h.y) < 62) || Math.hypot(x - collector.x, y - collector.y) < 62) continue;
@@ -456,6 +472,15 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
         const travel = Math.sin(clock / motion.period * Math.PI * 2) * motion.amplitude * motion.direction;
         Body.setPosition(rail, { x: motion.x + motion.axisX * travel, y: motion.y + motion.axisY * travel }, true);
       }
+    }
+    // Same simulation clock as the rails: settings, a mini-game, or a hidden tab
+    // skip step entirely, so the diamonds freeze with the balls.
+    for (const diamond of diamonds) {
+      const motion = diamond.plugin.motion;
+      if (!motion) continue;
+      const travel = Math.sin(clock / motion.period * Math.PI * 2 + motion.phase) * motion.amplitude;
+      Body.setPosition(diamond, { x: motion.x, y: motion.y + travel }, true);
+      Body.setAngle(diamond, Math.PI / 4 + motion.spin * clock, true);
     }
     Engine.update(engine, dt);
     // Apply the active platform's kick after the solver so the contact response
