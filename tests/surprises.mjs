@@ -106,6 +106,55 @@ assert.ok(shots[11].at - trigger <= 1000);
 assert.equal(new Set(shots.map(s => s.ballId)).size, 12, 'burst creates 12 separate physics bodies');
 console.log(`PASS: center triggers at 30 hits, fires 12 physical balls clockwise from 12 o'clock in ${(shots[11].at - trigger).toFixed(1)}ms.`);
 
+let scaled;
+const clockFactors = [];
+let clockGift = 0;
+scaled = createTable({
+  random: () => 0.25,
+  centerHitWeight: ball => ball.valueFactor,
+  giftScale: ball => (ball.valueFactor > 1 ? ball.valueFactor : 1),
+  onSurprise(event) {
+    if (event.kind === 'clock') clockGift = event.balls;
+    if (event.kind !== 'emit' || event.source !== 'clock') return;
+    clockFactors.push(scaled.balls.find(ball => ball.id === event.ballId).valueFactor);
+  },
+});
+const centerBumper = scaled.bumpers[2];
+for (let i = 0; i < 26; i++) hit(scaled, 2);
+assert.equal(scaled.rewards.hits[2], 26, 'a ×1 hit still adds 1 when the center hook is installed');
+const heavy = scaled.launch(1, 4);
+assert.ok(heavy);
+heavy.entered = true;
+Matter.Body.setPosition(heavy.body, { x: centerBumper.position.x, y: centerBumper.position.y + centerBumper.plugin.radius + 15 });
+Matter.Body.setVelocity(heavy.body, { x: 0, y: -8 });
+for (let i = 0; i < 20 && scaled.rewards.hits[2] === 26; i++) scaled.step();
+assert.equal(scaled.rewards.hits[2], 30, 'a ×4 ball advances the center drum by 4 and reaches 30');
+assert.equal(scaled.stats.clockBursts, 1);
+assert.equal(clockGift, 48, 'the ×4 ball multiplies the 12-ball clock into 48 balls');
+remove(scaled, heavy);
+for (let i = 0; i < 600 && clockFactors.length < 48; i++) scaled.step();
+assert.equal(clockFactors.length, 48);
+assert.equal(clockFactors.every(factor => factor === 1), true, 'multiplied clock balls are still ×1');
+const leftScaled = createTable({
+  random: () => 0.25,
+  giftScale: ball => (ball.valueFactor > 1 ? ball.valueFactor : 1),
+});
+for (let i = 0; i < DRUM_SIDE_HITS - 1; i++) hit(leftScaled, 0);
+const leftBall = leftScaled.launch(1, 2);
+assert.ok(leftBall);
+leftBall.entered = true;
+const leftBumper = leftScaled.bumpers[0];
+Matter.Body.setPosition(leftBall.body, { x: leftBumper.position.x, y: leftBumper.position.y + leftBumper.plugin.radius + 15 });
+Matter.Body.setVelocity(leftBall.body, { x: 0, y: -8 });
+const leftBefore = leftScaled.rewards.hits[0];
+for (let i = 0; i < 20 && leftScaled.rewards.hits[0] === leftBefore; i++) leftScaled.step();
+assert.equal(leftScaled.rewards.hits[0], leftBefore + 1, 'the left drum still advances by 1 per hit');
+assert.equal(leftScaled.stats.randomShots, 2, 'a ×2 ball doubles the left-drum gift');
+for (let i = 0; i < 20 && leftScaled.stats.bonusBalls < 2; i++) leftScaled.step();
+assert.equal(leftScaled.stats.bonusBalls, 2);
+assert.equal(leftScaled.balls.filter(ball => ball.kind === 'random').every(ball => ball.valueFactor === 1), true);
+console.log('PASS: sim hooks scale center progress and gift counts without changing ×1 balls or the left-drum meter.');
+
 const canon = createCanon();
 assert.deepEqual(Array.from({ length: 8 }, () => canon.next().name), ['F#5','E5','D5','C#5','B4','A4','B4','C#5']);
 for (let i = 8; i < CANON_NOTES.length; i++) canon.next();

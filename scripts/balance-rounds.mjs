@@ -3,22 +3,29 @@
 // Default policy: ×1 below 7 slots, ×2 from 7 slots, and at 9 slots ×8 when
 // that shot can be paid, otherwise ×4. Default is 100 rounds of the shipped
 // rules. --policy does not change the game:
-//   paid  ×2 from 7 slots, ×8 then ×4 at 9 slots (default)
-//   p1    ×2 from 7 slots, then ×1 only once 9 slots are open
-//   p2    ×1 for the whole round
+//   paid (a)  ×2 from 7 slots, ×8 then ×4 at 9 slots (default)
+//   p1 (b)    ×2 from 7 slots, then ×1 only once 9 slots are open
+//   p2 (c)    ×1 for the whole round
+// --gifts multiplies ball gifts by the ball that triggered them. It does not
+// change the game. off leaves gifts alone. full uses that ball's own ×N.
+// x2 gives every multiplier ball a flat ×2 gift. Both of those also advance
+// the center drum (index 2, the 30-hit clock meter) by the ball's own ×N.
+// Left drum, right drum, and the reel progress stay at +1 per hit.
+// Clock-burst and jar balls stay ×1; only how many of them appear changes.
+// Secret +20 and reel ball payouts are stock, scaled by the triggering ball.
 //
 // Named variants and --flags override the sim only. They do not change the
 // game. Extra drum/clock/enlarge balls are stock gifts on top of any real
 // balls the table already launches. valueScoreScale multiplies points of a
 // paid shot (valueFactor > 1) and leaves ×1 shots alone.
 //
-//   node scripts/balance-rounds.mjs [rounds] [main|a|b|c] [--policy=paid|p1|p2]
+//   node scripts/balance-rounds.mjs [rounds] [main|a|b|c] [--policy=paid|p1|p2|a|b|c] [--gifts=off|full|x2]
 //   node scripts/balance-rounds.mjs 40 --unlock7=3000 --unlock9=11000
 import { createTable, STEP } from '../src/physics.js';
 import { SLOT_UNLOCK_7, SLOT_UNLOCK_9 } from '../src/slots.js';
 import {
   START_BALLS, BURST_COST, SECRET_BALLS, DRUM_RANDOM_BALLS, DRUM_ENLARGE_BALLS, DRUM_CLOCK_BALLS,
-  chooseSpendFactor, shotCost, MINI_BALLS_FULL_SCORE,
+  chooseSpendFactor, shotCost, ballValue, MINI_BALLS_FULL_SCORE,
 } from '../src/round.js';
 
 // Probed proposals. `main` is empty: the shipped rules. Flags can still override a preset.
@@ -38,6 +45,12 @@ const POLICIES = {
   paid: '7槽起用×2；9槽优先×8（这一发付得起时），否则×4',
   p1: '7槽起用×2；9槽改回只打×1',
   p2: '全程只打×1',
+};
+const POLICY_ALIASES = { paid: 'paid', a: 'paid', p1: 'p1', b: 'p1', p2: 'p2', c: 'p2' };
+const GIFT_MODES = {
+  off: '赠球不乘倍',
+  full: '赠球乘触发球自己的 ×N；中鼓进度也按 ×N 走',
+  x2: '任何倍球的赠球固定 ×2；中鼓进度仍按该球自己的 ×N 走',
 };
 
 const BASE_TUNE = {
@@ -81,12 +94,22 @@ function parseInvocation(argv) {
   tune.leftDrumExtra = number(flags.drum, tune.leftDrumExtra);
   tune.clockExtra = number(flags.clock, tune.clockExtra);
   tune.valueScoreScale = number(flags.scale, tune.valueScoreScale);
-  const policy = flags.policy || 'paid';
-  if (!Object.hasOwn(POLICIES, policy)) throw new Error(`Unknown policy "${policy}". Use paid, p1, or p2.`);
-  return { rounds, preset, tune, policy };
+  const policy = POLICY_ALIASES[flags.policy || 'paid'];
+  if (!policy) throw new Error(`Unknown policy "${flags.policy}". Use paid, p1, p2, a, b, or c.`);
+  const gifts = flags.gifts || 'off';
+  if (!Object.hasOwn(GIFT_MODES, gifts)) throw new Error(`Unknown gifts "${gifts}". Use off, full, or x2.`);
+  return { rounds, preset, tune, policy, gifts };
 }
 
-const { rounds: ROUNDS, preset: PRESET, tune: TUNE, policy: POLICY } = parseInvocation(process.argv.slice(2));
+const { rounds: ROUNDS, preset: PRESET, tune: TUNE, policy: POLICY, gifts: GIFTS } = parseInvocation(process.argv.slice(2));
+
+// Gift scale follows the triggering ball. Center-drum progress uses the ball's
+// own multiplier in both full and x2; x2 only flattens the gift count.
+function giftMultiplier(valueFactor) {
+  const factor = ballValue(valueFactor);
+  if (GIFTS === 'off' || factor <= 1) return 1;
+  return GIFTS === 'full' ? factor : 2;
+}
 
 // p1 and p2 only change which tier chooseSpendFactor prefers. Fallback for a
 // short stock (unaffordable burst, last ball at ×1) stays the shipped rule.
@@ -128,17 +151,33 @@ function playRound(seed) {
   let enlargeGranted = 0;
   let drumExtraGranted = 0;
   let clockExtraGranted = 0;
+  let clockEmitted = 0;
+  let jarScheduled = 0;
+  let secretScale = 1;
+  let peakBalls = 0;
+  const reelGranted = { 1: 0, 2: 0, 3: 0 };
+  const pendingAll = [];
+  const pendingReel = [];
   const tierShots = { 1: 0, 2: 0, 4: 0, 8: 0 };
   const game = createTable({
     slots,
     random,
     starRandom: seeded(seed ^ 0x9e3779b9),
     slotRandom: seeded(seed ^ 0x85ebca6b),
+    ...(GIFTS === 'off' ? {} : {
+      centerHitWeight: ball => ballValue(ball.valueFactor),
+      giftScale: ball => giftMultiplier(ball.valueFactor),
+    }),
     onScore(result) {
       const paidBoost = result.valueFactor > 1 ? TUNE.valueScoreScale : 1;
       score += result.points * paidBoost;
+      if (GIFTS !== 'off') {
+        if ((game.slotMachine.entries + 1) % game.slotMachine.goal === 0) pendingAll.push(giftMultiplier(result.valueFactor));
+        if (result.lucky) pendingReel.push(giftMultiplier(result.valueFactor));
+      }
       if (result.kind === 'slot') bestSlot = Math.max(bestSlot, result.multiplier);
       if (result.kind === 'jackpot') {
+        if (!secretWait) secretScale = giftMultiplier(result.valueFactor);
         stock += game.setEmissionPaused(true);
         jackpots += 1;
         secretWait = true;
@@ -154,18 +193,29 @@ function playRound(seed) {
         stock += TUNE.enlargeBalls;
         enlargeGranted += TUNE.enlargeBalls;
       }
+      if (event.kind === 'storage-burst') jarScheduled += event.amount;
       if (event.kind === 'clock') {
+        clockEmitted += event.balls || 12;
         stock += DRUM_CLOCK_BALLS + TUNE.clockExtra;
         clockExtraGranted += TUNE.clockExtra;
       }
       if (event.kind === 'slot-result') {
+        let scale = 1;
+        if (GIFTS !== 'off') {
+          const queue = event.mode === 'reel' ? pendingReel : pendingAll;
+          if (queue.length) scale = queue.shift();
+        }
         if (event.mode === 'reel') {
           reelSpins += 1;
           if (event.paid) reelPaid += 1;
         }
         if (event.ballPayout) {
-          stock += event.ballPayout;
-          if (event.balls >= 1 && event.balls <= 3) ballHits[event.balls] += 1;
+          const granted = event.ballPayout * scale;
+          stock += granted;
+          if (event.balls >= 1 && event.balls <= 3) {
+            ballHits[event.balls] += 1;
+            reelGranted[event.balls] += granted;
+          }
         }
       }
     },
@@ -186,8 +236,9 @@ function playRound(seed) {
     }
     if (secretWait && idle && !miniAwarded) {
       const performanceScore = random() * MINI_BALLS_FULL_SCORE;
-      stock += TUNE.secretBalls + TUNE.miniBalls;
-      secretGranted += TUNE.secretBalls;
+      const secretPay = TUNE.secretBalls * secretScale;
+      stock += secretPay + TUNE.miniBalls;
+      secretGranted += secretPay;
       miniGranted += TUNE.miniBalls;
       score += Math.round(performanceScore * 0.35);
       miniMs += MINI_PAUSE_MS;
@@ -219,6 +270,7 @@ function playRound(seed) {
     }
     game.step();
     steps += 1;
+    if (game.balls.length > peakBalls) peakBalls = game.balls.length;
     const pending = game.collector.remaining;
     const stored = game.collector.stored.length;
     if (stock <= 0 && stored === 0 && pending === 0 && game.pendingLaunches === 0 && game.balls.length === 0 && !secretWait) break;
@@ -238,7 +290,8 @@ function playRound(seed) {
     playMs: launches * SHOT_GAP_MS + miniMs, capped: steps >= STEP_CAP, ballHits, reelSpins, reelPaid, after9,
     randomShots: game.stats.randomShots, enlargements: game.stats.enlargements, clockBursts: game.stats.clockBursts,
     jarReleases: game.stats.storageBursts, jarBalls: game.stats.storageDrops,
-    secretGranted, miniGranted, enlargeGranted, drumExtraGranted, clockExtraGranted,
+    secretGranted, miniGranted, enlargeGranted, drumExtraGranted, clockExtraGranted, clockEmitted, jarScheduled, reelGranted,
+    peakBalls, stockLeft: stock, tableBalls: game.balls.length,
   };
 }
 
@@ -296,6 +349,8 @@ console.log(JSON.stringify({
   tune: TUNE,
   policy: POLICY,
   policyText: POLICIES[POLICY],
+  gifts: GIFTS,
+  giftsText: GIFT_MODES[GIFTS],
   elapsedSec: Math.round((Date.now() - started) / 1000),
   startBalls: TUNE.startBalls,
   playMin: { mean: round2(mean(play)), median: round2(pick(play, 0.5)), p90: round2(pick(play, 0.9)) },
@@ -306,18 +361,19 @@ console.log(JSON.stringify({
     leftDrumPhysical: round1(mean(results.map(row => row.randomShots))),
     leftDrumExtra: round1(mean(results.map(row => row.drumExtraGranted))),
     clockBursts: round1(mean(results.map(row => row.clockBursts))),
-    clockBalls: round1(mean(results.map(row => row.clockBursts * 12 + row.clockExtraGranted))),
+    clockBalls: round1(mean(results.map(row => row.clockEmitted + row.clockExtraGranted))),
     clockExtra: round1(mean(results.map(row => row.clockExtraGranted))),
     jarReleases: round1(mean(results.map(row => row.jarReleases))),
     jarBalls: round1(mean(results.map(row => row.jarBalls))),
+    jarScheduled: round1(mean(results.map(row => row.jarScheduled))),
     secretVisits: round1(mean(results.map(row => row.jackpots))),
     secretBalls: round1(mean(results.map(row => row.secretGranted))),
     miniBalls: round1(mean(results.map(row => row.miniGranted))),
     enlargeBalls: round1(mean(results.map(row => row.enlargeGranted))),
-    reelPlus1: round1(mean(results.map(row => row.ballHits[1]))),
-    reelPlus10: round1(mean(results.map(row => row.ballHits[2] * 10))),
-    reelPlus100: round1(mean(results.map(row => row.ballHits[3] * 100))),
-    reelBalls: round1(mean(results.map(row => row.ballHits[1] + row.ballHits[2] * 10 + row.ballHits[3] * 100))),
+    reelPlus1: round1(mean(results.map(row => row.reelGranted[1]))),
+    reelPlus10: round1(mean(results.map(row => row.reelGranted[2]))),
+    reelPlus100: round1(mean(results.map(row => row.reelGranted[3]))),
+    reelBalls: round1(mean(results.map(row => row.reelGranted[1] + row.reelGranted[2] + row.reelGranted[3]))),
   },
   score: { mean: Math.round(mean(scores)), median: pick(scores, 0.5), p90: pick(scores, 0.9), max: Math.max(...scores) },
   reach: {
@@ -340,6 +396,9 @@ console.log(JSON.stringify({
     capped: row.capped,
   }] : []),
   cappedRuns: capped.length,
+  meanPeakBalls: round1(mean(results.map(row => row.peakBalls))),
+  maxPeakBalls: Math.max(...results.map(row => row.peakBalls)),
+  cappedStock: capped.length ? Math.round(mean(capped.map(row => row.stockLeft))) : 0,
   capped: capped.map(row => ({ score: row.score, launches: row.launches, slots: row.slots, jackpots: row.jackpots })),
   compareToPrevious40: { meanPlayMin: 7.99, meanScore: 20643, medianScore: 16902, maxScore: 57581, reached50k: 3, reached9: 8, reached7: 28 },
   meanScore: Math.round(mean(scores)),

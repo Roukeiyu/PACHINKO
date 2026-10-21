@@ -25,7 +25,7 @@ const DWELL_RADIUS = 12, DWELL_LIMIT = 1500, COLLECTOR_HOLD = 48;
 
 // Physics is independent of rendering, so trajectory and scoring can be tested at
 // the same fixed time step used on desktop and mobile (including fast launches).
-export function createTable({ slots = 7, collections = null, random = Math.random, starRandom = Math.random, slotRandom = Math.random, onHit = () => {}, onScore = () => {}, onReturn = () => {}, onDrain = () => {}, onSurprise = () => {} } = {}) {
+export function createTable({ slots = 7, collections = null, random = Math.random, starRandom = Math.random, slotRandom = Math.random, onHit = () => {}, onScore = () => {}, onReturn = () => {}, onDrain = () => {}, onSurprise = () => {}, centerHitWeight = null, giftScale = null } = {}) {
   const engine = Engine.create({ gravity: { x: 0, y: 1.05 }, positionIterations: 8, velocityIterations: 8 });
   const balls = [], walls = [], pins = [], kickers = [], bumpers = [], rails = [], diamonds = [], spinners = [], guards = [], dividers = [], gates = [];
   const holes = [{ x: 615, y: 482, facing: Math.PI, glow: 0 }];
@@ -257,14 +257,21 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     }
     return columns;
   }
+  function scaledCount(ball) {
+    if (!giftScale || !ball) return 1;
+    const raw = Math.floor(Number(giftScale(ball)));
+    return Number.isFinite(raw) && raw > 1 ? raw : 1;
+  }
   function storeBall(ball) {
-    // One stored ball per capture. Star multipliers stay. The paid ×N does not:
-    // the release drops that many normal balls, not ×N balls.
+    // One stored ball per capture. Star multipliers stay on that ball. The paid
+    // ×N is not copied onto the drop. giftScale, when the sim passes it, repeats
+    // the whole release as extra ×1 balls. The default scale is 1, a 1:1 drop.
     collector.stored.push(ball.scoreFactor); stats.absorbed++; collector.glow = 1;
     onSurprise({ kind: 'store', x: collector.x, y: collector.y, count: collector.stored.length, capacity: collector.capacity, ballId: ball.id, scoreFactor: ball.scoreFactor });
     if (collector.stored.length < collector.capacity) return;
-    // Stored balls are already in the player's hand, so the release matches them 1:1.
-    const factors = collector.stored.splice(0);
+    const stored = collector.stored.splice(0);
+    const scale = scaledCount(ball);
+    const factors = scale === 1 ? stored : stored.concat(Array((scale - 1) * stored.length).fill(1));
     const columns = shuffledColumns(factors.length);
     let due = Math.max(clock + 250, (pendingDrops.at(-1)?.due ?? clock) + 100);
     factors.forEach((scoreFactor, i) => {
@@ -272,7 +279,7 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
       due += 80 + random() * 60;
     });
     collector.remaining = pendingDrops.length; stats.storageBursts++;
-    onSurprise({ kind: 'storage-burst', x: collector.x, y: collector.y, amount: factors.length });
+    onSurprise({ kind: 'storage-burst', x: collector.x, y: collector.y, amount: factors.length, ...(scale > 1 ? { valueFactor: ballValue(ball.valueFactor), scale } : {}) });
   }
   function emitDrop(drop) {
     const outlet = collector.outlets[drop.column];
@@ -293,22 +300,44 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     Body.scale(bumper, radius / bumper.plugin.radius, radius / bumper.plugin.radius);
     bumper.plugin.radius = radius;
   }
-  function recordBumperHit(bumper) {
+  function recordBumperHit(bumper, ball) {
     const index = bumper.plugin.index;
-    rewards.hits[index]++;
-    if (rewards.hits[index] % rewards.goals[index]) return;
-    if (index === 0) {
-      stats.randomShots++;
-      pendingShots.push({ due: clock, index: 0, angle: random() * Math.PI * 2, kind: 'random', ordinal: 0 });
-      onSurprise({ kind: 'random', x: bumper.position.x, y: bumper.position.y });
-    } else if (index === 1) {
-      stats.enlargements++; rewards.enlargedUntil = clock + ENLARGE_MS;
-      resizeCenter(true);
-      onSurprise({ kind: 'enlarge', x: bumpers[2].position.x, y: bumpers[2].position.y });
-    } else {
-      stats.clockBursts++; rewards.burstUntil = clock + 1200;
-      for (let i = 0; i < 12; i++) pendingShots.push({ due: clock + i * 1000 / 12, index: 2, angle: -Math.PI / 2 + i * Math.PI / 6, kind: 'clock', ordinal: i });
-      onSurprise({ kind: 'clock', x: bumper.position.x, y: bumper.position.y });
+    // Center drum only (index 2, the meter that pays the 12-ball clock).
+    // Left and right drums always advance by 1. Omitting the hook keeps +1.
+    let weight = 1;
+    if (index === 2 && centerHitWeight && ball) {
+      const raw = Math.floor(Number(centerHitWeight(ball)));
+      if (Number.isFinite(raw) && raw > 1) weight = raw;
+    }
+    const before = rewards.hits[index];
+    rewards.hits[index] = before + weight;
+    const goal = rewards.goals[index];
+    const triggers = weight === 1
+      ? (rewards.hits[index] % goal === 0 ? 1 : 0)
+      : Math.floor(rewards.hits[index] / goal) - Math.floor(before / goal);
+    if (!triggers) return;
+    const scale = scaledCount(ball);
+    const factor = ball ? ballValue(ball.valueFactor) : 1;
+    for (let n = 0; n < triggers; n++) {
+      if (index === 0) {
+        stats.randomShots += scale;
+        for (let k = 0; k < scale; k++) {
+          pendingShots.push({ due: clock + (n * scale + k) * (scale === 1 ? 0 : 40), index: 0, angle: random() * Math.PI * 2, kind: 'random', ordinal: k });
+        }
+        onSurprise({ kind: 'random', x: bumper.position.x, y: bumper.position.y, ...(scale > 1 ? { valueFactor: factor, balls: scale } : {}) });
+      } else if (index === 1) {
+        stats.enlargements++; rewards.enlargedUntil = clock + ENLARGE_MS;
+        resizeCenter(true);
+        onSurprise({ kind: 'enlarge', x: bumpers[2].position.x, y: bumpers[2].position.y });
+      } else {
+        stats.clockBursts++;
+        const count = 12 * scale;
+        rewards.burstUntil = clock + Math.max(1200, (count - 1) * 1000 / 12);
+        for (let i = 0; i < count; i++) {
+          pendingShots.push({ due: clock + i * 1000 / 12, index: 2, angle: -Math.PI / 2 + (i % 12) * Math.PI / 6, kind: 'clock', ordinal: i % 12 });
+        }
+        onSurprise({ kind: 'clock', x: bumper.position.x, y: bumper.position.y, ...(scale > 1 ? { valueFactor: factor, balls: count } : {}) });
+      }
     }
   }
   Events.on(engine, 'collisionStart', event => {
@@ -330,7 +359,7 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
       }
       if (obstacle.label === 'bumper' && clock - ball.lastBumperHits[obstacle.plugin.index] > 100) {
         ball.lastBumperHits[obstacle.plugin.index] = clock;
-        recordBumperHit(obstacle);
+        recordBumperHit(obstacle, ball);
       }
       if (['bumper', 'kicker'].includes(obstacle.label) && clock - ball.lastKick > 170) {
         const dx = body.position.x - obstacle.position.x, dy = body.position.y - obstacle.position.y;
