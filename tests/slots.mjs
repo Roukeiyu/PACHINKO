@@ -57,8 +57,8 @@ for (const [from, to] of [[5, 7], [7, 9], [5, 9]]) {
     const width = mid.regions[extra + index].x1 - mid.regions[extra + index].x0;
     const halfway = before + (after - before) * mid.eased;
     assert.ok(Math.abs(width - halfway) < 0.6, `${from}→${to} eases an existing drain toward its new width`);
-    if (from === 7 && to === 9) assert.ok(after > before + 0.5, 'nine-slot drains are wider than the seven-slot drains they replace');
-    else if (to !== 9) assert.ok(after < before - 0.5, 'a smaller row narrows the drains it keeps');
+    if (from === 7 && to === 9) assert.ok(Math.abs(after - before) < 0.6, 'seven and nine slots keep the same wide drains');
+    else if (from === 5 && to === 7) assert.ok(after < before - 0.5, 'the five-slot drains narrow as the row gains end slots');
   });
   let edge = start.regions[0].x0;
   for (const region of mid.regions) {

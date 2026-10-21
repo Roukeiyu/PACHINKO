@@ -111,29 +111,6 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       const width = region.x1 - region.x0;
       if (width < 1.5) continue;
       const mid = (region.x0 + region.x1) / 2;
-      if (region.kind === 'apron') {
-        const left = region.side === 'left' || (region.side !== 'right' && mid < W / 2);
-        const neighbor = left
-          ? layout.regions.find(item => item.kind === 'slot' && item.x0 >= region.x1 - 1)
-          : [...layout.regions].reverse().find(item => item.kind === 'slot' && item.x1 <= region.x0 + 1);
-        const reach = neighbor ? Math.min(24, (neighbor.x1 - neighbor.x0) * 0.55) : 0;
-        const foot = left ? region.x1 + reach : region.x0 - reach;
-        const outer = left ? region.x0 : region.x1;
-        ctx.beginPath();
-        ctx.moveTo(outer, TABLE.slotTop + 8);
-        ctx.lineTo(outer, TABLE.slotTop + 98);
-        ctx.lineTo(foot, TABLE.slotTop + 98);
-        ctx.closePath();
-        ctx.fillStyle = paintColor('#8ea584', 'object');
-        ctx.fill();
-        ctx.strokeStyle = paintColor('#6d8064', 'line');
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(outer, TABLE.slotTop + 8);
-        ctx.lineTo(foot, TABLE.slotTop + 98);
-        ctx.stroke();
-        continue;
-      }
       if (region.kind === 'drain') {
         box(region.x0, TABLE.slotTop, width, 98, 3, '#5c2428');
         ctx.save();

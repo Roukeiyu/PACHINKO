@@ -30,7 +30,6 @@ function describeSlot(count, column, multiplier, fresh, fromColumn, fromMultipli
 function paintRegions(count) {
   const multipliers = slotMultipliers(count);
   return slotFrame(count).regions.map(region => {
-    if (region.kind === 'apron') return { kind: 'apron', side: region.side, fresh: false, x0: region.x0, x1: region.x1 };
     if (region.kind !== 'slot') return { kind: 'drain', fresh: false, x0: region.x0, x1: region.x1 };
     const multiplier = multipliers[region.column];
     return { ...describeSlot(count, region.column, multiplier, false, region.column, multiplier), x0: region.x0, x1: region.x1 };
@@ -39,8 +38,8 @@ function paintRegions(count) {
 
 // The old row is the middle of the new row. Anything added on the left grows
 // out of the left wall, and the same number of pieces grows out of the right
-// wall. 5→7 adds a drain and a slot per side. 7→9 and 5→9 add the nine-slot
-// aprons and the extra slots (and, for 5→9, the extra inner drains) the same way.
+// wall. 5→7 grows one payout slot per side while the slots already on the row
+// narrow. 7→9 grows a slot and a drain per side. There is no side slope.
 function morphRegions(fromCount, toCount, eased) {
   const fromFrame = slotFrame(fromCount);
   const toFrame = slotFrame(toCount);
@@ -58,7 +57,6 @@ function morphRegions(fromCount, toCount, eased) {
     });
   };
   const fieldsFor = (target, fresh, fromRegion) => {
-    if (target.kind === 'apron') return { kind: 'apron', side: target.side, fresh };
     if (target.kind === 'drain') return { kind: 'drain', fresh };
     const toMultiplier = toMult[target.column];
     const fromMultiplier = fromRegion ? fromMult[fromRegion.column] : toMultiplier;

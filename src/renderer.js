@@ -205,22 +205,6 @@ function create3DRenderer(canvas) {
       if (region.kind === 'drain') {
         if (width < 6) continue;
         layoutBox(cx, TABLE.slotTop + 50, Math.max(4, width - 2), 96, 2, hazardSide, -6, 2);
-      } else if (region.kind === 'apron') {
-        if (width < 4) continue;
-        const left = region.side === 'left' || (region.side !== 'right' && cx < W / 2);
-        const neighbor = left
-          ? frame.regions.find(item => item.kind === 'slot' && item.x0 >= region.x1 - 1)
-          : [...frame.regions].reverse().find(item => item.kind === 'slot' && item.x1 <= region.x0 + 1);
-        const reach = neighbor ? Math.min(24, (neighbor.x1 - neighbor.x0) * 0.55) : 0;
-        const foot = left ? region.x1 + reach : region.x0 - reach;
-        const outer = left ? region.x0 : region.x1;
-        const shape = new THREE.Shape();
-        const x0 = Math.min(outer, foot), x1 = Math.max(outer, foot);
-        shape.moveTo(x0, 0); shape.lineTo(x1, 0); shape.lineTo(outer, 78); shape.closePath();
-        const mesh = extrude(shape, 12, floorSide, 0);
-        mesh.material = floorSide; mesh.castShadow = false; mesh.receiveShadow = true;
-        mesh.position.copy(world(0, TABLE.slotTop + 90, -6));
-        layoutModels.push(mesh);
       } else if (region.kind === 'slot' && width >= 14) {
         layoutBox(cx, TABLE.slotTop + 43, width - 4, 78, 3, goldSide, -.5, 6);
       }
@@ -229,10 +213,14 @@ function create3DRenderer(canvas) {
     // Physics walls are already on the new row. While the picture eases, draw
     // the lips on the easing mouths instead of the settled bodies.
     if (animating) {
-      for (const region of frame.regions) {
-        if (region.kind !== 'slot' || region.x1 - region.x0 < 16) continue;
-        layoutBox(region.x0 + DRAIN_WALL / 2, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
-        layoutBox(region.x1 - DRAIN_WALL / 2, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
+      const pictured = frame.regions.filter(region => region.kind === 'slot');
+      const flush = shift.to !== 5;
+      for (const region of pictured) {
+        if (region.x1 - region.x0 < 16) continue;
+        const outerLeft = flush && region === pictured[0];
+        const outerRight = flush && region === pictured[pictured.length - 1];
+        if (!outerLeft) layoutBox(region.x0 + DRAIN_WALL / 2, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
+        if (!outerRight) layoutBox(region.x1 - DRAIN_WALL / 2, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
       }
     } else {
       for (const b of game.dividers) bodyModel(b, hazardSide, 9);
