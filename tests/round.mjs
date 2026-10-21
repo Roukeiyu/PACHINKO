@@ -26,7 +26,8 @@ for (const score of [0, 1400, 5600, 1e9]) {
 assert.equal(secretHoleBalls({ valueFactor: 1 }).holeBalls, SECRET_BALLS);
 assert.equal(secretHoleBalls({ valueFactor: 8 }).holeBalls, SECRET_BALLS * 8);
 assert.equal(secretHoleBalls({ valueFactor: 8 }).miniBalls, 0, 'a multiplied secret visit still pays no mini-game balls');
-assert.equal(BOARD_CROWD_LOCK >= 40 && BOARD_CROWD_LOCK <= 60, true, 'the crowd lock stays in the measured smooth band');
+assert.equal(BOARD_CROWD_LOCK, 100);
+assert.equal(boardCrowdUnlock(), 50);
 assert.equal(boardCrowdUnlock(), Math.floor(BOARD_CROWD_LOCK / 2));
 assert.equal(crowdLaunchLocked(false, BOARD_CROWD_LOCK - 1), false);
 assert.equal(crowdLaunchLocked(false, BOARD_CROWD_LOCK), true);

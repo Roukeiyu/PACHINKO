@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { SLOT_LAYOUTS, SLOT_UNLOCK_7, SLOT_UNLOCK_9, nextSlotCount, restoreSlots, slotMultipliers, slotsForScore } from '../src/slots.js';
+import { SLOT_ROW_LEFT, SLOT_ROW_RIGHT, slotFrame } from '../src/round.js';
+import { SLOT_TRANSITION_MS, blendSlotLayout, slotTransitionEase } from '../src/slot-transition.js';
 
 assert.equal(SLOT_UNLOCK_7, 3000);
 assert.equal(SLOT_UNLOCK_9, 10000);
@@ -21,4 +23,56 @@ for (const count of [5, 7, 9]) {
   assert.equal(row[Math.floor(row.length / 2)], count === 5 ? 5 : count === 7 ? 10 : 20);
   assert.deepEqual(row, [...row].reverse(), 'layouts stay symmetric');
 }
-console.log('PASS: slot thresholds, no downgrade, and the 5/7/9 multiplier tables.');
+assert.equal(SLOT_TRANSITION_MS, 900);
+assert.ok(SLOT_TRANSITION_MS >= 600 && SLOT_TRANSITION_MS <= 1200);
+assert.equal(slotTransitionEase(0), 0);
+assert.equal(slotTransitionEase(1), 1);
+assert.equal(slotTransitionEase(0.5), 0.5);
+for (const [from, to] of [[5, 7], [7, 9], [5, 9]]) {
+  const start = blendSlotLayout(from, to, 0);
+  const end = blendSlotLayout(from, to, 1);
+  const mid = blendSlotLayout(from, to, 0.5);
+  const almost = blendSlotLayout(from, to, 0.999);
+  const old = slotFrame(from);
+  const next = slotFrame(to);
+  const visible = start.regions.filter(region => region.x1 - region.x0 > 0.01);
+  assert.equal(visible.length, old.regions.length, `${from}→${to} starts on the old mouths`);
+  visible.forEach((region, index) => {
+    assert.equal(region.kind, old.regions[index].kind);
+    assert.ok(Math.abs(region.x0 - old.regions[index].x0) < 1e-6);
+    assert.ok(Math.abs(region.x1 - old.regions[index].x1) < 1e-6);
+  });
+  assert.equal(start.regions[0].kind, 'drain');
+  assert.ok(start.regions[0].x1 - start.regions[0].x0 < 1e-6, 'the new left drain starts shut');
+  assert.equal(start.regions.at(-1).kind, 'drain');
+  assert.ok(start.regions.at(-1).x1 - start.regions.at(-1).x0 < 1e-6, 'the new right drain starts shut');
+  assert.ok(mid.regions[0].x1 - mid.regions[0].x0 > 1, 'the new left drain has grown by halfway');
+  const oldDrains = old.regions.filter(region => region.kind === 'drain');
+  const midDrains = mid.regions.filter(region => region.kind === 'drain' && region.fresh === false);
+  assert.equal(midDrains.length, oldDrains.length);
+  midDrains.forEach((region, index) => {
+    assert.ok(region.x1 - region.x0 < oldDrains[index].x1 - oldDrains[index].x0 - 0.5, 'an existing drain narrows');
+  });
+  let edge = start.regions[0].x0;
+  for (const region of mid.regions) {
+    assert.ok(Math.abs(region.x0 - edge) < 1e-4, `${from}→${to} mouths stay tiled`);
+    assert.ok(region.x1 >= region.x0);
+    edge = region.x1;
+  }
+  assert.ok(Math.abs(mid.regions[0].x0 - SLOT_ROW_LEFT) < 1e-4);
+  assert.ok(Math.abs(edge - SLOT_ROW_RIGHT) < 1e-4);
+  assert.equal(end.regions.length, next.regions.length);
+  end.regions.forEach((region, index) => {
+    assert.equal(region.kind, next.regions[index].kind);
+    assert.ok(Math.abs(region.x0 - next.regions[index].x0) < 1e-6);
+    assert.ok(Math.abs(region.x1 - next.regions[index].x1) < 1e-6);
+  });
+  almost.regions.forEach((region, index) => {
+    assert.equal(region.kind, next.regions[index].kind);
+    assert.ok(Math.abs(region.x0 - next.regions[index].x0) < 3);
+    assert.ok(Math.abs(region.x1 - next.regions[index].x1) < 3);
+  });
+  const changing = mid.regions.find(region => region.kind === 'slot' && region.fromMultiplier !== region.toMultiplier);
+  assert.ok(changing, `${from}→${to} eases at least one multiplier`);
+}
+console.log('PASS: slot thresholds, no downgrade, the 5/7/9 multiplier tables, and the drain transition.');

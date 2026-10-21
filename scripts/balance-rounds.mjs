@@ -231,9 +231,11 @@ function playRound(seed) {
   while (steps < STEP_CAP) {
     const next = slotsForTune(score);
     const idle = game.balls.length === 0 && game.collector.remaining === 0 && game.pendingLaunches === 0;
-    if (next > slots && idle && !secretWait) {
+    // Same rule as the table: crossing 3000 / 10000 upgrades immediately and
+    // leaves balls that are already in play on the new mouths.
+    if (next > slots) {
       slots = next;
-      game.setSlots(next);
+      game.setSlots(next, { keepBalls: true });
       if (slots >= 9 && !at9) {
         at9 = { score, ballsSpent, launches, miniMs, steps };
       }

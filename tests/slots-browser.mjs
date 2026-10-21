@@ -37,10 +37,12 @@ try {
   assert.equal(await page.evaluate(() => window.__ponpon.holdBall()), true);
   await page.evaluate(goal => window.__ponpon.grant(goal - window.__ponpon.score), SLOT_UNLOCK_9);
   await page.clock.runFor(30);
-  assert.equal(await page.evaluate(() => window.__ponpon.slots), 7, 'a ball on the table delays the 9-slot switch');
+  assert.equal(await page.evaluate(() => window.__ponpon.slots), 9, 'a ball on the table does not delay the 9-slot switch');
+  assert.ok(await page.evaluate(() => window.__ponpon.activeBalls > 0), 'the live ball stays on the table');
   await page.evaluate(() => window.__ponpon.releaseWave());
   await page.clock.runFor(50);
   assert.equal(await page.evaluate(() => window.__ponpon.slots), 9);
+  assert.equal(await page.evaluate(() => window.__ponpon.activeBalls), 0);
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('ponpon-settings')).slots), 9);
   await page.reload();
   await page.clock.runFor(50);
@@ -48,5 +50,5 @@ try {
   assert.equal(await page.evaluate(() => window.__ponpon.score), 0, 'a refresh starts the next round at score 0');
   assert.equal(await page.evaluate(() => window.__ponpon.keepProgress), false);
   assert.deepEqual(errors, []);
-  console.log('PASS: score thresholds upgrade 5→7→9, a live ball waits, vibration and toast fire, and a refresh starts a fresh round.');
+  console.log('PASS: score thresholds upgrade 5→7→9 immediately with a live ball, vibration and toast fire, and a refresh starts a fresh round.');
 } finally { await browser.close(); }

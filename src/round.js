@@ -74,7 +74,7 @@ export function secretHoleBalls(scoreOrOptions) {
 
 // Live balls at or above this count lock the player's launch until the board
 // drains below half of it. Gift and burst balls are not refused.
-export const BOARD_CROWD_LOCK = 48;
+export const BOARD_CROWD_LOCK = 100;
 
 export function boardCrowdUnlock() {
   return Math.floor(BOARD_CROWD_LOCK / 2);

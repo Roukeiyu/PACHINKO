@@ -1,8 +1,8 @@
 import { chargeEffectsAt } from './charge.js';
 import { sceneMotionAt, project2DMotion } from './scene-motion.js';
-import { TABLE, slotMultipliers, LAUNCH_SQUASH } from './physics.js';
+import { TABLE, LAUNCH_SQUASH } from './physics.js';
 import { BOARD_CROWD_LOCK } from './round.js';
-import { slotFrame } from './round.js';
+import { blendSlotLayout } from './slot-transition.js';
 import { SLOT_DISPLAY, BALL_SYMBOL, REEL_WEIGHTS, reelBox, PROGRESS_TOP, PROGRESS_HEIGHT, slotBonusLabel } from './slot-machine.js';
 import { drawReelSymbol } from './reel-icons.js';
 import { rewardProfile, activeRewardScenes, rewardSceneAt, marqueePoint } from './reward-effects.js';
@@ -44,6 +44,27 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     const g = ctx.createRadialGradient(x - 3, y - 4, 0, x, y, 12); g.addColorStop(0, paintColor('#ffffff')); g.addColorStop(.6, paintColor('#fffde8')); g.addColorStop(1, paintColor('#ffdb76'));
     circle(x, y, 11.5, g); circle(x - 3, y - 4, 3.5, '#fff'); ctx.restore(); paintingBall = false;
   }
+  function mixHex(from, to, t) {
+    const channels = hex => {
+      const raw = String(hex).replace('#', '');
+      const full = raw.length >= 6 ? raw : raw.slice(0, 3).split('').map(ch => ch + ch).join('');
+      return [0, 2, 4].map(index => parseInt(full.slice(index, index + 2), 16));
+    };
+    if (typeof from !== 'string' || typeof to !== 'string' || from[0] !== '#' || to[0] !== '#') return t >= 1 ? to : from;
+    const a = channels(from), b = channels(to);
+    const value = index => Math.round(a[index] + (b[index] - a[index]) * t);
+    return `rgb(${value(0)} ${value(1)} ${value(2)})`;
+  }
+  function formatMultiplier(from, to, eased, bonus) {
+    const value = (from + (to - from) * eased) * bonus;
+    const rounded = Math.round(value * 10) / 10;
+    return `×${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)}`;
+  }
+  function slotLayout(state) {
+    const shift = state.slotTransition;
+    if (!shift) return blendSlotLayout(state.slots, state.slots, 1);
+    return blendSlotLayout(shift.from, shift.to, (performance.now() - shift.startedAt) / shift.duration);
+  }
   function draw(game, theme, state, fx, palette = null) {
     activePalette = palette;
     const t = state.calm ? 0 : game.clock / 1000;
@@ -76,9 +97,13 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     ctx.save();ctx.globalAlpha=.8;bodyShape(game.gates[1], game.rewards.gateGlow ? '#f8cc77' : '#d7bf97', '#fff3d6', false);ctx.restore();
     ctx.save();ctx.setLineDash([5,6]);ctx.strokeStyle = paintColor('#a7ba8e', 'line');ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(676,539);ctx.lineTo(676,615);ctx.stroke();ctx.restore();
     text('↙ 回流口', 624, 640, 12, '#9b8965');
-    const multipliers = slotMultipliers(state.slots);
-    for (const region of slotFrame(state.slots).regions) {
+    const layout = slotLayout(state);
+    const iconSize = (layout.from === 9 ? 16 : 20) + ((layout.to === 9 ? 16 : 20) - (layout.from === 9 ? 16 : 20)) * layout.eased;
+    const scoreSize = (layout.from === 9 ? 12 : 15) + ((layout.to === 9 ? 12 : 15) - (layout.from === 9 ? 12 : 15)) * layout.eased;
+    for (const region of layout.regions) {
       const width = region.x1 - region.x0;
+      if (width < 1.5) continue;
+      const mid = (region.x0 + region.x1) / 2;
       if (region.kind === 'drain') {
         box(region.x0, TABLE.slotTop, width, 98, 3, '#5c2428');
         ctx.save();
@@ -86,18 +111,28 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
         ctx.strokeStyle = paintColor('#e7b8a2', 'line'); ctx.lineWidth = 1.5; ctx.globalAlpha = .55;
         for (let y = TABLE.slotTop - 6; y < TABLE.slotTop + 98; y += 8) { ctx.beginPath(); ctx.moveTo(region.x0, y); ctx.lineTo(region.x1, y + 7); ctx.stroke(); }
         ctx.restore();
-        const labelSize = width >= 36 ? 13 : 10;
-        if (width >= 12) text('漏', (region.x0 + region.x1) / 2, TABLE.slotTop + 78, labelSize, '#f6d7c8', 'bold');
+        if (width >= 12) text('漏', mid, TABLE.slotTop + 78, width >= 36 ? 13 : 10, '#f6d7c8', 'bold');
         continue;
       }
-      const i = region.column, glow = fx.slotGlows[i] || 0;
+      const eased = layout.eased;
+      const fromColor = paintColor(theme.colors[slotColorIndex(region.fromMultiplier)], 'object');
+      const toColor = paintColor(theme.colors[slotColorIndex(region.toMultiplier)], 'object');
       const inset = Math.min(3, width / 6);
-      box(region.x0 + inset, TABLE.slotTop, width - inset * 2, 86, 8, theme.colors[slotColorIndex(multipliers[i])]);
-      if (glow) { const p = rewardProfile({ multiplier: multipliers[i] }); ctx.save(); ctx.globalAlpha = glow * .65; ctx.shadowBlur = 8 + p.tier * 5; ctx.shadowColor = paintColor(p.color, 'glow'); box(region.x0 + inset, TABLE.slotTop, width - inset * 2, 86, 8, p.color); ctx.restore(); }
-      text(slotIcon(multipliers[i]), (region.x0 + region.x1) / 2, TABLE.slotTop + 23, state.slots === 9 ? 16 : 20, '#627454');
-      text(`×${multipliers[i] * bonus.multiplier}`, (region.x0 + region.x1) / 2, TABLE.slotTop + 54, state.slots === 9 ? 12 : 15, '#4c6648', 'bold');
-      if (bonus.multiplier > 1) text(`进洞 ×${bonus.multiplier}`, (region.x0 + region.x1) / 2, TABLE.slotTop + 73, 9, bonus.multiplier === 5 ? '#8b59b5' : '#99712d');
-      else if (i === (state.slots - 1) / 2 || multipliers[i] >= 10) text('LUCKY', (region.x0 + region.x1) / 2, TABLE.slotTop + 73, 8, '#aa8243');
+      box(region.x0 + inset, TABLE.slotTop, width - inset * 2, 86, 8, mixHex(fromColor, toColor, eased));
+      const glow = fx.slotGlows[region.column] || 0;
+      if (glow) { const p = rewardProfile({ multiplier: region.toMultiplier }); ctx.save(); ctx.globalAlpha = glow * .65; ctx.shadowBlur = 8 + p.tier * 5; ctx.shadowColor = paintColor(p.color, 'glow'); box(region.x0 + inset, TABLE.slotTop, width - inset * 2, 86, 8, p.color); ctx.restore(); }
+      if (width < 16) continue;
+      if (region.fromMultiplier === region.toMultiplier) text(slotIcon(region.toMultiplier), mid, TABLE.slotTop + 23, iconSize, '#627454');
+      else {
+        ctx.save(); ctx.globalAlpha = 1 - eased; text(slotIcon(region.fromMultiplier), mid, TABLE.slotTop + 23, iconSize, '#627454'); ctx.restore();
+        ctx.save(); ctx.globalAlpha = eased; text(slotIcon(region.toMultiplier), mid, TABLE.slotTop + 23, iconSize, '#627454'); ctx.restore();
+      }
+      text(formatMultiplier(region.fromMultiplier, region.toMultiplier, eased, bonus.multiplier), mid, TABLE.slotTop + 54, scoreSize, '#4c6648', 'bold');
+      if (bonus.multiplier > 1) text(`进洞 ×${bonus.multiplier}`, mid, TABLE.slotTop + 73, 9, bonus.multiplier === 5 ? '#8b59b5' : '#99712d');
+      else {
+        const lucky = (region.luckyFrom ? 1 - eased : 0) + (region.luckyTo ? eased : 0);
+        if (lucky > 0.04) { ctx.save(); ctx.globalAlpha = Math.min(1, lucky); text('LUCKY', mid, TABLE.slotTop + 73, 8, '#aa8243'); ctx.restore(); }
+      }
     }
     for (const hole of game.holes) {
       const treasure = (fx.celebrations || []).find(b => b.kind === 'jackpot' && b.x === hole.x && b.y === hole.y);

@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createRenderer as createCanvasRenderer } from './renderer-2d.js';
 import { TABLE, LAUNCH_SQUASH } from './physics.js';
-import { slotFrame } from './round.js';
+import { DRAIN_WALL, slotFrame } from './round.js';
+import { blendSlotLayout } from './slot-transition.js';
 import { reelBox } from './slot-machine.js';
 import { chargeEffectsAt } from './charge.js';
 import { sceneMotionAt } from './scene-motion.js';
@@ -170,21 +171,45 @@ function create3DRenderer(canvas) {
     }
     for (const spinner of game.spinners) disc(spinner.position.x, spinner.position.y, 15, 5, goldSide, 12);
   }
-  let slotCount = 0, dividerKey = '';
-  function updateLayout(game) {
+  let layoutKey = '';
+  function layoutBox(x, y, width, height, depth, side, z, radius) {
+    if (width < 3 || height < 3) return;
+    const fit = Math.min(radius, width / 2 - 0.4, height / 2 - 0.4);
+    layoutModels.push(box(x, y, width, height, depth, side, z, Math.max(0.4, fit)));
+  }
+  function updateLayout(game, state) {
+    const shift = state?.slotTransition;
+    const elapsed = shift ? (performance.now() - shift.startedAt) / shift.duration : 1;
+    const animating = !!(shift && elapsed < 1);
     const ids = game.dividers.map(body => body.id).join(',');
-    if (slotCount === game.slots && dividerKey === ids) return;
+    const quant = animating ? Math.round(elapsed * 24) : -1;
+    const key = animating ? `blend:${shift.from}:${shift.to}:${quant}` : `${game.slots}:${ids}`;
+    if (key === layoutKey) return;
     for (const mesh of layoutModels.splice(0)) { table.remove(mesh); mesh.geometry.dispose(); }
     for (const [id, entry] of bodies) if (entry.body.label === 'divider') { table.remove(entry.mesh); entry.mesh.geometry.dispose(); bodies.delete(id); }
-    slotCount = game.slots; dividerKey = ids;
-    const frame = slotFrame(game.slots);
+    layoutKey = key;
+    const frame = animating ? blendSlotLayout(shift.from, shift.to, elapsed) : slotFrame(game.slots);
     for (const region of frame.regions) {
       const cx = (region.x0 + region.x1) / 2, width = region.x1 - region.x0;
-      if (region.kind === 'drain') layoutModels.push(box(cx, TABLE.slotTop + 50, Math.max(4, width - 2), 96, 2, hazardSide, -6, 2));
-      else layoutModels.push(box(cx, TABLE.slotTop + 43, Math.max(8, width - 4), 78, 3, goldSide, -.5, 6));
+      if (region.kind === 'drain') {
+        if (width < 6) continue;
+        layoutBox(cx, TABLE.slotTop + 50, Math.max(4, width - 2), 96, 2, hazardSide, -6, 2);
+      } else if (width >= 14) {
+        layoutBox(cx, TABLE.slotTop + 43, width - 4, 78, 3, goldSide, -.5, 6);
+      }
     }
-    for (const outlet of game.collector.outlets) layoutModels.push(box(outlet.x, outlet.y, 52, 17, 7, purpleSide, 0, 6));
-    for (const b of game.dividers) bodyModel(b, hazardSide, 9);
+    for (const outlet of game.collector.outlets) layoutBox(outlet.x, outlet.y, 52, 17, 7, purpleSide, 0, 6);
+    // Physics walls are already on the new row. While the picture eases, draw
+    // the lips on the easing mouths instead of the settled bodies.
+    if (animating) {
+      for (const region of frame.regions) {
+        if (region.kind !== 'slot' || region.x1 - region.x0 < 16) continue;
+        layoutBox(region.x0 + DRAIN_WALL / 2, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
+        layoutBox(region.x1 - DRAIN_WALL / 2, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
+      }
+    } else {
+      for (const b of game.dividers) bodyModel(b, hazardSide, 9);
+    }
   }
   const sphere = new THREE.SphereGeometry(11, 24, 16);
   const ballMaterial = new THREE.MeshStandardMaterial({ color: '#ffedb0', metalness: .6, roughness: .2, envMapIntensity: 1.4 });
@@ -331,7 +356,7 @@ function create3DRenderer(canvas) {
   let paintedState = '';
   function draw(game, theme, state, fx, palette = null) {
     if (!currentGame) { setup(game); currentGame = game; }
-    updateLayout(game);
+    updateLayout(game, state);
     const paletteChanged = currentPalette !== palette || currentTheme !== theme;
     if (paletteChanged) {
       currentPalette = palette; currentTheme = theme;

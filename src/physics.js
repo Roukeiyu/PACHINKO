@@ -146,9 +146,12 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   }
   placeStar();
   function clearBalls() { for (const ball of balls) Composite.remove(engine.world, ball.body); balls.length = 0; pendingShots.length = 0; pendingLaunches.length = 0; rewards.burstUntil = 0; rewards.burstStep = -1; }
-  function setSlots(count) {
+  function setSlots(count, { keepBalls = false } = {}) {
     if (![5, 7, 9].includes(count)) throw new RangeError('Slots must be 5, 7, or 9');
-    slots = count; clearBalls();
+    slots = count;
+    // A new round and the GM control clear the table. A score upgrade keeps
+    // whatever is already in play and lets it meet the new mouths immediately.
+    if (!keepBalls) clearBalls();
     for (const body of dividers) Composite.remove(engine.world, body);
     dividers.length = 0;
     const frame = slotFrame(slots);

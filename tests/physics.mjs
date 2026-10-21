@@ -180,6 +180,16 @@ const ball = game.launch();
 Matter.Body.setPosition(ball.body, { x: TABLE.launchX, y: 820 }); Matter.Body.setVelocity(ball.body, { x: 0, y: 3 });
 game.step(); assert.equal(scores.length, 0); assert.equal(game.stats.returns, 1, 'falling in shooter lane returns without scoring');
 game.launch(); game.setSlots(9); assert.equal(game.balls.length, 0); assert.equal(game.slots, 9);
+{
+  const kept = createTable();
+  kept.launch();
+  assert.equal(kept.balls.length, 1);
+  kept.setSlots(7, { keepBalls: true });
+  assert.equal(kept.balls.length, 1, 'a score upgrade leaves the ball on the new mouths');
+  assert.equal(kept.slots, 7);
+  kept.setSlots(9);
+  assert.equal(kept.balls.length, 0, 'an explicit slot change still clears the table');
+}
 console.log(`PASS: right bonus cup, near misses, lane return and slot changes. ${totals.jackpots}/1080 bonus entries; fixed physics step ${STEP.toFixed(2)}ms.`);
 
 // A ball whose center reaches the cup scores immediately. While the hole is
