@@ -26,8 +26,8 @@ try {
   await page.clock.runFor(40);
   assert.match(await page.locator('#reward-slot-caption').textContent(), /\+1\/\+10\/\+100/);
   assert.equal(await page.locator('#double-ball').isDisabled(), true, 'double cost stays locked at 5 slots');
-  assert.match(await page.locator('#double-ball-note').textContent(), /5000 分解锁 ×2/);
-  assert.match(await page.locator('#double-ball').getAttribute('aria-label'), /20000 分解锁 ×4/);
+  assert.match(await page.locator('#double-ball-note').textContent(), /3000 分解锁 ×2/);
+  assert.match(await page.locator('#double-ball').getAttribute('aria-label'), /10000 分解锁 ×4/);
   assert.equal(await page.locator('#ball-count').textContent(), String(START_BALLS));
   assert.equal(await page.locator('#mobile-balls').textContent(), String(START_BALLS));
   const spent = await page.evaluate(() => {
@@ -101,18 +101,18 @@ try {
   assert.equal(await page.locator('#settlement').evaluate(el => el.open), false, 'an ended run is not restored when keep-progress is off');
   assert.equal(await page.locator('#mini-game').evaluate(el => el.open), false, 'a refresh does not restore an in-progress mini-game');
 
-  await page.evaluate(() => { window.__ponpon.setStock(64); window.__ponpon.grant(4321); });
+  await page.evaluate(() => { window.__ponpon.setStock(64); window.__ponpon.grant(2500); });
   await page.locator('#settings-button').click();
   for (let i = 0; i < 3; i++) await page.locator('#gm-dot').click();
   assert.equal(await page.locator('#keep-progress').isChecked(), false, 'keep-progress defaults off');
   await page.locator('#keep-progress').check();
-  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('ponpon-settings')).run.score), 4321, 'turning keep-progress on saves the current run');
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('ponpon-settings')).run.score), 2500, 'turning keep-progress on saves the current run');
   await page.keyboard.press('Escape');
   await page.reload();
   await page.clock.runFor(40);
   assert.equal(await page.evaluate(() => window.__ponpon.available), 64, 'keep-progress restores the ball stock');
-  assert.equal(await page.evaluate(() => window.__ponpon.score), 4321, 'keep-progress restores the score');
-  assert.equal(await page.evaluate(() => window.__ponpon.slots), 5, '4321 has not unlocked 7 slots');
+  assert.equal(await page.evaluate(() => window.__ponpon.score), 2500, 'keep-progress restores the score');
+  assert.equal(await page.evaluate(() => window.__ponpon.slots), 5, '2500 has not unlocked 7 slots');
   assert.equal(await page.evaluate(() => window.__ponpon.keepProgress), true);
   const beforeSecret = await page.evaluate(() => window.__ponpon.available);
   assert.equal(await page.evaluate(() => window.__ponpon.dropHole()), true);
@@ -174,7 +174,7 @@ try {
   await paid.locator('#double-ball').click();
   assert.equal(await paid.locator('#double-ball').getAttribute('data-factor'), '2');
   assert.match(await paid.locator('#double-ball-note').textContent(), /单发 2 · 五连发 10/);
-  assert.match(await paid.locator('#double-ball-note').textContent(), /20000 分解锁 ×4 ×8/);
+  assert.match(await paid.locator('#double-ball-note').textContent(), /10000 分解锁 ×4 ×8/);
   assert.match(await paid.locator('#toast').textContent(), /球消耗 ×2/);
   const shot = await paid.evaluate(() => window.__ponpon.tryLaunch(0.8, false));
   assert.equal(shot.valueFactor, 2);

@@ -119,7 +119,7 @@ assert.equal(holeScores[0].kind, 'jackpot');
 assert.equal(holeScores[0].basePoints, 500);
 assert.equal(holeScores[0].points, 1000);
 assert.equal(holeScores[0].valueFactor, 2);
-assert.equal(secretHoleBalls(1400).holeBalls, 10);
+assert.equal(secretHoleBalls(1400).holeBalls, 20);
 assert.equal(secretHoleBalls(1400).miniBalls, 0, 'the mini-game score does not add balls, and ×N does not scale them');
 
 function hit(game, index) {

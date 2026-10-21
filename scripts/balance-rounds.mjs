@@ -22,8 +22,10 @@ const PRESETS = {
   main: {},
   // Thresholds only. The ball supply is unchanged.
   a: { unlock7: 1500, unlock9: 3200 },
-  // Same 5000 / 20000 gates. A capped mini-game grant, a larger secret, and +2 on enlarge.
-  b: { secretBalls: 28, miniBalls: 16, enlargeBalls: 2 },
+  // Historical proposal: the old 5000 / 20000 gates, a capped mini-game grant,
+  // a larger secret, and +2 on enlarge. Unlock pins stay so this preset does
+  // not inherit later shipped gates.
+  b: { unlock7: 5000, unlock9: 20000, secretBalls: 28, miniBalls: 16, enlargeBalls: 2 },
   // Earlier gates, a larger opening stock, a small mini grant, paid shots score 1.45×.
   c: { unlock7: 3800, unlock9: 10000, startBalls: 160, secretBalls: 12, miniBalls: 8, valueScoreScale: 1.45 },
 };

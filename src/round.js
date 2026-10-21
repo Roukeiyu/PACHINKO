@@ -1,7 +1,7 @@
 // One round spends balls as lives. Every tunable number in that economy lives here.
 import { LEADERBOARD_LIMIT, LEADERBOARD_QUALIFY_SCORE, topEntries } from './leaderboard.js';
 
-export const START_BALLS = 100;
+export const START_BALLS = 150;
 export const LOW_BALLS = 10;
 export const LAUNCH_COST = 1;
 export const BURST_COST = 5;
@@ -60,10 +60,10 @@ export function tablePoints(basePoints, scoreFactor = 1, valueFactor = 1, global
   return basePoints * scoreFactor * ballValue(valueFactor) * globalMultiplier;
 }
 
-// Ball gifts ignore the paid multiplier. Reel icons pay +1 / +10 / +100 and
-// a secret visit still pays SECRET_BALLS. Mini-games add happiness points
-// only, so miniBalls stays 0 no matter the score. None of the ball gifts
-// scale with ×N.
+// Ball gifts ignore the paid multiplier. Reel icons pay +1 / +10 / +100.
+// Entering the secret hole always pays a fixed SECRET_BALLS. The mini-game
+// that follows adds happiness points only, so miniBalls stays 0: that fixed
+// grant is the whole package. None of the ball gifts scale with ×N.
 export function secretHoleBalls() {
   return { holeBalls: SECRET_BALLS, miniBalls: 0 };
 }
@@ -73,8 +73,8 @@ export function secretHoleBalls() {
 // Ball icons on the reels pay balls separately (see slot-machine.js).
 export const SLOT_MACHINE_BALLS = 0;
 export const LUCKY_BALLS = 0;
-// One payment when a secret-hole visit finishes, after its mini-game.
-export const SECRET_BALLS = 10;
+// The whole secret-hole visit. The mini-game pays points only.
+export const SECRET_BALLS = 20;
 
 // Perfect 32-pair clear (10×(1+2+…+33) = 5600). The balance sim samples
 // mini-game happiness from this cap. Mini-games no longer pay balls.

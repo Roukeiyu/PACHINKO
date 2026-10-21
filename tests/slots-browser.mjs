@@ -27,7 +27,7 @@ try {
   assert.deepEqual(await page.evaluate(() => window.__ponpon.collections), { 2: 8, 3: 1, 5: 4, 10: 6, 20: 0 });
   await page.evaluate(amount => window.__ponpon.grant(amount), SLOT_UNLOCK_7 - 1);
   await page.clock.runFor(50);
-  assert.equal(await page.evaluate(() => window.__ponpon.slots), 5, '4999 stays on 5 slots');
+  assert.equal(await page.evaluate(() => window.__ponpon.slots), 5, 'one point below 7 slots stays on 5 slots');
   await page.evaluate(() => window.__ponpon.grant(1));
   await page.clock.runFor(50);
   assert.equal(await page.evaluate(() => window.__ponpon.slots), 7);

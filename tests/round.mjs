@@ -9,13 +9,13 @@ import {
   qualifiesForLeaderboard, freshRound, restoreRun,
 } from '../src/round.js';
 
-assert.equal(START_BALLS, 100);
+assert.equal(START_BALLS, 150);
 assert.equal(LOW_BALLS, 10);
 assert.equal(LAUNCH_COST, 1);
 assert.equal(BURST_COST, 5);
 assert.equal(LUCKY_BALLS, 0);
 assert.equal(SLOT_MACHINE_BALLS, 0);
-assert.equal(SECRET_BALLS, 10);
+assert.equal(SECRET_BALLS, 20);
 assert.equal(DRUM_ENLARGE_BALLS, 0);
 assert.equal(MINI_BALLS_FULL_SCORE, 5600);
 for (const score of [0, 1400, 5600, 1e9]) {

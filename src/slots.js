@@ -1,7 +1,7 @@
 // Within one round the slot count follows the happiness score and never steps backward.
 // A new round starts at 5. Refresh continues the saved round instead of a fresh table.
-export const SLOT_UNLOCK_7 = 5000;
-export const SLOT_UNLOCK_9 = 20000;
+export const SLOT_UNLOCK_7 = 3000;
+export const SLOT_UNLOCK_9 = 10000;
 
 // Center pockets are the special slots: ×5 / ×10 / ×20.
 // Neighbors step down toward the rails. The same number always means the same fruit.
