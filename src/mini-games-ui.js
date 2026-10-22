@@ -1,4 +1,4 @@
-import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_COLORS, BLOCK_SYMBOLS, MINI_HIT_SHAKE, MINI_HIT_MS, comboMultiplier, formatComboMultiplier, PAIR_DURATION, PAIR_TARGET, PAIR_CLEAR_BONUS } from './mini-games.js';
+import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_COLORS, BLOCK_SYMBOLS, MINI_HIT_SHAKE, MINI_HIT_MS, comboMultiplier, formatComboMultiplier, PAIR_DURATION, PAIR_TARGET, PAIR_CLEAR_BONUS, AFK_BALL_TEXT, miniGameIdle } from './mini-games.js';
 import { PAIR_SVG } from './pair-icons.js';
 import { secretPayout } from './secret-wave.js';
 import { SECRET_BALLS } from './round.js';
@@ -199,9 +199,12 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     const doubleNote=scoreMultiplier>1?' · 双球入洞 ×2':'';
     $('#mini-result-score').textContent=`收下 ${paid.toLocaleString()} 分快乐${moleNote}${doubleNote}`;
     const ballLine = $('#mini-result-balls');
-    if (source === 'secret') { ballLine.hidden = false; ballLine.textContent = `+${ballGrant} 球`; }
+    const idle = miniGameIdle(s);
+    ballLine.classList.toggle('is-afk', idle);
+    if (source === 'secret' && !idle) { ballLine.hidden = false; ballLine.textContent = `+${ballGrant} 球`; }
+    else if (idle) { ballLine.hidden = false; ballLine.textContent = AFK_BALL_TEXT; }
     else { ballLine.hidden = true; ballLine.textContent = ''; }
-    onFinish({kind:s.kind,score:paid,baseScore:s.score,multiplier:scoreMultiplier,source,status:s.status,bestCombo:s.bestCombo});
+    onFinish({kind:s.kind,score:paid,baseScore:s.score,multiplier:scoreMultiplier,source,status:s.status,bestCombo:s.bestCombo,played:s.played===true,idle});
     $('#mini-return').focus();
   }
   function paint() {

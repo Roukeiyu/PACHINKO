@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { connectedBlocks, BLOCK_CLEAR_TARGET, BLOCK_DURATION, MINI_DURATION, comboPoints, formatComboMultiplier, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS } from '../src/mini-games.js';
+import { connectedBlocks, BLOCK_CLEAR_TARGET, BLOCK_DURATION, MINI_DURATION, comboPoints, formatComboMultiplier, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS, AFK_BALL_TEXT } from '../src/mini-games.js';
+import { SECRET_BALLS } from '../src/round.js';
 const executablePath=process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined);
 const browser=await chromium.launch({executablePath,args:process.platform==='linux'?['--no-sandbox']:[]});
 await mkdir('test-results',{recursive:true});
@@ -35,11 +36,17 @@ try {
  await page.evaluate(()=>window.__secretFixture.drain());await page.clock.runFor(50);s=await state();
  assert.equal(s.activeBalls,0);assert.ok(['pairs','blocks','moles'].includes(s.miniGame.kind));
  assert.equal(await page.locator('#mini-game').evaluate(el=>el.open),true);
- const before=await score(),clock=s.gameClock;await page.keyboard.press('Escape');assert.equal(await page.locator('#mini-game').evaluate(el=>el.open),true);
+ const before=await score(),clock=s.gameClock,stockBeforeMini=s.available,firstKind=s.miniGame.kind;
+ assert.equal(s.lastMiniGame,firstKind,'starting a secret mini-game remembers it');
+ await page.keyboard.press('Escape');assert.equal(await page.locator('#mini-game').evaluate(el=>el.open),true);
  await page.clock.fastForward(Math.max(PAIR_DURATION,BLOCK_DURATION,MINI_DURATION)+2000);s=await state();assert.notEqual(s.miniGame.status,'playing');assert.equal(s.gameClock,clock,'the table pauses during the mini-game');
  assert.equal(s.stats.launches,2);assert.equal(s.score,before+s.miniGame.score);
+ assert.equal(s.miniGame.played,false);assert.equal(s.miniGame.score,0);assert.equal(s.available,stockBeforeMini,'an idle secret visit adds no balls');
+ assert.equal(await page.locator('#mini-result-balls').textContent(),AFK_BALL_TEXT);
  await page.clock.fastForward(5000);assert.equal(await score(),s.score,'results are credited exactly once');
  await page.locator('#mini-return').click();await page.clock.runFor(50);s=await state();assert.equal(s.secretPending,false);assert.equal(s.emissionPaused,false);assert.equal(s.auto,true);
+ assert.equal(s.available,stockBeforeMini,'leaving an idle secret visit still adds no balls');
+ assert.notEqual(await page.locator('#toast').textContent(),`+${SECRET_BALLS} 球`);
  await page.clock.runFor(1200);assert.ok((await state()).stats.launches>2,'automatic firing resumes after returning');
  await page.locator('#settings-button').click();await page.locator('#auto').uncheck();
  assert.equal(await page.locator('#gm-tools').isVisible(),false);
@@ -75,6 +82,7 @@ try {
  assert.equal((await mini()).status,'complete');assert.equal((await mini()).score,pairScore);assert.equal((await mini()).clearBonus,PAIR_CLEAR_BONUS);assert.ok(pairTotal>1000);assert.equal(await score(),initial+pairScore);
  assert.equal(await page.locator('#mini-round').textContent(),`${PAIR_TARGET}/${PAIR_TARGET} 对`);
  assert.equal(await page.locator('#mini-result-math').textContent(),`全部配对 +${PAIR_CLEAR_BONUS}`);
+ assert.equal((await mini()).played,true);assert.equal(await page.locator('#mini-result-balls').evaluate(el=>el.hidden),true,'a played GM round does not show a ball grant');
  await back();
  await start('blocks');assert.equal(await page.locator('#mini-grid button').count(),100);initial=await score();
  const colors=await page.evaluate(()=>[0,1,2,3].map(i=>{const el=document.querySelector(`.mini-color-${i}`),c=document.createElement('canvas').getContext('2d');c.fillStyle=getComputedStyle(el).backgroundColor;c.fillRect(0,0,1,1);return [...c.getImageData(0,0,1,1).data].slice(0,3);}));
@@ -106,11 +114,13 @@ try {
   for(const index of moles.board.flatMap((c,i)=>c.type==='mole'?[i]:[]))await cell(index);
   await page.clock.runFor(50);
  }
- assert.equal((await mini()).status,'complete');assert.equal((await mini()).hit,40);assert.equal(await score(),initial+(await mini()).score);await back();
+ assert.equal((await mini()).status,'complete');assert.equal((await mini()).hit,40);assert.equal((await mini()).played,true);assert.equal(await score(),initial+(await mini()).score);await back();
  // A timed wave advances even if the player does not hit any mole.
  await start('moles');
  for(let wave=2;wave<=10;wave++){await page.clock.fastForward(3000);assert.equal((await mini()).wave,wave,'each visible slice advances one wave');}
- await page.clock.fastForward(3000);assert.equal((await mini()).status,'complete');assert.equal((await mini()).score,0);await back();
+ await page.clock.fastForward(3000);assert.equal((await mini()).status,'complete');assert.equal((await mini()).score,0);assert.equal((await mini()).played,false);
+ assert.equal(await page.locator('#mini-result-balls').textContent(),AFK_BALL_TEXT);
+ assert.equal(await page.locator('#mini-return').textContent(),'返回设置');await back();
  await start('moles');const pausedWave=(await mini()).wave;
  await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'));});
  await page.clock.fastForward(20000);
@@ -139,6 +149,7 @@ try {
  assert.equal((await state()).miniGame,null,'the second hole does not open another mini-game');
  assert.equal((await state()).secretMultiplier,2);
  assert.equal(await page.locator('#toast').textContent(),'双球入洞！秘密洞得分 ×2');
+ const previousKind=(await state()).lastMiniGame;
  await page.evaluate(()=>window.__secretFixture.holeNext());
  assert.equal(await score(),holeBase+3000,'a third hole stays at ×2');
  assert.equal((await state()).secretMultiplier,2);
@@ -148,6 +159,8 @@ try {
  assert.equal(await page.locator('#mini-bonus').textContent(),'×2');
  assert.equal(await page.locator('#mini-bonus').evaluate(el=>el.classList.contains('is-on')),true);
  const kind=(await mini()).kind;
+ assert.notEqual(kind,previousKind,'the next secret mini-game differs from the previous one');
+ assert.equal((await state()).lastMiniGame,kind);
  for(let step=0;step<50 && (await mini()).status==='playing' && (kind==='blocks'?(await mini()).removed<BLOCK_CLEAR_TARGET:(await mini()).score<1000);step++){
   const board=(await mini()).board;
   if(kind==='pairs'){
@@ -181,6 +194,7 @@ try {
  assert.equal(await score(),holeBase+3000+paid);
  const moleNote=done.kind==='moles'?` · 打中 ${done.hit}/40 只`:'';
  assert.equal(await page.locator('#mini-result-score').textContent(),await page.evaluate(({paid,moleNote})=>`收下 ${paid.toLocaleString()} 分快乐${moleNote} · 双球入洞 ×2`,{paid,moleNote}));
+ assert.equal(done.played,true);assert.equal(await page.locator('#mini-result-balls').textContent(),`+${SECRET_BALLS} 球`);
  await page.screenshot({path:'test-results/secret-double-result.png'});
  await page.locator('#mini-return').click();await page.clock.runFor(50);
  assert.equal((await state()).secretPending,false);

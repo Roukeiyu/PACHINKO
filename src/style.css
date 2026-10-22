@@ -191,6 +191,7 @@ html:not(.calm) .ball-count.is-low{animation:ball-low 900ms ease-in-out infinite
   .launch-control>.launch-row{margin:0}
 }
 .mini-result-balls{margin:10px 0 4px;text-align:center;font-size:32px;font-weight:800;letter-spacing:1px;color:#8a5a12}
+.mini-result-balls.is-afk{font-size:22px;letter-spacing:0;line-height:1.35;padding:0 8px}
 .board-stage{display:contents}
 .fullscreen-button{display:block;width:100%;margin:-6px 0 18px;border:1px solid var(--flow-line-b8c7a9,#b8c7a9);background:var(--flow-surface-edf1e5,#edf1e5);color:var(--ink);border-radius:12px;min-height:40px;font-size:12px;font-weight:700}
 @media (min-width: 741px) and (min-height: 501px) {

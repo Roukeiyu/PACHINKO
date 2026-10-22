@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { existsSync } from 'node:fs';
 import { START_BALLS, BURST_COST, SECRET_BALLS } from '../src/round.js';
-import { PAIR_DURATION } from '../src/mini-games.js';
+import { PAIR_DURATION, BLOCK_DURATION, MINI_DURATION, AFK_BALL_TEXT, connectedBlocks } from '../src/mini-games.js';
 import { BURST_READY_AT } from '../src/charge.js';
 
 const executablePath = process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
@@ -115,17 +115,88 @@ try {
   assert.equal(await page.evaluate(() => window.__ponpon.slots), 5, '2500 has not unlocked 7 slots');
   assert.equal(await page.evaluate(() => window.__ponpon.keepProgress), true);
   const beforeSecret = await page.evaluate(() => window.__ponpon.available);
+  const miniWait = Math.max(PAIR_DURATION, BLOCK_DURATION, MINI_DURATION) + 2000;
+  async function missOnce() {
+    const board = await page.evaluate(() => window.__ponpon.miniGame);
+    if (board.kind === 'moles') {
+      const index = board.board.findIndex(cell => cell.type === 'cabbage');
+      await page.locator(`[data-cell="${index}"]`).evaluate(el => el.click());
+    } else if (board.kind === 'pairs') {
+      const groups = Object.values(Object.groupBy(board.board.map((cell, index) => ({ ...cell, index })), cell => cell.pair));
+      await page.locator(`[data-cell="${groups[0][0].index}"]`).evaluate(el => el.click());
+      await page.locator(`[data-cell="${groups[1][0].index}"]`).evaluate(el => el.click());
+    } else {
+      const index = board.board.findIndex((_, cell) => connectedBlocks(board.board, cell).length < 3);
+      if (index >= 0) await page.locator(`[data-cell="${index}"]`).evaluate(el => el.click());
+    }
+    await page.clock.runFor(40);
+  }
+  async function scoreOnce() {
+    const board = await page.evaluate(() => window.__ponpon.miniGame);
+    if (board.kind === 'moles') {
+      const index = board.board.findIndex(cell => cell.type === 'mole' && !cell.hit);
+      await page.locator(`[data-cell="${index}"]`).evaluate(el => el.click());
+    } else if (board.kind === 'pairs') {
+      const groups = Object.values(Object.groupBy(board.board.map((cell, index) => ({ ...cell, index })), cell => cell.pair));
+      await page.locator(`[data-cell="${groups[0][0].index}"]`).evaluate(el => el.click());
+      await page.locator(`[data-cell="${groups[0][1].index}"]`).evaluate(el => el.click());
+    } else {
+      const index = board.board.findIndex((_, cell) => connectedBlocks(board.board, cell).length >= 3);
+      await page.locator(`[data-cell="${index}"]`).evaluate(el => el.click());
+      for (let step = 0; step < 40; step++) {
+        if (await page.locator('#mini-game').getAttribute('data-busy') !== '1') break;
+        await page.clock.runFor(80);
+      }
+    }
+    await page.clock.runFor(40);
+  }
   assert.equal(await page.evaluate(() => window.__ponpon.dropHole()), true);
   await page.clock.runFor(80);
   assert.equal(await page.locator('#mini-game').evaluate(el => el.open), true);
-  await page.clock.fastForward(PAIR_DURATION + 2000);
+  const idleKind = await page.evaluate(() => window.__ponpon.miniGame.kind);
+  assert.equal(await page.evaluate(() => window.__ponpon.lastMiniGame), idleKind);
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('ponpon-settings')).run.lastMiniGame), idleKind, 'keep-progress remembers the mini-game that just started');
+  await missOnce();
+  assert.equal(await page.evaluate(() => window.__ponpon.miniGame.played), false, 'a miss does not count as play');
+  await page.clock.fastForward(miniWait);
+  await page.clock.runFor(40);
+  assert.equal(await page.locator('#mini-result-balls').textContent(), AFK_BALL_TEXT);
+  assert.equal(await page.evaluate(() => window.__ponpon.miniGame.played), false);
+  assert.equal(await page.evaluate(() => window.__ponpon.miniGame.score), 0);
+  assert.equal(await page.evaluate(() => window.__ponpon.available), beforeSecret, 'an idle secret visit pays no balls');
+  await page.locator('#mini-return').click();
+  await page.clock.runFor(40);
+  assert.notEqual(await page.locator('#toast').textContent(), `+${SECRET_BALLS} 球`);
+  assert.equal(await page.evaluate(() => window.__ponpon.available), beforeSecret);
+
+  await page.reload();
+  await page.clock.runFor(40);
+  assert.equal(await page.evaluate(() => window.__ponpon.lastMiniGame), idleKind, 'a reload restores the last mini-game while keep-progress is on');
+  assert.equal(await page.evaluate(() => window.__ponpon.dropHole()), true);
+  await page.clock.runFor(80);
+  const playedKind = await page.evaluate(() => window.__ponpon.miniGame.kind);
+  assert.notEqual(playedKind, idleKind, 'the mini-game after a reload is not the saved one');
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('ponpon-settings')).run.lastMiniGame), playedKind);
+  await scoreOnce();
+  assert.equal(await page.evaluate(() => window.__ponpon.miniGame.played), true);
+  await page.clock.fastForward(miniWait);
   await page.clock.runFor(40);
   assert.equal(await page.locator('#mini-result-balls').textContent(), `+${SECRET_BALLS} 球`);
-  const afterSecret = await page.evaluate(() => window.__ponpon.available);
-  assert.equal(afterSecret, beforeSecret + SECRET_BALLS, 'a finished secret visit pays the hole balls only');
+  assert.equal(await page.evaluate(() => window.__ponpon.available), beforeSecret + SECRET_BALLS, 'one scoring action keeps the secret-hole balls');
   await page.locator('#mini-return').click();
   await page.clock.runFor(40);
   assert.equal(await page.locator('#toast').textContent(), `+${SECRET_BALLS} 球`);
+
+  assert.equal(await page.evaluate(() => window.__ponpon.dropHole()), true);
+  await page.clock.runFor(80);
+  const thirdKind = await page.evaluate(() => window.__ponpon.miniGame.kind);
+  assert.notEqual(thirdKind, playedKind, 'two secret visits in one page never repeat');
+  await page.clock.fastForward(miniWait);
+  await page.clock.runFor(40);
+  assert.equal(await page.locator('#mini-result-balls').textContent(), AFK_BALL_TEXT);
+  assert.equal(await page.evaluate(() => window.__ponpon.available), beforeSecret + SECRET_BALLS, 'the following idle visit adds nothing more');
+  await page.locator('#mini-return').click();
+  await page.clock.runFor(40);
 
   await page.locator('#settings-button').click();
   for (let i = 0; i < 3; i++) await page.locator('#gm-dot').click();

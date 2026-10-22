@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_DURATION, BLOCK_POINT, BLOCK_GROUP_LIMIT, COMBO_WINDOW_MS, COMBO_MULTIPLIER_STEP, comboMultiplier, comboPoints, connectedBlocks, randomMiniGame, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS, PAIR_ICON_LIST, PAIR_SUITS, PAIR_SUIT_COUNT, PAIR_COPIES } from '../src/mini-games.js';
+import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_DURATION, BLOCK_POINT, BLOCK_GROUP_LIMIT, COMBO_WINDOW_MS, COMBO_MULTIPLIER_STEP, comboMultiplier, comboPoints, connectedBlocks, randomMiniGame, miniGameIdle, AFK_BALL_TEXT, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS, PAIR_ICON_LIST, PAIR_SUITS, PAIR_SUIT_COUNT, PAIR_COPIES } from '../src/mini-games.js';
 import { secretPayout } from '../src/secret-wave.js';
 assert.equal(COMBO_MULTIPLIER_STEP,.5);
 assert.deepEqual([0,1,2,3,4].map(comboMultiplier),[1,1,1.5,2,2.5]);
@@ -14,7 +14,18 @@ assert.equal(PAIR_ICON_LIST.length,32);assert.equal(new Set(PAIR_ICON_LIST.map(i
 assert.equal(PAIR_SUIT_COUNT,16);assert.equal(PAIR_COPIES,4);assert.equal(PAIR_SUITS.length,16);
 assert.equal(new Set(PAIR_SUITS.map(icon=>icon.id)).size,16);assert.ok(PAIR_SUITS.every(icon=>PAIR_ICON_LIST.includes(icon)));
 assert.deepEqual(Object.values(MINI_GAMES).map(d=>[d.columns,d.rows]),[[8,8],[10,10],[4,4]]);
+assert.equal(AFK_BALL_TEXT,'挂机未操作 · 无小球奖励');
 assert.deepEqual([0,.4,.9].map(r=>randomMiniGame(()=>r)),['pairs','blocks','moles']);
+assert.equal(randomMiniGame(()=>0,'nope'),'pairs','an unknown previous still uses the full pool');
+assert.equal(randomMiniGame(()=>0,'pairs'),'blocks');
+assert.equal(randomMiniGame(()=>.99,'pairs'),'moles');
+assert.equal(randomMiniGame(()=>0,'blocks'),'pairs');
+assert.equal(randomMiniGame(()=>.99,'blocks'),'moles');
+assert.equal(randomMiniGame(()=>0,'moles'),'pairs');
+assert.equal(randomMiniGame(()=>.99,'moles'),'blocks');
+for (const previous of ['pairs','blocks','moles']) {
+  for (let i=0;i<30;i++) assert.notEqual(randomMiniGame(Math.random,previous),previous,'the next mini-game is never the previous one');
+}
 assert.throws(()=>createMiniGame('other'),RangeError);
 for(let seed=0;seed<25;seed++) {
   const pairs=createMiniGame('pairs',{random:seeded(seed),now:100});
@@ -91,7 +102,7 @@ for(let seed=0;seed<25;seed++) {
 }
 const noHit=createMiniGame('moles');
 for(let round=1;round<=9;round++){noHit.tick(round*3000);assert.equal(noHit.state.wave,round+1);}
-noHit.tick(30000);assert.equal(noHit.state.status,'complete');assert.equal(noHit.state.score,0);
+noHit.tick(30000);assert.equal(noHit.state.status,'complete');assert.equal(noHit.state.score,0);assert.equal(noHit.state.hit,0);assert.equal(noHit.state.played,false);assert.equal(miniGameIdle(noHit.state),true);
 const jumped=createMiniGame('moles',{now:0});
 jumped.tick(16000);assert.equal(jumped.state.wave,2,'one tick advances at most one mole wave');assert.equal(jumped.state.status,'playing');
 jumped.tick(30000);assert.equal(jumped.state.status,'timeout');assert.equal(jumped.state.score,0);
@@ -262,4 +273,29 @@ assert.equal(sameSuit.select(suit[3].index,4),comboPoints(PAIR_POINT,2),'after t
 assert.equal(MINI_GAMES.blocks.rule.includes('掉落连锁照样加基础分'), true);
 assert.equal(MINI_GAMES.blocks.rule.includes('玩满 45 秒'), true);
 assert.equal(MINI_GAMES.blocks.rule.includes('计入 100 块'), true);
-console.log('PASS: combo multipliers, broken streaks, a 100-block cap, timer finish, drop chains, gravity order, and secret ×2 on the full total.');
+assert.equal(MINI_GAMES.pairs.rule.includes('没有配成一对'), true);
+assert.equal(MINI_GAMES.blocks.rule.includes('没有一次消除'), true);
+assert.equal(MINI_GAMES.moles.rule.includes('没有打中'), true);
+const glance=createMiniGame('pairs',{random:seeded(9),now:0});
+glance.select(0,1);assert.equal(glance.state.played,false,'opening one card is not a scoring action');
+glance.tick(PAIR_DURATION);assert.equal(glance.state.status,'timeout');assert.equal(glance.state.score,0);assert.equal(glance.state.removed,0);assert.equal(miniGameIdle(glance.state),true);
+const mismatched=createMiniGame('pairs',{random:seeded(8),now:0});
+const suits=Object.values(Object.groupBy(mismatched.state.board.map((cell,index)=>({...cell,index})),cell=>cell.pair));
+mismatched.select(suits[0][0].index,1);mismatched.select(suits[1][0].index,2);
+assert.equal(mismatched.state.played,false);assert.equal(mismatched.state.score,0);assert.equal(miniGameIdle(mismatched.state),true);
+assert.equal(mismatched.select(suits[0][1].index,3),0);
+assert.ok(mismatched.select(suits[0][2].index,4)>0);assert.equal(mismatched.state.played,true);assert.equal(miniGameIdle(mismatched.state),false);
+const untouched=isolatedTrio(0);
+untouched.state.board[0].color=1;untouched.state.board[1].color=0;untouched.state.board[10].color=2;
+assert.equal(connectedBlocks(untouched.state.board,0).length,1);
+assert.equal(untouched.select(0,1),0);assert.equal(untouched.state.played,false,'a block tap under 3 is not play');
+assert.equal(untouched.select(90,2),30);assert.equal(untouched.state.played,true);assert.equal(untouched.state.removed,3);assert.equal(miniGameIdle(untouched.state),false);
+const swing=createMiniGame('moles',{random:seeded(5),now:0});
+const cabbageOnly=swing.state.board.findIndex(cell=>cell.type==='cabbage');
+assert.equal(swing.select(cabbageOnly,1),0);assert.equal(swing.state.played,false);assert.equal(swing.state.hit,0);
+const mole=swing.state.board.findIndex(cell=>cell.type==='mole'&&!cell.hit);
+assert.ok(swing.select(mole,2)>0);assert.equal(swing.state.played,true);assert.equal(swing.state.hit,1);
+assert.equal(swing.select(mole,3),0,'a repeat hit does not score');assert.equal(swing.state.played,true);assert.equal(miniGameIdle(swing.state),false);
+const idleMoles=createMiniGame('moles',{random:seeded(6),now:0});
+idleMoles.tick(MINI_DURATION);assert.equal(idleMoles.state.played,false);assert.equal(idleMoles.state.score,0);assert.equal(idleMoles.state.hit,0);
+console.log('PASS: combo multipliers, broken streaks, a 100-block cap, timer finish, drop chains, gravity order, secret ×2 on the full total, idle rounds, and no repeated mini-game.');

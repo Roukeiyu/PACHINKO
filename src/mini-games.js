@@ -33,9 +33,9 @@ export const PAIR_TARGET = 32;
 export const PAIR_DURATION = 30000;
 export const PAIR_CLEAR_BONUS = 200;
 export const MINI_GAMES = Object.freeze({
-  pairs: { title: '对对碰', rule: `64 张牌排成 8×8，16 种图案，每种 4 张，同花色任意两张都能配对。配完全部 ${PAIR_TARGET} 对，或玩满 ${PAIR_DURATION / 1000} 秒，先到先结算。每对 ${PAIR_POINT} 分。连续配对会累加连击，点错则连击重置。${PAIR_DURATION / 1000} 秒内配完，额外 +${PAIR_CLEAR_BONUS}。`, columns: 8, rows: 8 },
-  blocks: { title: '消消乐', rule: `点击上下左右相连的同色方块，至少 3 块才能消除。每块 ${BLOCK_POINT} 分。只有自己点掉的块计入 ${BLOCK_CLEAR_TARGET} 块；掉落连锁照样加基础分，但不计入这 ${BLOCK_CLEAR_TARGET} 块，也不会因此结束。开局同色相连不超过 ${BLOCK_GROUP_LIMIT} 块。点掉的块累计到 ${BLOCK_CLEAR_TARGET}，或玩满 ${BLOCK_DURATION / 1000} 秒，先到先结算。一次点击超过剩余块数时，只把点掉的块算到 ${BLOCK_CLEAR_TARGET}。${COMBO_WINDOW_MS / 1000} 秒内再点出消除，连击 +1；超过 ${COMBO_WINDOW_MS / 1000} 秒，或点了消不掉的地方，连击归零。连击和倍率没有上限。掉落连锁不加连击。结束时按本局最高连击一次性乘算。`, columns: 10, rows: 10 },
-  moles: { title: '打地鼠', rule: '点击地鼠，白菜留着！每只 25 分，共 10 轮、40 只；每轮最多 3 秒，打完提前换轮。不是地鼠的格子都是白菜。连续打中会累加连击；打到白菜，或这一轮有地鼠漏掉，连击重置。', columns: 4, rows: 4 },
+  pairs: { title: '对对碰', rule: `64 张牌排成 8×8，16 种图案，每种 4 张，同花色任意两张都能配对。配完全部 ${PAIR_TARGET} 对，或玩满 ${PAIR_DURATION / 1000} 秒，先到先结算。每对 ${PAIR_POINT} 分。连续配对会累加连击，点错则连击重置。${PAIR_DURATION / 1000} 秒内配完，额外 +${PAIR_CLEAR_BONUS}。只翻开一张，或翻错，都不算有效操作。整局没有配成一对，秘密洞不发小球。`, columns: 8, rows: 8 },
+  blocks: { title: '消消乐', rule: `点击上下左右相连的同色方块，至少 3 块才能消除。每块 ${BLOCK_POINT} 分。只有自己点掉的块计入 ${BLOCK_CLEAR_TARGET} 块；掉落连锁照样加基础分，但不计入这 ${BLOCK_CLEAR_TARGET} 块，也不会因此结束。开局同色相连不超过 ${BLOCK_GROUP_LIMIT} 块。点掉的块累计到 ${BLOCK_CLEAR_TARGET}，或玩满 ${BLOCK_DURATION / 1000} 秒，先到先结算。一次点击超过剩余块数时，只把点掉的块算到 ${BLOCK_CLEAR_TARGET}。${COMBO_WINDOW_MS / 1000} 秒内再点出消除，连击 +1；超过 ${COMBO_WINDOW_MS / 1000} 秒，或点了消不掉的地方，连击归零。连击和倍率没有上限。掉落连锁不加连击。结束时按本局最高连击一次性乘算。点了消不掉的地方不算有效操作。整局没有一次消除，秘密洞不发小球。`, columns: 10, rows: 10 },
+  moles: { title: '打地鼠', rule: '点击地鼠，白菜留着！每只 25 分，共 10 轮、40 只；每轮最多 3 秒，打完提前换轮。不是地鼠的格子都是白菜。连续打中会累加连击；打到白菜，或这一轮有地鼠漏掉，连击重置。只点白菜，或重复点已经打过的地鼠，都不算有效操作。整局没有打中，秘密洞不发小球。', columns: 4, rows: 4 },
 });
 export const BLOCK_COLORS = Object.freeze(['红','蓝','黄','绿']);
 export const BLOCK_SYMBOLS = Object.freeze(['♥','●','✦','◆']);
@@ -51,7 +51,22 @@ function shuffle(values, random) {
   for (let i = result.length - 1; i > 0; i--) { const j = integer(random, 0, i); [result[i],result[j]] = [result[j],result[i]]; }
   return result;
 }
-export const randomMiniGame = (random = Math.random) => Object.keys(MINI_GAMES)[integer(random,0,2)];
+// Shown instead of the secret-hole ball grant when the round had no scoring action.
+export const AFK_BALL_TEXT = '挂机未操作 · 无小球奖励';
+// A scoring action is the only thing that counts as play: a finished pair, a
+// clear of at least 3 blocks, or a hit on a mole that has not been hit yet.
+// One card, a mismatch, a block tap under 3, a cabbage, or a repeat hit do not.
+export function miniGameIdle(state) {
+  if (!state) return true;
+  const progress = state.kind === 'moles' ? state.hit : state.removed;
+  return state.played !== true || state.score <= 0 || progress <= 0;
+}
+// The next game is uniform among the other two. An unknown previous uses the full pool.
+export function randomMiniGame(random = Math.random, previous = null) {
+  const kinds = Object.keys(MINI_GAMES);
+  const pool = Object.hasOwn(MINI_GAMES, previous) ? kinds.filter(kind => kind !== previous) : kinds;
+  return pool[integer(random, 0, pool.length - 1)];
+}
 export function connectedBlocks(board, index) {
   if (!board[index]) return [];
   const color = board[index].color, found = new Set([index]), queue = [index];
@@ -68,7 +83,7 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
   let nextId = 0, fxId = 0;
   const tile = (extra = {}) => ({ id: nextId++, color: integer(random,0,3), fall: 0, spawned: false, ...extra });
   const roundMs = kind === 'pairs' ? PAIR_DURATION : kind === 'blocks' ? BLOCK_DURATION : MINI_DURATION;
-  const state = { kind, status: 'playing', score: 0, combo: 0, multiplier: 1, bestCombo: 0, bestMultiplier: 1, baseScore: 0, lastClearAt: null, inputLocked: false, payoutSettled: false, clearBonus: 0, startedAt: now, deadline: now + roundMs, revision: 0, selected: null, removed: 0, hit: 0, wave: 0, waveUntil: 0, board: [], molePlan: [], message: '', fx: null, motion: [], motionSeq: 0 };
+  const state = { kind, status: 'playing', score: 0, played: false, combo: 0, multiplier: 1, bestCombo: 0, bestMultiplier: 1, baseScore: 0, lastClearAt: null, inputLocked: false, payoutSettled: false, clearBonus: 0, startedAt: now, deadline: now + roundMs, revision: 0, selected: null, removed: 0, hit: 0, wave: 0, waveUntil: 0, board: [], molePlan: [], message: '', fx: null, motion: [], motionSeq: 0 };
   function ensurePlayable() {
     if (state.board.some((_,i) => connectedBlocks(state.board,i).length >= 3)) return;
     const color = integer(random,0,3);
@@ -266,6 +281,7 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
       state.message = `打中了！+${points} · ${state.combo} 连击 ${formatComboMultiplier(state.combo)}`;
       state.fx = { id:++fxId, kind, broken:false, points, combo:state.combo, multiplier:state.multiplier, cells:[index], chains:0 };
     }
+    if (points > 0) state.played = true;
     state.revision++;
     if (kind === 'blocks' && state.removed >= BLOCK_CLEAR_TARGET) finish('complete');
     if (kind === 'pairs' && state.removed >= PAIR_TARGET * 2) {
