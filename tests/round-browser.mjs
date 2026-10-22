@@ -181,7 +181,8 @@ try {
   assert.equal(shot.doubleBall, true);
   assert.equal(shot.available, START_BALLS + 111 - 2);
   await paid.clock.runFor(40);
-  assert.match(await paid.locator('#global-multiplier-time').textContent(), /球 ×2/);
+  assert.equal(await paid.locator('#global-multiplier-value').textContent(), '×1', 'a paid ball does not change the field multiplier');
+  assert.equal(await paid.locator('#global-multiplier-time').evaluate(el => el.hidden), true);
   await paid.clock.runFor(3000);
   await paid.evaluate(() => window.__ponpon.setStock(1));
   const last = await paid.evaluate(() => window.__ponpon.tryLaunch(0.4, false));

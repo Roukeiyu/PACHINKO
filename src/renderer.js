@@ -249,6 +249,32 @@ function create3DRenderer(canvas) {
   const valueRingGeometry = new THREE.RingGeometry(13.2, 15.6, 48);
   const valueRingMaterial = new THREE.MeshBasicMaterial({ color: '#f0c14a', side: THREE.DoubleSide, transparent: true, opacity: .95, depthWrite: false });
   const valueRings = new Map();
+  const scoreRingGeometry = new THREE.RingGeometry(16.6, 18.8, 48);
+  const scoreRingMaterial = new THREE.MeshBasicMaterial({ color: '#e8b446', side: THREE.DoubleSide, transparent: true, opacity: .95, depthWrite: false });
+  const scoreRings = new Map();
+  const scoreLabels = new Map();
+  const scoreLabelMaterials = new Map();
+  function scoreLabelMaterial(factor, daylight) {
+    const key = `${factor}:${daylight ? 1 : 0}`;
+    if (scoreLabelMaterials.has(key)) return scoreLabelMaterials.get(key);
+    const canvas = document.createElement('canvas');
+    canvas.width = 128; canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, 128, 64);
+    // An opaque pill. A stroked glyph on a transparent sprite shrinks to a
+    // tan smudge once the camera filters it down to the ball.
+    ctx.beginPath(); ctx.roundRect(2, 6, 124, 52, 26);
+    ctx.fillStyle = daylight ? '#fff6d4' : '#2a2418'; ctx.fill();
+    ctx.lineWidth = 6; ctx.strokeStyle = daylight ? '#c9842a' : '#e8b446'; ctx.stroke();
+    ctx.font = 'bold 36px "Trebuchet MS", "PingFang SC", sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = daylight ? '#7a4208' : '#fff6d4';
+    ctx.fillText(`×${factor}`, 64, 33);
+    const map = new THREE.CanvasTexture(canvas); map.colorSpace = THREE.SRGBColorSpace; map.needsUpdate = true;
+    const material = new THREE.SpriteMaterial({ map, transparent: true, depthWrite: false, depthTest: false, toneMapped: false });
+    scoreLabelMaterials.set(key, material);
+    return material;
+  }
   const readyBall = new THREE.Mesh(sphere, ballMaterial); readyBall.castShadow = true; table.add(readyBall);
   const springPoints = Array.from({ length: 193 }, (_, i) => { const t = i / 192, a = t * Math.PI * 12; return new THREE.Vector3(Math.cos(a) * 9, t * 52, 9 + Math.sin(a) * 5); });
   const spring = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(springPoints), 192, 1.7, 6, false), material('#a4ac93', 'object', { metalness: .7, roughness: .3 }));
@@ -468,7 +494,10 @@ function create3DRenderer(canvas) {
       }
     }
     const activeIds = new Set(game.balls.map(b => b.id));
+    const daylight = palette?.phase?.id !== 'night';
     for (const [id, ring] of valueRings) if (!activeIds.has(id)) { table.remove(ring); valueRings.delete(id); }
+    for (const [id, ring] of scoreRings) if (!activeIds.has(id)) { table.remove(ring); scoreRings.delete(id); }
+    for (const [id, label] of scoreLabels) if (!activeIds.has(id)) { table.remove(label); scoreLabels.delete(id); }
     ballPositions.clear();
     let playerCount = 0, bonusCount = 0;
     for (const ball of game.balls) {
@@ -487,6 +516,21 @@ function create3DRenderer(canvas) {
       let ring = valueRings.get(ball.id);
       if (valued && !ring) { ring = new THREE.Mesh(valueRingGeometry, valueRingMaterial); table.add(ring); valueRings.set(ball.id, ring); }
       if (ring) { ring.visible = valued; if (valued) ring.position.copy(place); }
+      const starred = ball.scoreFactor > 1;
+      let scoreRing = scoreRings.get(ball.id);
+      if (starred && !scoreRing) { scoreRing = new THREE.Mesh(scoreRingGeometry, scoreRingMaterial); scoreRing.renderOrder = 3; table.add(scoreRing); scoreRings.set(ball.id, scoreRing); }
+      if (scoreRing) { scoreRing.visible = starred; if (starred) scoreRing.position.copy(place); }
+      let scoreLabel = scoreLabels.get(ball.id);
+      if (starred && (!scoreLabel || scoreLabel.userData.factor !== ball.scoreFactor || scoreLabel.userData.daylight !== daylight)) {
+        if (scoreLabel) table.remove(scoreLabel);
+        scoreLabel = new THREE.Sprite(scoreLabelMaterial(ball.scoreFactor, daylight));
+        scoreLabel.userData.factor = ball.scoreFactor; scoreLabel.userData.daylight = daylight;
+        scoreLabel.scale.set(52, 26, 1); scoreLabel.renderOrder = 6; table.add(scoreLabel); scoreLabels.set(ball.id, scoreLabel);
+      }
+      if (scoreLabel) {
+        scoreLabel.visible = starred;
+        if (starred) scoreLabel.position.copy(world(ball.body.position.x, ball.body.position.y - 36, 36));
+      }
     }
     playerBalls.count = Math.min(playerCount, BALL_CAPACITY);
     bonusBalls.count = Math.min(bonusCount, BALL_CAPACITY);
@@ -506,7 +550,6 @@ function create3DRenderer(canvas) {
     }
     const flicker = state.calm ? .92 : .7 + .3 * Math.sin(game.clock / 140) * (.65 + .35 * Math.sin(game.clock / 55));
     starSprite.visible = !!game.star;
-    const daylight = palette?.phase?.id !== 'night';
     starMaterial.blending = daylight ? THREE.NormalBlending : THREE.AdditiveBlending;
     sparkMaterial.blending = daylight ? THREE.NormalBlending : THREE.AdditiveBlending;
     if (game.star) {

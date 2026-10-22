@@ -138,8 +138,9 @@ try {
   assert.equal(reward.slotFirst, true, 'the slot row leads the reward list');
   assert.equal(reward.noStarRow, true);
   assert.equal(reward.noHoleRow, true);
-  assert.equal(reward.multiplier, `×${reward.starMultiplier}`);
-  assert.match(reward.multiplierTime, /^星 \d+s$/);
+  assert.equal(reward.multiplier, '×1', 'an uncollected star leaves the field multiplier at ×1');
+  assert.equal(reward.multiplierTime, '', 'the field card does not time the star');
+  assert.equal(reward.starMultiplier > 1, true);
   await page.evaluate(() => window.__ponpon.previewReels([5, 1, 2], 17));
   await page.waitForFunction(() => document.querySelector('#reward-slot-count').textContent === '17/50');
   assert.equal(await page.locator('.reward-reels i.is-ball').count(), 1, 'the sidebar reel mirrors the ball icon');
@@ -149,7 +150,8 @@ try {
   await page.evaluate(() => window.__ponpon.previewJar(7));
   await page.waitForFunction(() => document.querySelector('#reward-jar').textContent === '7/20');
   await page.evaluate(() => window.__ponpon.setSlotMultiplier(2));
-  await page.waitForFunction(expected => document.querySelector('#global-multiplier-value').textContent === expected, `×${reward.starMultiplier * 2}`);
+  await page.waitForFunction(() => document.querySelector('#global-multiplier-value').textContent === '×2');
+  assert.doesNotMatch(await page.locator('#global-multiplier-time').textContent(), /星|球/);
   assert.match(await page.locator('#reward-slot-caption').textContent(), /^\d{2}:\d{2}$/);
   assert.equal(await page.locator('#global-multiplier').evaluate(el => el.classList.contains('is-changed')), true);
   assert.equal(await page.locator('#hole-points').textContent(), '+1000');

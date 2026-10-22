@@ -758,26 +758,22 @@ function updateRewardCard() {
   $('#reward-jar-progress').value = jarValue;
   const holePoints = 500 * machine.multiplier;
   $('#hole-points').textContent = `+${holePoints}`;
-  const star = game.star;
-  const total = machine.multiplier * (star ? star.multiplier : 1);
-  const value = `×${total}`;
+  // The field card follows the slot machine only. A star doubles the ball that
+  // picks it up, and the launch cost stays on that ball and the round button.
+  const value = `×${machine.multiplier}`;
   const valueEl = $('#global-multiplier-value');
+  const band = $('#global-multiplier');
+  band.classList.toggle('is-on', machine.multiplier > 1);
+  band.dataset.factor = String(machine.multiplier);
   if (valueEl.textContent !== value) {
     valueEl.textContent = value;
-    const band = $('#global-multiplier');
     band.classList.remove('is-changed');
     void band.offsetWidth;
     band.classList.add('is-changed');
   }
-  const timeBits = [];
-  if (machine.multiplier > 1) timeBits.push(clockText(machine.activeUntil));
-  if (star) timeBits.push(`星 ${Math.max(0, Math.ceil((star.expiresAt - game.clock) / 1000))}s`);
-  const carriedFactor = game.carriedBalls.reduce((max, ball) => Math.max(max, ball.valueFactor), 1);
-  const ballFactor = Math.max(state.ballCost, carriedFactor);
-  if (ballFactor > 1) timeBits.push(`球 ×${ballFactor}`);
   const timeEl = $('#global-multiplier-time');
-  timeEl.hidden = timeBits.length === 0;
-  timeEl.textContent = timeBits.join(' · ');
+  timeEl.hidden = machine.multiplier <= 1;
+  timeEl.textContent = machine.multiplier > 1 ? clockText(machine.activeUntil) : '';
   const globalBonus = slotBonusLabel(machine, game.clock);
   $('#machine-caption').textContent = globalBonus ? `全场${globalBonus}` : 'THE HAPPY LITTLE PACHINKO';
   $('#reward-timer').textContent = game.rewards.enlargedUntil > game.clock ? `放大中 ${(Math.max(0, game.rewards.enlargedUntil - game.clock) / 1000).toFixed(1)}s` : `满 ${DRUM_SIDE_HITS} 次，只放大中央 ${ENLARGE_MS / 1000} 秒`;
