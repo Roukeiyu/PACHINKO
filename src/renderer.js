@@ -207,27 +207,41 @@ function create3DRenderer(canvas) {
     for (const [id, entry] of bodies) if (entry.body.label === 'divider') { table.remove(entry.mesh); entry.mesh.geometry.dispose(); bodies.delete(id); }
     layoutKey = key;
     const frame = animating ? blendSlotLayout(shift.from, shift.to, elapsed) : slotFrame(game.slots);
+    const openDrains = frame.regions.some(region => region.kind === 'drain');
+    const cardPad = openDrains ? 2 : DRAIN_WALL / 2;
     for (const region of frame.regions) {
       const cx = (region.x0 + region.x1) / 2, width = region.x1 - region.x0;
       if (region.kind === 'drain') {
         if (width < 6) continue;
         layoutBox(cx, TABLE.slotTop + 50, Math.max(4, width - 2), 96, 2, hazardSide, -6, 2);
       } else if (region.kind === 'slot' && width >= 14) {
-        layoutBox(cx, TABLE.slotTop + 43, width - 4, 78, 3, goldSide, -.5, 6);
+        layoutBox(cx, TABLE.slotTop + 43, Math.max(4, width - cardPad * 2), 78, 3, goldSide, -.5, 6);
       }
     }
     for (const outlet of game.collector.outlets) layoutBox(outlet.x, outlet.y, 52, 17, 7, purpleSide, 0, 6);
     // Physics walls are already on the new row. While the picture eases, draw
     // the lips on the easing mouths instead of the settled bodies.
     if (animating) {
-      const pictured = frame.regions.filter(region => region.kind === 'slot');
-      const flush = shift.to !== 5;
-      for (const region of pictured) {
-        if (region.x1 - region.x0 < 16) continue;
-        const outerLeft = flush && region === pictured[0];
-        const outerRight = flush && region === pictured[pictured.length - 1];
-        if (!outerLeft) layoutBox(region.x0 + DRAIN_WALL / 2, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
-        if (!outerRight) layoutBox(region.x1 - DRAIN_WALL / 2, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
+      const pictured = frame.regions.filter(region => region.kind === 'slot' && region.x1 - region.x0 >= 16);
+      if (shift.to === 9) {
+        for (let i = 0; i < pictured.length - 1; i++) {
+          const left = pictured[i], right = pictured[i + 1];
+          const gap = right.x0 - left.x1;
+          if (gap > DRAIN_WALL + 0.75) {
+            layoutBox(left.x1 - DRAIN_WALL / 2, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
+            layoutBox(right.x0 + DRAIN_WALL / 2, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
+          } else {
+            layoutBox((left.x1 + right.x0) / 2, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
+          }
+        }
+      } else {
+        const flush = shift.to !== 5;
+        for (const region of pictured) {
+          const outerLeft = flush && region === pictured[0];
+          const outerRight = flush && region === pictured[pictured.length - 1];
+          if (!outerLeft) layoutBox(region.x0 + DRAIN_WALL / 2, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
+          if (!outerRight) layoutBox(region.x1 - DRAIN_WALL / 2, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
+        }
       }
     } else {
       for (const b of game.dividers) bodyModel(b, hazardSide, 9);

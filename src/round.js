@@ -114,10 +114,11 @@ export const DRUM_CLOCK_BALLS = 0;
 // from POCKET_WIDTH pockets and never begins below DRAIN_MIN_OPENING.
 // DRAIN_WIDTH_SCALE then halves every mouth and returns that width to the
 // scoring slots, so the row still fills the span.
-// Seven and nine slots have no edge drain and no side slope. The outermost
-// payout slot runs into the side wall, and every mouth between slots is
-// wider than a ball. Nine pockets stay 40px; the width the slopes used to
-// take makes each of those mouths 32px.
+// Seven slots have no edge drain and no side slope. The outermost payout
+// slot runs into the side wall, and every mouth between slots is 32px.
+// Nine slots also run into the side walls, but the striped mouths are gone.
+// Nine equal pockets tile the full row. A thin wall stands on each shared
+// edge; it is not a filler and does not take a gap out of the row.
 export const SLOT_ROW_LEFT = 39;
 export const SLOT_ROW_RIGHT = 655;
 export const POCKET_WIDTH = 36;
@@ -131,7 +132,17 @@ export const WIDE_DRAIN_OPENING = BALL_DIAMETER + 10;
 export function slotFrame(count) {
   if (count !== 5 && count !== 7 && count !== 9) throw new RangeError('Slots must be 5, 7, or 9');
   const span = SLOT_ROW_RIGHT - SLOT_ROW_LEFT;
-  if (count === 7 || count === 9) {
+  if (count === 9) {
+    const pocket = span / count;
+    const regions = [];
+    for (let column = 0; column < count; column++) {
+      const x0 = SLOT_ROW_LEFT + span * column / count;
+      const x1 = column === count - 1 ? SLOT_ROW_RIGHT : SLOT_ROW_LEFT + span * (column + 1) / count;
+      regions.push({ kind: 'slot', column, x0, x1 });
+    }
+    return { count, opening: 0, pocket, mouths: 0, apron: 0, regions };
+  }
+  if (count === 7) {
     const mouths = count - 1;
     const opening = WIDE_DRAIN_OPENING;
     const pocket = (span - mouths * opening) / count;

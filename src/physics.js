@@ -181,16 +181,26 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     const frame = slotFrame(slots);
     // Lips sit inside the pocket, so the painted mouth stays fully open and a
     // ball that misses the lip falls through instead of being guided in.
-    // Seven and nine slots leave the wall itself as the outer edge, so a ball
-    // rolling down the side falls into the end slot instead of onto a lip.
+    // Seven slots leave the wall itself as the outer edge, so a ball rolling
+    // down the side falls into the end slot instead of onto a lip.
+    // Nine slots have no mouth between them. One wall is centered on each
+    // shared edge, so every catch stays the same width. A lip on both sides
+    // of that edge would stack into a double barrier.
     const lip = DRAIN_WALL;
-    const flush = slots !== 5;
     const slotRegions = frame.regions.filter(region => region.kind === 'slot');
-    for (const region of slotRegions) {
-      const outerLeft = flush && region.column === 0;
-      const outerRight = flush && region.column === slotRegions.length - 1;
-      if (!outerLeft) segment(region.x0 + lip / 2, TABLE.slotTop, region.x0 + lip / 2, DRAIN_FLOOR, lip, dividers, 'divider', .2);
-      if (!outerRight) segment(region.x1 - lip / 2, TABLE.slotTop, region.x1 - lip / 2, DRAIN_FLOOR, lip, dividers, 'divider', .2);
+    if (slots === 9) {
+      for (let index = 0; index < slotRegions.length - 1; index++) {
+        const x = slotRegions[index].x1;
+        segment(x, TABLE.slotTop, x, DRAIN_FLOOR, lip, dividers, 'divider', .2);
+      }
+    } else {
+      const flush = slots !== 5;
+      for (const region of slotRegions) {
+        const outerLeft = flush && region.column === 0;
+        const outerRight = flush && region.column === slotRegions.length - 1;
+        if (!outerLeft) segment(region.x0 + lip / 2, TABLE.slotTop, region.x0 + lip / 2, DRAIN_FLOOR, lip, dividers, 'divider', .2);
+        if (!outerRight) segment(region.x1 - lip / 2, TABLE.slotTop, region.x1 - lip / 2, DRAIN_FLOOR, lip, dividers, 'divider', .2);
+      }
     }
     collector.outlets = frame.regions.filter(region => region.kind === 'slot').map(region => ({
       column: region.column, x: (region.x0 + region.x1) / 2, y: 74, glow: 0, pocket: region.x1 - region.x0,

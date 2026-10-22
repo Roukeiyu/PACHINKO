@@ -52,7 +52,21 @@ for (const count of [5, 7, 9]) {
   const drains = frame.regions.filter(region => region.kind === 'drain');
   assert.equal(slots.length, count);
   assert.ok(frame.pocket - DRAIN_WALL * 2 >= 24, `${count} slots leave room for a ball`);
-  if (count === 7 || count === 9) {
+  if (count === 9) {
+    const span = TABLE.right - TABLE.left;
+    const widths = slots.map(slot => slot.x1 - slot.x0);
+    assert.equal(frame.opening, 0);
+    assert.equal(frame.mouths, 0);
+    assert.equal(frame.apron, 0);
+    assert.equal(drains.length, 0, '9 slots have no filler mouths');
+    assert.equal(frame.regions.length, 9);
+    assert.ok(frame.regions.every(region => region.kind === 'slot'));
+    assert.ok(Math.abs(widths.reduce((sum, width) => sum + width, 0) - span) < 1e-6, '9 slots fill the row');
+    assert.ok(Math.max(...widths) - Math.min(...widths) < 1, `9 slot widths ${widths.map(width => width.toFixed(3)).join(', ')} stay within 1px`);
+    for (const width of widths) assert.ok(Math.abs(width - span / 9) < 1);
+    assert.equal(frame.regions[0].column, 0);
+    assert.equal(frame.regions.at(-1).column, count - 1);
+  } else if (count === 7) {
     assert.equal(frame.opening, WIDE_DRAIN_OPENING);
     assert.equal(frame.apron, 0);
     assert.ok(frame.opening >= BALL_DIAMETER + 6, `${count}-slot drains are wider than a ball`);
@@ -113,6 +127,44 @@ for (const count of [7, 9]) {
     assert.equal(game.stats.timeouts, 0);
     assert.equal(game.stats.drains, 0, `${count}-slot ${name} scores the end slot`);
     assert.equal(game.stats.scored, 1);
+  }
+  if (count === 9) {
+    for (let column = 0; column < count; column++) {
+      const game = drop(pocketCenter(count, column));
+      assert.equal(game.balls.length, 0, `9-slot pocket ${column} must not hold a ball`);
+      assert.equal(game.stats.timeouts, 0, `9-slot pocket ${column} settles`);
+      assert.equal(game.stats.drains, 0);
+      assert.equal(game.stats.scored, 1);
+    }
+    frame.regions.slice(0, -1).forEach((region, index) => {
+      for (const x of [region.x1 - 16, region.x1 + 16]) {
+        const game = drop(x);
+        assert.equal(game.stats.timeouts, 0, `9-slot beside wall ${index} settles`);
+        assert.equal(game.balls.length, 0);
+        assert.equal(game.stats.drains, 0);
+        assert.equal(game.stats.scored, 1);
+      }
+    });
+  }
+}
+{
+  const nine = createTable({ slots: 9, random: () => 0.2 });
+  const frame = slotFrame(9);
+  assert.equal(nine.dividers.length, 8, 'one thin wall between each pair of the 9 slots');
+  const centers = nine.dividers.map(body => body.position.x).sort((a, b) => a - b);
+  frame.regions.slice(0, -1).forEach((region, index) => {
+    assert.ok(Math.abs(centers[index] - region.x1) < 0.51, `wall ${index} sits on the shared edge`);
+    const wall = nine.dividers.find(body => Math.abs(body.position.x - region.x1) < 0.51);
+    const thickness = wall.bounds.max.x - wall.bounds.min.x;
+    assert.ok(thickness < 12 && thickness > 3, `wall ${index} is a lip, not a filler (${thickness})`);
+  });
+  for (let index = 1; index < centers.length; index++) {
+    assert.ok(centers[index] - centers[index - 1] > 40, '9-slot walls are not stacked into a filler');
+  }
+  for (const count of [5, 7]) {
+    const lips = count === 5 ? count * 2 : count * 2 - 2;
+    const table = createTable({ slots: count, random: () => 0.2 });
+    assert.equal(table.dividers.length, lips, `${count} slots keep their drain lips`);
   }
 }
 assert.equal(classifyBottom(TABLE.left - 1, 5), null);
@@ -185,15 +237,20 @@ for (const count of [5, 7, 9]) {
     assert.equal(scored.at(-1).multiplier, [count === 5 ? [2, 3, 5, 3, 2] : count === 7 ? [2, 3, 5, 10, 5, 3, 2] : [2, 3, 5, 10, 20, 10, 5, 3, 2]][0][column]);
   }
   const drain = slotFrame(count).regions.find(region => region.kind === 'drain');
-  const before = scored.length;
-  const ball = game.launch(1);
-  ball.entered = true;
-  Matter.Body.setPosition(ball.body, { x: (drain.x0 + drain.x1) / 2, y: TABLE.scoreLine - 1 });
-  Matter.Body.setVelocity(ball.body, { x: 0, y: 6 });
-  game.step();
-  assert.equal(scored.length, before, 'a drain mouth does not score');
-  assert.equal(drained.length, 1);
-  assert.equal(game.stats.drains, 1);
+  if (drain) {
+    const before = scored.length;
+    const ball = game.launch(1);
+    ball.entered = true;
+    Matter.Body.setPosition(ball.body, { x: (drain.x0 + drain.x1) / 2, y: TABLE.scoreLine - 1 });
+    Matter.Body.setVelocity(ball.body, { x: 0, y: 6 });
+    game.step();
+    assert.equal(scored.length, before, 'a drain mouth does not score');
+    assert.equal(drained.length, 1);
+    assert.equal(game.stats.drains, 1);
+  } else {
+    assert.equal(count, 9);
+    assert.equal(game.stats.drains, 0, '9 slots have nothing to drain through');
+  }
   const paused = game.launchBurst();
   assert.ok(paused);
   assert.equal(game.pendingLaunches, 4);

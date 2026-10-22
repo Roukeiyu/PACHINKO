@@ -47,19 +47,32 @@ for (const [from, to] of [[5, 7], [7, 9], [5, 9]]) {
   assert.equal(start.regions.at(-1).kind, next.regions.at(-1).kind);
   assert.ok(start.regions.at(-1).x1 - start.regions.at(-1).x0 < 1e-6, 'the new right piece starts shut');
   assert.ok(mid.regions[0].x1 - mid.regions[0].x0 > 1, 'the new left piece has grown by halfway');
-  const extra = (next.regions.length - old.regions.length) / 2;
-  old.regions.forEach((region, index) => {
-    const target = next.regions[extra + index];
-    assert.equal(target.kind, region.kind, `${from}→${to} keeps the old mouths in the middle`);
-    if (region.kind !== 'drain') return;
-    const before = region.x1 - region.x0;
-    const after = target.x1 - target.x0;
-    const width = mid.regions[extra + index].x1 - mid.regions[extra + index].x0;
-    const halfway = before + (after - before) * mid.eased;
-    assert.ok(Math.abs(width - halfway) < 0.6, `${from}→${to} eases an existing drain toward its new width`);
-    if (from === 7 && to === 9) assert.ok(Math.abs(after - before) < 0.6, 'seven and nine slots keep the same wide drains');
-    else if (from === 5 && to === 7) assert.ok(after < before - 0.5, 'the five-slot drains narrow as the row gains end slots');
-  });
+  if (to === 9) {
+    assert.equal(next.regions.filter(region => region.kind === 'drain').length, 0, `${from}→${to} removes the filler mouths`);
+    const widths = next.regions.map(region => region.x1 - region.x0);
+    assert.ok(Math.max(...widths) - Math.min(...widths) < 1, `${from}→${to} ends on equal pockets`);
+    const side = (to - from) / 2;
+    old.regions.forEach((region, index) => {
+      const during = mid.regions[side + index];
+      assert.equal(during.kind, region.kind, `${from}→${to} keeps the old mouths while they move`);
+      if (region.kind !== 'drain') return;
+      const before = region.x1 - region.x0;
+      assert.ok(during.x1 - during.x0 < before - 0.5, `${from}→${to} shrinks a striped drain`);
+    });
+  } else {
+    const extra = (next.regions.length - old.regions.length) / 2;
+    old.regions.forEach((region, index) => {
+      const target = next.regions[extra + index];
+      assert.equal(target.kind, region.kind, `${from}→${to} keeps the old mouths in the middle`);
+      if (region.kind !== 'drain') return;
+      const before = region.x1 - region.x0;
+      const after = target.x1 - target.x0;
+      const width = mid.regions[extra + index].x1 - mid.regions[extra + index].x0;
+      const halfway = before + (after - before) * mid.eased;
+      assert.ok(Math.abs(width - halfway) < 0.6, `${from}→${to} eases an existing drain toward its new width`);
+      if (from === 5 && to === 7) assert.ok(after < before - 0.5, 'the five-slot drains narrow as the row gains end slots');
+    });
+  }
   let edge = start.regions[0].x0;
   for (const region of mid.regions) {
     assert.ok(Math.abs(region.x0 - edge) < 1e-4, `${from}→${to} mouths stay tiled`);
@@ -74,11 +87,23 @@ for (const [from, to] of [[5, 7], [7, 9], [5, 9]]) {
     assert.ok(Math.abs(region.x0 - next.regions[index].x0) < 1e-6);
     assert.ok(Math.abs(region.x1 - next.regions[index].x1) < 1e-6);
   });
-  almost.regions.forEach((region, index) => {
-    assert.equal(region.kind, next.regions[index].kind);
-    assert.ok(Math.abs(region.x0 - next.regions[index].x0) < 3);
-    assert.ok(Math.abs(region.x1 - next.regions[index].x1) < 3);
-  });
+  if (to === 9) {
+    const easedSlots = almost.regions.filter(region => region.kind === 'slot');
+    assert.equal(easedSlots.length, next.regions.length);
+    easedSlots.forEach((region, index) => {
+      assert.ok(Math.abs(region.x0 - next.regions[index].x0) < 3);
+      assert.ok(Math.abs(region.x1 - next.regions[index].x1) < 3);
+    });
+    for (const drain of almost.regions.filter(region => region.kind === 'drain')) {
+      assert.ok(drain.x1 - drain.x0 < 1, `${from}→${to} has closed the striped drains`);
+    }
+  } else {
+    almost.regions.forEach((region, index) => {
+      assert.equal(region.kind, next.regions[index].kind);
+      assert.ok(Math.abs(region.x0 - next.regions[index].x0) < 3);
+      assert.ok(Math.abs(region.x1 - next.regions[index].x1) < 3);
+    });
+  }
   const changing = mid.regions.find(region => region.kind === 'slot' && region.fromMultiplier !== region.toMultiplier);
   assert.ok(changing, `${from}→${to} eases at least one multiplier`);
 }

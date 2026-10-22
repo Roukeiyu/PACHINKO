@@ -1,7 +1,7 @@
 import { chargeEffectsAt } from './charge.js';
 import { sceneMotionAt, project2DMotion } from './scene-motion.js';
 import { TABLE, LAUNCH_SQUASH } from './physics.js';
-import { BOARD_CROWD_LOCK } from './round.js';
+import { BOARD_CROWD_LOCK, DRAIN_WALL } from './round.js';
 import { ballOwnFactor, ballRimStyle } from './ball-rim.js';
 import { blendSlotLayout } from './slot-transition.js';
 import { SLOT_DISPLAY, BALL_SYMBOL, REEL_WEIGHTS, reelBox, PROGRESS_TOP, PROGRESS_HEIGHT, slotBonusLabel } from './slot-machine.js';
@@ -122,8 +122,8 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     ctx.save();ctx.setLineDash([5,6]);ctx.strokeStyle = paintColor('#a7ba8e', 'line');ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(676,539);ctx.lineTo(676,615);ctx.stroke();ctx.restore();
     text('↙ 回流口', 624, 640, 12, '#9b8965');
     const layout = slotLayout(state);
-    const iconSize = (layout.from === 9 ? 16 : 20) + ((layout.to === 9 ? 16 : 20) - (layout.from === 9 ? 16 : 20)) * layout.eased;
-    const scoreSize = (layout.from === 9 ? 12 : 15) + ((layout.to === 9 ? 12 : 15) - (layout.from === 9 ? 12 : 15)) * layout.eased;
+    const iconSize = 20;
+    const scoreSize = 15;
     for (const region of layout.regions) {
       const width = region.x1 - region.x0;
       if (width < 1.5) continue;
@@ -156,6 +156,19 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       else {
         const lucky = (region.luckyFrom ? 1 - eased : 0) + (region.luckyTo ? eased : 0);
         if (lucky > 0.04) { ctx.save(); ctx.globalAlpha = Math.min(1, lucky); text('LUCKY', mid, TABLE.slotTop + 73, 8, '#aa8243'); ctx.restore(); }
+      }
+    }
+    // Nine slots meet edge to edge. The thin wall fills the card inset; it is
+    // a solid lip, not the diagonal 漏 hatch. Wide drains still shrinking
+    // during the upgrade keep that hatch until they close.
+    if (layout.to === 9) {
+      const pictured = layout.regions.filter(region => region.kind === 'slot' && region.x1 - region.x0 >= 8);
+      for (let i = 0; i < pictured.length - 1; i++) {
+        const left = pictured[i], right = pictured[i + 1];
+        const gap = right.x0 - left.x1;
+        if (gap > DRAIN_WALL + 0.75) continue;
+        const x = (left.x1 + right.x0) / 2;
+        box(x - DRAIN_WALL / 2, TABLE.slotTop, DRAIN_WALL, 90, 1, '#6e2c32');
       }
     }
     for (const hole of game.holes) {
