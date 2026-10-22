@@ -48,8 +48,9 @@ for (const slots of [5, 7, 9]) for (const multiplier of new Set(slotMultipliers(
   const game = createTable({ collections: stock, onScore: e => events.push(e) });
   game.slotMachine.tripleUntil = 60000;
   const ball = game.launch(); ball.entered = true; ball.scoreFactor = 2;
-  Matter.Body.setPosition(ball.body, { x: game.holes[0].x - 47, y: game.holes[0].y - 2 });
-  Matter.Body.setVelocity(ball.body, { x: 5, y: -1 });
+  const cup = game.holes[0];
+  Matter.Body.setPosition(ball.body, { x: cup.x + Math.cos(cup.facing) * 47, y: cup.y + Math.sin(cup.facing) * 47 });
+  Matter.Body.setVelocity(ball.body, { x: -Math.cos(cup.facing) * 5, y: -Math.sin(cup.facing) * 5 });
   for (let i = 0; i < 45 && game.balls.includes(ball); i++) game.step();
   assert.equal(events[0].kind, 'jackpot'); assert.equal(events[0].points, 500 * 2 * 5);
   assert.equal(events[0].collection, null);

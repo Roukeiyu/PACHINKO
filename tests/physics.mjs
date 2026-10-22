@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import Matter from 'matter-js';
-import { createTable, TABLE, STEP } from '../src/physics.js';
+import { createTable, TABLE, STEP, SECRET_HOLE_FACING } from '../src/physics.js';
 import { reelBox } from '../src/slot-machine.js';
 
 function seeded(seed) { return () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 32; }; }
@@ -197,21 +197,30 @@ for (const slots of [5, 7, 9]) for (const seedOffset of [0, 100, 200]) {
 }
 assert.ok(totals.jackpots > 0 && totals.jackpots < 108, 'physical bonus cups should be attainable and uncommon (<10% in seeded sample)');
 
-// Approach the remaining right cup from its real, narrow mouth. Capture scores exactly
-// once, while a trajectory just outside the cup does not receive a jackpot.
+// Approach the remaining right cup through the down-left mouth. Capture scores
+// exactly once, while a trajectory into the closed arc does not receive a jackpot.
 {
   const scores = [], game = createTable({ onScore: score => scores.push(score) });
   assert.equal(game.holes.length, 1, 'only the right secret hole remains');
-  const h = game.holes[0], direction = -1;
+  const h = game.holes[0];
   assert.ok(h.x > TABLE.width / 2);
+  assert.equal(h.facing, SECRET_HOLE_FACING, 'the mouth faces 7:30, 45° down-left');
+  const open = game.guards.filter(guard => guard.plugin.hole);
+  assert.equal(open.length, 12);
+  for (const guard of open) {
+    const angle = Math.atan2(guard.position.y - h.y, guard.position.x - h.x);
+    const delta = Math.atan2(Math.sin(angle - h.facing), Math.cos(angle - h.facing));
+    assert.ok(Math.abs(delta) >= 0.5, 'the wall arc leaves the down-left mouth open');
+  }
   const ball = game.launch(); ball.entered = true;
-  Matter.Body.setPosition(ball.body, { x: h.x + direction * 47, y: h.y - 2 });
-  Matter.Body.setVelocity(ball.body, { x: -direction * 5, y: -1 });
+  Matter.Body.setPosition(ball.body, { x: h.x + Math.cos(h.facing) * 47, y: h.y + Math.sin(h.facing) * 47 });
+  Matter.Body.setVelocity(ball.body, { x: -Math.cos(h.facing) * 5, y: -Math.sin(h.facing) * 5 });
   for (let i = 0; i < 45; i++) game.step();
   assert.equal(scores.length, 1); assert.equal(scores[0].points, 500);
   const miss = game.launch(); miss.entered = true;
-  Matter.Body.setPosition(miss.body, { x: h.x + direction * 48, y: h.y - 48 });
-  Matter.Body.setVelocity(miss.body, { x: -direction * 3, y: 0 });
+  const closed = h.facing - 1.15;
+  Matter.Body.setPosition(miss.body, { x: h.x + Math.cos(closed) * 48, y: h.y + Math.sin(closed) * 48 });
+  Matter.Body.setVelocity(miss.body, { x: -Math.cos(closed) * 3, y: -Math.sin(closed) * 3 });
   for (let i = 0; i < 15; i++) game.step();
   assert.equal(scores.length, 1, 'near misses cannot count as cup entry');
 }
@@ -316,7 +325,7 @@ function stillWedged(table, ball, hole, ms = 2500) {
   const samples = [
     { name: 'right cusp', x: 657, y: 463, vx: 0, vy: 0 },
     { name: 'top seam', x: 618.5, y: 443, vx: 0, vy: 2 },
-    { name: 'mouth tangent', x: 615, y: 448, vx: -5, vy: 0 },
+    { name: 'mouth tangent', x: 615 + Math.cos(SECRET_HOLE_FACING + 0.5) * 34, y: 482 + Math.sin(SECRET_HOLE_FACING + 0.5) * 34, vx: -Math.cos(SECRET_HOLE_FACING) * 5, vy: -Math.sin(SECRET_HOLE_FACING) * 5 },
   ];
   const hole = { x: 615, y: 482 };
   for (let deg = 0; deg < 360; deg += 45) for (const speed of [2, 8]) for (const tangent of [0, 1]) {
@@ -328,9 +337,17 @@ function stillWedged(table, ball, hole, ms = 2500) {
       vy: Math.sin(a + Math.PI / 2 * tangent + Math.PI * (1 - tangent)) * speed,
     });
   }
-  for (const dy of [-28, 0, 28]) for (const speed of [2, 7]) {
-    samples.push({ name: `mouth ${dy}/${speed}`, x: hole.x - 52, y: hole.y + dy, vx: speed, vy: dy / 52 * speed });
+  for (const offset of [-0.35, 0, 0.35]) for (const speed of [2, 7]) {
+    const angle = SECRET_HOLE_FACING + offset;
+    samples.push({
+      name: `mouth ${offset}/${speed}`,
+      x: hole.x + Math.cos(angle) * 52,
+      y: hole.y + Math.sin(angle) * 52,
+      vx: -Math.cos(angle) * speed,
+      vy: -Math.sin(angle) * speed,
+    });
   }
+  samples.push({ name: 'closed left wall', x: hole.x - 52, y: hole.y, vx: 4, vy: 0 });
   for (const sample of samples) {
     const scored = [], table = createTable({ slots: 7, random: () => 0, onScore: s => scored.push(s) });
     const h = table.holes[0];

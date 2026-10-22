@@ -99,7 +99,8 @@ function slot(game, ball = game.launch()) {
   assert.ok(!game.balls.includes(ball));
 }
 function hole(game, ball = game.launch()) {
-  const h = game.holes[0]; put(ball, h.x - 47, h.y - 2, 5, -1);
+  const h = game.holes[0];
+  put(ball, h.x + Math.cos(h.facing) * 47, h.y + Math.sin(h.facing) * 47, -Math.cos(h.facing) * 5, -Math.sin(h.facing) * 5);
   for (let n = 0; n < 45 && game.balls.includes(ball); n++) game.step();
   assert.ok(!game.balls.includes(ball));
 }

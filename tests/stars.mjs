@@ -124,7 +124,7 @@ assert.deepEqual([a.scoreFactor, b.scoreFactor].sort(), [1, 2]);
 const jackpotScores = [], jackpot = createTable({ starRandom: () => .6, onScore: s => jackpotScores.push(s) });
 const lucky = jackpot.launch(); collect(jackpot, lucky);
 const h = jackpot.holes[0];
-put(lucky, h.x - 47, h.y - 2, 5, -1);
+put(lucky, h.x + Math.cos(h.facing) * 47, h.y + Math.sin(h.facing) * 47, -Math.cos(h.facing) * 5, -Math.sin(h.facing) * 5);
 for (let i = 0; i < 45; i++) jackpot.step();
 assert.equal(jackpotScores.length, 1);
 assert.equal(jackpotScores[0].kind, 'jackpot');

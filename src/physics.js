@@ -27,6 +27,9 @@ const FILTER = { world: 1, ascending: 2, playing: 4, returnRamp: 8, launchDoor: 
 // The cup's inner wall sits near r=28. A center that reaches the sink has passed
 // that lip, so the rim can no longer push it back out between checks.
 const HOLE_SINK = 30, HOLE_RIM = 56, HOLE_IGNORE = 200, HOLE_GROUP = -2;
+// Mouth direction. Angle 0 points right and increases clockwise, because y
+// grows downward. 3π/4 is 7:30: 45° down-left, 225° clockwise from 12 o'clock.
+export const SECRET_HOLE_FACING = Math.PI * 3 / 4;
 const DWELL_RADIUS = 12, DWELL_LIMIT = 1500, COLLECTOR_HOLD = 48;
 // Same negative group: a phased ball skips the secret-hole ring only.
 // Collector guards stay on group 0, so storage is never phased open.
@@ -36,7 +39,7 @@ const DWELL_RADIUS = 12, DWELL_LIMIT = 1500, COLLECTOR_HOLD = 48;
 export function createTable({ slots = 7, collections = null, random = Math.random, starRandom = Math.random, slotRandom = Math.random, onHit = () => {}, onScore = () => {}, onReturn = () => {}, onDrain = () => {}, onSurprise = () => {}, centerHitWeight = null, giftScale = null } = {}) {
   const engine = Engine.create({ gravity: { x: 0, y: 1.05 }, positionIterations: 8, velocityIterations: 8 });
   const balls = [], walls = [], pins = [], kickers = [], bumpers = [], rails = [], diamonds = [], spinners = [], guards = [], dividers = [], gates = [];
-  const holes = [{ x: 615, y: 482, facing: Math.PI, glow: 0 }];
+  const holes = [{ x: 615, y: 482, facing: SECRET_HOLE_FACING, glow: 0 }];
   const deflectors = [], pendingDeflections = [];
   let activeStar = null, nextStarAt = 0, nextStarId = 1, lastStarLocation = -1, nextStarMultiplier = 2;
   let clock = 0, nextId = 1;
@@ -103,8 +106,8 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   // from nearby obstacles even when pointing left, allowing full-circle shots.
   const triangle = add(Bodies.fromVertices(99, 466, [[{ x: 34, y: 0 }, { x: -17, y: -23 }, { x: -17, y: 23 }]], { isStatic: true, label: 'deflector', restitution: .8, friction: 0 }), deflectors, { radius: 34, angle: -Math.PI / 3, hits: 0 });
   Body.setAngle(triangle, triangle.plugin.angle);
-  // Recessed cups with narrow, inward-facing mouths. A jackpot is earned by
-  // actually reaching the hole, never by an invisible random rejection.
+  // Recessed cup. The missing arc is the mouth, centered on facing (7:30,
+  // down-left). A jackpot is earned by actually reaching the hole.
   for (const hole of holes) {
     for (let i = 0; i < 12; i++) {
       const a = hole.facing + .55 + i * (Math.PI * 2 - 1.1) / 12;
