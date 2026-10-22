@@ -185,6 +185,7 @@ for (const slots of [5, 7, 9]) for (const seedOffset of [0, 100, 200]) {
   assert.ok(columns.size >= slots - 1, 'multiple routes must reach almost all slots');
   for (const kind of ['bumper', 'rail', 'spinner', 'diamond', 'pin', 'deflector']) assert.ok(game.stats.hits[kind] > 0, `${kind} participates in physical trajectories`);
   assert.ok(outcomes.every(r => {
+    if (r.kind === 'hit') return ['bunny', 'bear', 'cat', 'diamond'].includes(r.target) && [1, 2, 5].includes(r.basePoints) && r.points === r.basePoints * r.ownFactor && r.ownFactor >= 1;
     let factor = r.scoreFactor;
     if (!Number.isInteger(factor) || factor < 1) return false;
     for (const prime of [2, 5]) while (factor % prime === 0) factor /= prime;

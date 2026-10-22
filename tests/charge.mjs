@@ -40,7 +40,7 @@ for (const slots of [5,7,9]) for (let seed = 1; seed <= 20; seed++) {
     assert.equal(ball.power, 1); assert.equal(ball.bonus, false);
     assert.ok(game.balls.every(other => other === ball || Math.hypot(other.body.position.x - ball.body.position.x, other.body.position.y - ball.body.position.y) > 22), 'new shots never stack inside the spring');
     shots.push(e);
-  } }, onScore: e => { assert.ok(!settlements.has(e.ballId), 'each physical ball settles once'); settlements.add(e.ballId); } });
+  } }, onScore: e => { if (e.kind === 'hit') return; assert.ok(!settlements.has(e.ballId), 'each physical ball settles once'); settlements.add(e.ballId); } });
   assert.ok(game.launchBurst());
   assert.equal(game.stats.launches, 1);
   assert.equal(game.pendingLaunches, 4);

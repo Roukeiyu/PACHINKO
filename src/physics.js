@@ -4,6 +4,7 @@ import { slotMultipliers } from './slots.js';
 export { slotMultipliers };
 import { createSlotMachine, SLOT_DISPLAY } from './slot-machine.js';
 import { SLOT_ROW_LEFT, SLOT_ROW_RIGHT, DRAIN_WALL, DRAIN_FLOOR, slotFrame, classifyBottom, ballValue, tablePoints, jarRefundable } from './round.js';
+import { ballOwnFactor } from './ball-rim.js';
 export { slotFrame, classifyBottom };
 
 const { Engine, Bodies, Body, Composite, Events } = Matter;
@@ -19,6 +20,9 @@ export const ENLARGE_MS = 10000;
 // clockwise by this much. Straight up from 12 o'clock falls back onto the
 // center peg and the bell and never leaves that line.
 export const CLOCK_LAUNCH_TILT = 15 * Math.PI / 180;
+// One award per contact start. A ball rattling on the same bumper or diamond
+// waits this long before the next +N. Drum progress keeps its own 100ms gate.
+export const HIT_SCORE_COOLDOWN = 150;
 const FILTER = { world: 1, ascending: 2, playing: 4, returnRamp: 8, launchDoor: 16 };
 // The cup's inner wall sits near r=28. A center that reaches the sink has passed
 // that lip, so the rim can no longer push it back out between checks.
@@ -221,7 +225,7 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   function spawn(x, y, vx, vy, { power = 0, bonus = false, kind = 'launch' } = {}) {
     const body = Bodies.circle(x, y, 11, { label: 'ball', density: .009, restitution: .65, friction: .001, frictionAir: .001, collisionFilter: { category: bonus ? FILTER.playing : FILTER.ascending, mask: 0xffffffff, group: 0 } });
     Body.setVelocity(body, { x: vx, y: vy });
-    const ball = { id: nextId++, body, power, entered: bonus, bonus, kind, scoreFactor: 1, valueFactor: 1, redirected: false, trail: [], born: clock, stuck: 0, ignoreHoleUntil: 0, anchorX: x, anchorY: y, lastKick: -1000, lastBumperHits: [-1000, -1000, -1000], collisions: 0 };
+    const ball = { id: nextId++, body, power, entered: bonus, bonus, kind, scoreFactor: 1, valueFactor: 1, redirected: false, trail: [], born: clock, stuck: 0, ignoreHoleUntil: 0, anchorX: x, anchorY: y, lastKick: -1000, lastBumperHits: [-1000, -1000, -1000], hitScores: new Map(), collisions: 0 };
     Composite.add(engine.world, body); balls.push(ball);
     if (bonus) stats.bonusBalls++;
     return ball;
@@ -434,10 +438,37 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
         Body.setVelocity(body, { x: dx / d * 10.8, y: dy / d * 10.8 });
         ball.lastKick = clock;
       }
+      awardHit(obstacle, ball, body);
       onHit({ kind: obstacle.label, x: body.position.x, y: body.position.y, index: obstacle.plugin.index || 0, speed: body.speed });
     }
   });
   function remove(ball, index) { Composite.remove(engine.world, ball.body); balls.splice(index, 1); }
+  function hitTarget(obstacle) {
+    if (obstacle.label === 'diamond') return { target: 'diamond', index: diamonds.indexOf(obstacle), basePoints: 1 };
+    if (obstacle.label !== 'bumper') return null;
+    const index = obstacle.plugin.index;
+    if (index !== 0 && index !== 1 && index !== 2) return null;
+    // The center drum pays more while the enlarge timer is still running.
+    // Expiry runs before the solver, so a hit on the shrinking step pays 2.
+    const basePoints = index === 2 ? (rewards.enlargedUntil > clock ? 5 : 2) : 1;
+    return { target: ['bunny', 'bear', 'cat'][index], index, basePoints };
+  }
+  function awardHit(obstacle, ball, body) {
+    const award = ball && hitTarget(obstacle);
+    if (!award) return;
+    const last = ball.hitScores.get(obstacle.id);
+    if (last !== undefined && clock - last < HIT_SCORE_COOLDOWN) return;
+    ball.hitScores.set(obstacle.id, clock);
+    const ownFactor = ballOwnFactor(ball);
+    // Reel ×2/×5 multiplies slots and the secret hole only. This award uses
+    // the same factor as the ball's rim: launch ×N times stars on this ball.
+    onScore({
+      kind: 'hit', target: award.target, index: award.index, basePoints: award.basePoints,
+      scoreFactor: ball.scoreFactor, valueFactor: ballValue(ball.valueFactor), ownFactor,
+      globalMultiplier: slotMachine.state.multiplier, points: award.basePoints * ownFactor,
+      x: body.position.x, y: body.position.y, ballId: ball.id,
+    });
+  }
   function settleScore(result, ball) {
     const globalMultiplier = slotMachine.state.multiplier;
     stats.scored++;
