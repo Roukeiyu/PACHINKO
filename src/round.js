@@ -227,10 +227,17 @@ export function jarRefundable(stored) {
   }, 0);
 }
 
+// Last-resort pause before a quiet table is finalized. The normal end still
+// happens on the same frame the table clears; this only covers a panel that
+// is holding the simulation, or a ball the table never noticed leaving.
+export const ROUND_IDLE_MS = 3000;
+
 // Every one of these has to be clear. A ball still on the table, a player ball
-// banked in the tank, a drop waiting to fall, or a secret visit keeps the round alive.
-export function roundCanEnd({ balls = 0, onTable = 0, stored = 0, pendingDrops = 0, pendingLaunches = 0, secretPending = false, miniOpen = false } = {}) {
-  return balls <= 0 && onTable <= 0 && stored <= 0 && pendingDrops <= 0 && pendingLaunches <= 0 && !secretPending && !miniOpen;
+// banked in the tank, a drop waiting to fall, a queued drum or clock shot, or a
+// secret visit keeps the round alive. Gift entries in a partial jar do not:
+// they never fill the tank on their own, and they are not a stuck release.
+export function roundCanEnd({ balls = 0, onTable = 0, stored = 0, pendingDrops = 0, pendingLaunches = 0, pendingShots = 0, secretPending = false, miniOpen = false } = {}) {
+  return balls <= 0 && onTable <= 0 && stored <= 0 && pendingDrops <= 0 && pendingLaunches <= 0 && pendingShots <= 0 && !secretPending && !miniOpen;
 }
 
 export function qualifiesForLeaderboard(score, rows) {

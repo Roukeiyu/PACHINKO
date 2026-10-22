@@ -6,7 +6,7 @@ import {
   START_BALLS, LOW_BALLS, LAUNCH_COST, BURST_COST, SECRET_BALLS, LUCKY_BALLS, SLOT_MACHINE_BALLS,
   DRUM_ENLARGE_BALLS, MINI_BALLS_FULL_SCORE, DRAIN_MIN_OPENING, DRAIN_WIDTH_SCALE, DRAIN_WALL, POCKET_WIDTH,
   BALL_DIAMETER, WIDE_DRAIN_OPENING,
-  slotFrame, classifyBottom, pocketCenter, secretHoleBalls, shotCost, nextBallCost, clampBallCost, chooseSpendFactor, roundCanEnd, jarRefundable,
+  slotFrame, classifyBottom, pocketCenter, secretHoleBalls, shotCost, nextBallCost, clampBallCost, chooseSpendFactor, roundCanEnd, jarRefundable, ROUND_IDLE_MS,
   BOARD_CROWD_LOCK, boardCrowdUnlock, crowdLaunchLocked, triggeringGiftScale,
   qualifiesForLeaderboard, freshRound, restoreRun,
 } from '../src/round.js';
@@ -261,8 +261,11 @@ assert.equal(jarRefundable([1, { scoreFactor: 2, refund: true }]), 2);
 assert.equal(jarRefundable([{ scoreFactor: 5, refund: false }, { scoreFactor: 1 }]), 0, 'gift entries and unmarked objects do not return a ball');
 assert.equal(roundCanEnd({ pendingDrops: 1 }), false);
 assert.equal(roundCanEnd({ pendingLaunches: 1 }), false);
+assert.equal(roundCanEnd({ pendingShots: 1 }), false, 'a queued drum or clock shot keeps the round alive');
 assert.equal(roundCanEnd({ secretPending: true }), false);
 assert.equal(roundCanEnd({ miniOpen: true }), false);
+assert.equal(ROUND_IDLE_MS, 3000);
+assert.equal(roundCanEnd({ stored: jarRefundable([{ scoreFactor: 1 }, { scoreFactor: 2 }]) }), true, 'gift balls sitting in a partial jar do not block the end');
 
 assert.equal(qualifiesForLeaderboard(49999, PRESET_BOARD), false);
 assert.equal(qualifiesForLeaderboard(50000, PRESET_BOARD), true);

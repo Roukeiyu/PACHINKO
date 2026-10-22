@@ -616,12 +616,16 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
         }
       }
       // Balls falling back down the shooter lane are returned, never mis-scored
-      // as the rightmost slot. A timeout is visible rather than a hidden teleport.
-      if ((x > 688 && y > 815 && body.velocity.y > 0) || y > 960 || clock - ball.born > 45000) {
-        const timedOut = clock - ball.born > 45000;
+      // as the rightmost slot. A center that has left the cabinet is gone too:
+      // a leak or the secret mouth must not leave a ghost ball blocking the end.
+      // A timeout is visible rather than a hidden teleport.
+      const fellOff = x < -40 || x > TABLE.width + 40 || y < -40 || y > 960;
+      const weakReturn = x > 688 && y > 815 && body.velocity.y > 0;
+      const timedOut = !fellOff && !weakReturn && clock - ball.born > 45000;
+      if (fellOff || weakReturn || timedOut) {
         if (timedOut) stats.timeouts++;
         stats.returns++; remove(ball, i);
-        onReturn({ ballId: ball.id, reason: timedOut ? 'timeout' : y > 960 ? 'out' : 'weak' });
+        onReturn({ ballId: ball.id, reason: timedOut ? 'timeout' : fellOff ? 'out' : 'weak' });
         continue;
       }
       // High-frequency contact keeps speed well above a "stopped" threshold, so

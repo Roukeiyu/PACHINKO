@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { existsSync } from 'node:fs';
-import { START_BALLS, BURST_COST, SECRET_BALLS } from '../src/round.js';
+import { START_BALLS, BURST_COST, SECRET_BALLS, ROUND_IDLE_MS } from '../src/round.js';
 import { PAIR_DURATION, BLOCK_DURATION, MINI_DURATION, AFK_BALL_TEXT, connectedBlocks, MOLE_FLIP_MS } from '../src/mini-games.js';
 import { BURST_READY_AT } from '../src/charge.js';
 
@@ -73,6 +73,11 @@ try {
   await page.evaluate(() => { document.querySelector('#mini-game').close(); });
   await page.clock.runFor(80);
   assert.equal(await page.locator('#settlement').evaluate(el => el.open), true);
+  await page.keyboard.press('Escape');
+  await page.clock.runFor(50);
+  assert.equal(await page.locator('#settlement').evaluate(el => el.open), true, 'escape cannot dismiss the settlement');
+  assert.equal(await page.evaluate(() => window.__ponpon.over), true);
+  assert.equal(await page.locator('#launch-label').textContent(), '本局结束');
 
   const best = await page.locator('#best').textContent();
   await page.locator('#play-again').click();
@@ -219,6 +224,62 @@ try {
   assert.equal(await page.evaluate(() => window.__ponpon.score), 0);
   assert.equal(await page.evaluate(() => window.__ponpon.slots), 5);
   assert.equal(await page.locator('#settlement').evaluate(el => el.open), false);
+
+  await page.evaluate(() => { window.__ponpon.grant(120718); window.__ponpon.setStock(0); window.__ponpon.previewJar(8); });
+  await page.clock.runFor(80);
+  assert.equal(await page.locator('#settlement').evaluate(el => el.open), true, 'gift balls in a partial jar do not hold the round open');
+  assert.equal(await page.locator('#name-entry').evaluate(el => el.open), true, 'a qualifying score still asks for a name');
+  assert.equal(await page.evaluate(() => window.__ponpon.collector.count), 8);
+  assert.equal(await page.evaluate(() => window.__ponpon.available), 0);
+  await page.keyboard.press('Escape');
+  await page.clock.runFor(40);
+  assert.equal(await page.locator('#name-entry').evaluate(el => el.open), false, 'escape skips the name prompt');
+  assert.equal(await page.locator('#settlement').evaluate(el => el.open), true, 'the result stays up under the name prompt');
+  await page.keyboard.press('Escape');
+  await page.clock.runFor(40);
+  assert.equal(await page.locator('#settlement').evaluate(el => el.open), true, 'a second escape cannot leave an ended round with no dialog');
+  assert.equal(await page.evaluate(() => window.__ponpon.over), true);
+  assert.equal(await page.locator('#launch-label').textContent(), '本局结束');
+  await page.locator('#play-again').click();
+  await page.clock.runFor(30);
+  assert.equal(await page.evaluate(() => window.__ponpon.over), false);
+
+  await page.evaluate(() => window.__ponpon.setStock(0));
+  const queued = await page.evaluate(() => window.__ponpon.queueClock(8));
+  assert.equal(queued, 96);
+  await page.clock.runFor(50);
+  const burst = await page.evaluate(() => ({
+    over: window.__ponpon.over,
+    balls: window.__ponpon.activeBalls,
+    pending: window.__ponpon.pendingShots,
+    open: document.querySelector('#settlement').open,
+  }));
+  assert.equal(burst.over, false, 'an ×8 clock burst does not end the round between shots');
+  assert.equal(burst.open, false);
+  assert.ok(burst.pending > 0 || burst.balls > 0, 'the burst is still queued or on the table');
+  await page.evaluate(() => window.__ponpon.restart());
+  await page.clock.runFor(40);
+
+  await page.locator('#settings-button').click();
+  await page.evaluate(() => { window.__ponpon.setStock(0); window.__ponpon.previewJar(8); });
+  await page.clock.runFor(80);
+  assert.equal(await page.locator('#settlement').evaluate(el => el.open), false, 'settings hold the normal end until the watchdog');
+  await page.clock.fastForward(ROUND_IDLE_MS - 400);
+  await page.clock.runFor(20);
+  assert.equal(await page.locator('#settlement').evaluate(el => el.open), false, 'the watchdog waits the full 3 seconds');
+  await page.clock.fastForward(700);
+  await page.clock.runFor(40);
+  assert.equal(await page.locator('#settlement').evaluate(el => el.open), true, 'a quiet table with only gift balls ends after 3 seconds');
+  assert.equal(await page.evaluate(() => window.__ponpon.over), true);
+  assert.equal(await page.locator('#launch-label').textContent(), '本局结束');
+  await page.locator('#play-again').click();
+  await page.clock.runFor(30);
+  await page.locator('#close-settings').click();
+  await page.clock.runFor(20);
+  assert.equal(await page.locator('#settlement').evaluate(el => el.open), false);
+  assert.equal(await page.evaluate(() => window.__ponpon.over), false);
+  assert.equal(await page.evaluate(() => window.__ponpon.available), START_BALLS);
+
   assert.deepEqual(errors, []);
   console.log('PASS: ball spend and return, drains, blocked game over, restart, and keep-progress refresh.');
 

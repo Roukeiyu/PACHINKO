@@ -270,6 +270,30 @@ const scores = [], game = createTable({ onScore: score => scores.push(score) });
 const ball = game.launch();
 Matter.Body.setPosition(ball.body, { x: TABLE.launchX, y: 820 }); Matter.Body.setVelocity(ball.body, { x: 0, y: 3 });
 game.step(); assert.equal(scores.length, 0); assert.equal(game.stats.returns, 1, 'falling in shooter lane returns without scoring');
+{
+  const reasons = [];
+  for (const slots of [5, 7, 9]) {
+    const table = createTable({ slots, onReturn: event => reasons.push(`${slots}:${event.reason}`) });
+    for (const spot of [{ x: -80, y: 400 }, { x: TABLE.width + 80, y: 420 }, { x: 300, y: -80 }, { x: 300, y: 980 }]) {
+      const stray = table.launch();
+      Matter.Body.setPosition(stray.body, spot);
+      Matter.Body.setVelocity(stray.body, { x: 0, y: 0 });
+      table.step();
+      assert.equal(table.balls.includes(stray), false, `${slots} slots remove a ball that left the board at ${spot.x},${spot.y}`);
+      assert.equal(reasons.at(-1), `${slots}:out`);
+    }
+    const parked = table.launch();
+    Matter.Body.setPosition(parked.body, { x: 713, y: 787 });
+    Matter.Body.setVelocity(parked.body, { x: 0, y: 0 });
+    table.step();
+    assert.equal(table.balls.includes(parked), true, `${slots} slots keep a ball waiting in the shooter lane`);
+    table.collector.stored.push({ scoreFactor: 1 }, { scoreFactor: 2 }, { scoreFactor: 1 });
+    assert.equal(table.collector.refundable, 0, `${slots} slots do not refund a partial gift jar`);
+    assert.equal(table.queueClock(8), 96, `${slots} slots queue an ×8 clock burst`);
+    assert.equal(table.pendingShotCount, 96);
+  }
+  console.log('PASS: off-board balls are removed on 5, 7 and 9 slots; a partial gift jar is not a release.');
+}
 game.launch(); game.setSlots(9); assert.equal(game.balls.length, 0); assert.equal(game.slots, 9);
 {
   const kept = createTable();
