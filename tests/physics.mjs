@@ -197,14 +197,14 @@ for (const slots of [5, 7, 9]) for (const seedOffset of [0, 100, 200]) {
 }
 assert.ok(totals.jackpots > 0 && totals.jackpots < 108, 'physical bonus cups should be attainable and uncommon (<10% in seeded sample)');
 
-// Approach the cup through the down-left mouth. Capture scores exactly once,
+// Approach the cup through the up-left mouth. Capture scores exactly once,
 // while a trajectory into the closed arc does not receive a jackpot.
 {
   const scores = [], game = createTable({ onScore: score => scores.push(score) });
   assert.equal(game.holes.length, 1, 'only the right secret hole remains');
   const h = game.holes[0];
   assert.ok(h.x > TABLE.width / 2);
-  assert.equal(h.facing, SECRET_HOLE_FACING, 'the mouth faces 7:30, 45° down-left');
+  assert.equal(h.facing, SECRET_HOLE_FACING, 'the mouth faces 10 o\'clock, up-left');
   assert.equal(h.x, SECRET_HOLE_X);
   assert.equal(h.y, SECRET_HOLE_Y);
   const open = game.guards.filter(guard => guard.plugin.hole);
@@ -212,7 +212,7 @@ assert.ok(totals.jackpots > 0 && totals.jackpots < 108, 'physical bonus cups sho
   for (const guard of open) {
     const angle = Math.atan2(guard.position.y - h.y, guard.position.x - h.x);
     const delta = Math.atan2(Math.sin(angle - h.facing), Math.cos(angle - h.facing));
-    assert.ok(Math.abs(delta) >= 0.5, 'the wall arc leaves the down-left mouth open');
+    assert.ok(Math.abs(delta) >= 0.5, 'the wall arc leaves the up-left mouth open');
   }
   const ball = game.launch(); ball.entered = true;
   Matter.Body.setPosition(ball.body, { x: h.x + Math.cos(h.facing) * 47, y: h.y + Math.sin(h.facing) * 47 });
@@ -349,8 +349,8 @@ function stillWedged(table, ball, hole, ms = 2500) {
 }
 {
   const samples = [
-    { name: 'right cusp', x: 648, y: 450, vx: 0, vy: 0 },
-    { name: 'top seam', x: 600, y: 448, vx: 0, vy: 2 },
+    { name: 'right cusp', x: 656, y: SECRET_HOLE_Y - 46, vx: 0, vy: 1 },
+    { name: 'lower shoulder', x: 656, y: SECRET_HOLE_Y + 48, vx: 0, vy: 2 },
     { name: 'mouth tangent', x: SECRET_HOLE_X + Math.cos(SECRET_HOLE_FACING + 0.5) * 34, y: SECRET_HOLE_Y + Math.sin(SECRET_HOLE_FACING + 0.5) * 34, vx: -Math.cos(SECRET_HOLE_FACING) * 5, vy: -Math.sin(SECRET_HOLE_FACING) * 5 },
   ];
   const hole = { x: SECRET_HOLE_X, y: SECRET_HOLE_Y };
@@ -386,12 +386,31 @@ function stillWedged(table, ball, hole, ms = 2500) {
   }
   const parked = createTable({ slots: 7, random: () => 0 });
   const wedged = parked.launch(); wedged.entered = true;
-  Matter.Body.setPosition(wedged.body, { x: 648, y: 450 });
+  Matter.Body.setPosition(wedged.body, { x: 656, y: SECRET_HOLE_Y - 40 });
   Matter.Body.setVelocity(wedged.body, { x: 0, y: 0 });
   parked.step();
   parked.setSlots(5);
   assert.equal(parked.balls.length, 0, 'switching slots removes a ball sitting in the cusp');
   console.log(`PASS: secret-hole rim scan (${samples.length} angles and speeds) sinks or ejects, and slot changes clear a wedged ball.`);
+}
+// The ring is buried in the launch-lane wall. Balls dropped on that junction
+// must fall into the cup or roll back into play, never sit in the shoulder.
+{
+  const junction = [];
+  for (let dy = -84; dy <= 84; dy += 12) {
+    for (const x of [SECRET_HOLE_X + 4, SECRET_HOLE_X + 16, 652, 658]) {
+      for (const [vx, vy] of [[0, 0], [0, 4], [-1.5, 2.5], [1, 0.8]]) junction.push({ x, y: SECRET_HOLE_Y + dy, vx, vy });
+    }
+  }
+  for (const spot of junction) {
+    const table = createTable({ slots: 7, random: () => 0 });
+    const ball = table.launch(); ball.entered = true;
+    Matter.Body.setPosition(ball.body, { x: spot.x, y: spot.y });
+    Matter.Body.setVelocity(ball.body, { x: spot.vx, y: spot.vy });
+    assert.equal(stillWedged(table, ball, table.holes[0]), false, `junction ${spot.x},${spot.y} speed ${spot.vx},${spot.vy} must sink or leave`);
+    release(table, ball);
+  }
+  console.log(`PASS: hole-wall junction (${junction.length} drops) sinks or clears within 2.5s.`);
 }
 // A ball balanced away from the hole and the storage cup is the global dwell case.
 {

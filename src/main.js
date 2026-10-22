@@ -201,8 +201,8 @@ const miniGames = createMiniGamesUI({ root: $('#mini-game'), onFinish: result =>
       if (secretBallFlash) {
         const bonus = secretBallFlash;
         secretBallFlash = 0;
-        flyBalls(bonus, SECRET_HOLE_X, SECRET_HOLE_Y - 52, `+${bonus} 球`);
-        fx.popups.push({ x: SECRET_HOLE_X, y: SECRET_HOLE_Y - 52, text: `+${bonus} 球`, life: 1.6, decay: .008, rise: .35, big: true, color: '#8a5a12', size: 28 });
+        flyBalls(bonus, SECRET_HOLE_X - 24, SECRET_HOLE_Y - 46, `+${bonus} 球`);
+        fx.popups.push({ x: SECRET_HOLE_X - 24, y: SECRET_HOLE_Y - 46, text: `+${bonus} 球`, life: 1.6, decay: .008, rise: .35, big: true, color: '#8a5a12', size: 28 });
         toast(`+${bonus} 球`);
       }
     }

@@ -28,12 +28,12 @@ const FILTER = { world: 1, ascending: 2, playing: 4, returnRamp: 8, launchDoor: 
 // that lip, so the rim can no longer push it back out between checks.
 const HOLE_SINK = 30, HOLE_RIM = 56, HOLE_IGNORE = 200, HOLE_GROUP = -2;
 // Mouth direction. Angle 0 points right and increases clockwise, because y
-// grows downward. 3π/4 is 7:30: 45° down-left, 225° clockwise from 12 o'clock.
-// The cup sits just off the seam's lower-left end. Balls rolling off that end
-// still reach this down-left mouth, so the opening stays at 7:30.
-export const SECRET_HOLE_X = 580;
-export const SECRET_HOLE_Y = 470;
-export const SECRET_HOLE_FACING = Math.PI * 3 / 4;
+// grows downward. The cup replaces the old green seam and is buried in the
+// launch-lane wall. Balls arrive from above-left, and -5π/6 (10 o'clock)
+// opens toward them without turning the cup into a wide net.
+export const SECRET_HOLE_X = 646;
+export const SECRET_HOLE_Y = 426;
+export const SECRET_HOLE_FACING = -Math.PI * 5 / 6;
 const DWELL_RADIUS = 12, DWELL_LIMIT = 1500, COLLECTOR_HOLD = 48;
 // Same negative group: a phased ball skips the secret-hole ring only.
 // Collector guards stay on group 0, so storage is never phased open.
@@ -110,8 +110,9 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   // from nearby obstacles even when pointing left, allowing full-circle shots.
   const triangle = add(Bodies.fromVertices(99, 466, [[{ x: 34, y: 0 }, { x: -17, y: -23 }, { x: -17, y: 23 }]], { isStatic: true, label: 'deflector', restitution: .8, friction: 0 }), deflectors, { radius: 34, angle: -Math.PI / 3, hits: 0 });
   Body.setAngle(triangle, triangle.plugin.angle);
-  // Recessed cup. The missing arc is the mouth, centered on facing (7:30,
-  // down-left). A jackpot is earned by actually reaching the hole.
+  // Recessed cup. The missing arc is the mouth, centered on facing (left).
+  // The ring's right side is inside the launch-lane wall, so the two meet
+  // with no open channel. A jackpot is earned by actually reaching the hole.
   for (const hole of holes) {
     for (let i = 0; i < 12; i++) {
       const a = hole.facing + .55 + i * (Math.PI * 2 - 1.1) / 12;
@@ -120,6 +121,18 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
       guard.plugin.hole = true;
       guard.collisionFilter.group = HOLE_GROUP;
     }
+    // Shoulders where the curve leaves the wall can hold a ball. These fillets
+    // stay on group 0 (a phased ball still hits them) and slope down-left, so
+    // anything that lands there rolls back into the playfield.
+    const lip = (x1, y1, x2, y2) => {
+      const body = segment(x1, y1, x2, y2, 18, guards, 'guard', .35);
+      body.plugin.fillet = true;
+      return body;
+    };
+    // Upper lip crosses the crown and ends on the closed arc, just short of
+    // the mouth, so a ball cannot sit on top of the ring against the wall.
+    lip(672, hole.y - 64, hole.x + Math.cos(-1.85) * 30, hole.y + Math.sin(-1.85) * 30);
+    lip(672, hole.y + 54, hole.x + Math.cos(1.05) * 28, hole.y + Math.sin(1.05) * 28);
   }
   // A real upward-facing cup receives balls through a wide mouth in the lower-left gap.
   for (let i = 0; i < 14; i++) {
@@ -129,10 +142,6 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
       collector.x + Math.cos(b) * 33, collector.y + Math.sin(b) * 33, 8, guards, 'guard', .25);
     rim.plugin.storage = true;
   }
-  // Cover the outer seam between the recessed cup and the side wall, so a
-  // falling ball cannot wedge into the narrow space behind the cup. The cup
-  // sits just off this rail's lower-left end, on the side balls roll off.
-  segment(665, 413, 615, 438, 13, walls);
   // Fixed left/right pairs mirrored across the center bumper's vertical x=350 axis.
   // Coordinates leave space for moving rails, enlarged bumpers and the hole.
   // The side-by-side pair between the bunny and bear drums, (320,270) and
