@@ -2,6 +2,7 @@ import { chargeEffectsAt } from './charge.js';
 import { sceneMotionAt, project2DMotion } from './scene-motion.js';
 import { TABLE, LAUNCH_SQUASH } from './physics.js';
 import { BOARD_CROWD_LOCK } from './round.js';
+import { ballOwnFactor, ballRimStyle } from './ball-rim.js';
 import { blendSlotLayout } from './slot-transition.js';
 import { SLOT_DISPLAY, BALL_SYMBOL, REEL_WEIGHTS, reelBox, PROGRESS_TOP, PROGRESS_HEIGHT, slotBonusLabel } from './slot-machine.js';
 import { drawReelSymbol } from './reel-icons.js';
@@ -49,7 +50,23 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     ctx.shadowColor = paintColor(glow, 'glow'); ctx.shadowBlur = 25;
     circle(x, y, 14, rim); ctx.shadowBlur = 0;
     const g = ctx.createRadialGradient(x - 3, y - 4, 0, x, y, 12); g.addColorStop(0, paintColor('#ffffff')); g.addColorStop(.6, paintColor(mid)); g.addColorStop(1, paintColor(edge));
-    circle(x, y, 11.5, g); circle(x - 3, y - 4, 3.5, '#fff'); ctx.restore(); paintingBall = false;
+    circle(x, y, 11.5, g);     circle(x - 3, y - 4, 3.5, '#fff'); ctx.restore(); paintingBall = false;
+  }
+  function ownRim(x, y, factor, quiet) {
+    const style = ballRimStyle(factor);
+    paintingBall = true;
+    ctx.save();
+    if (style.glow && !quiet) {
+      ctx.globalAlpha = style.tier === 8 ? 0.42 : 0.3;
+      ctx.shadowColor = style.glow;
+      ctx.shadowBlur = style.tier === 8 ? 11 : 7;
+      circle(x, y, style.radius + 1.5 + style.extra, null, style.glow, style.tier === 8 ? 3.4 : 2.4);
+      ctx.shadowBlur = 0;
+    }
+    ctx.globalAlpha = 1;
+    circle(x, y, style.radius, null, style.color, style.width);
+    ctx.restore();
+    paintingBall = false;
   }
   function mixHex(from, to, t) {
     const channels = hex => {
@@ -519,18 +536,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     for (const b of game.balls) {
       if (!state.calm && !(crowded && b.bonus)) b.trail.forEach((pos, i) => { ctx.save(); ctx.globalAlpha = i / b.trail.length * .5; circle(pos.x, pos.y, 3 + i / b.trail.length * 7, b.bonus ? '#d9cff6' : '#f7b863'); ctx.restore(); });
       ball(b.body.position.x, b.body.position.y, 1, crowded && b.bonus, b.bonus);
-      if (b.scoreFactor > 1) {
-        circle(b.body.position.x, b.body.position.y, 18, null, '#e8b446b0', 1.5);
-        text(`×${b.scoreFactor}`, b.body.position.x, b.body.position.y - 25, 13, '#a87535', 'bold');
-      }
-      if (b.valueFactor > 1) {
-        ctx.save();
-        ctx.shadowColor = '#e2ae48';
-        ctx.shadowBlur = state.calm ? 0 : 14;
-        circle(b.body.position.x, b.body.position.y, 16, null, '#e2ae48cc', 2.4);
-        ctx.restore();
-        text(`×${b.valueFactor}`, b.body.position.x, b.body.position.y + 24, 12, '#a87535', 'bold');
-      }
+      if (!textureMode && !b.bonus) ownRim(b.body.position.x, b.body.position.y, ballOwnFactor(b), state.calm || crowded);
     }
     ctx.restore();
   }

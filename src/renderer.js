@@ -7,6 +7,7 @@ import { blendSlotLayout } from './slot-transition.js';
 import { reelBox } from './slot-machine.js';
 import { chargeEffectsAt } from './charge.js';
 import { sceneMotionAt } from './scene-motion.js';
+import { ballOwnFactor, ballRimStyle } from './ball-rim.js';
 
 const W = TABLE.width, H = TABLE.height;
 const world = (x, y, z = 0) => new THREE.Vector3(x - W / 2, H / 2 - y, z);
@@ -246,35 +247,36 @@ function create3DRenderer(canvas) {
   }
   const playerBalls = makeBalls(sphere, ballMaterial, true);
   const bonusBalls = makeBalls(burstSphere, burstMaterial, false);
-  const valueRingGeometry = new THREE.RingGeometry(13.2, 15.6, 48);
-  const valueRingMaterial = new THREE.MeshBasicMaterial({ color: '#f0c14a', side: THREE.DoubleSide, transparent: true, opacity: .95, depthWrite: false });
-  const valueRings = new Map();
-  const scoreRingGeometry = new THREE.RingGeometry(16.6, 18.8, 48);
-  const scoreRingMaterial = new THREE.MeshBasicMaterial({ color: '#e8b446', side: THREE.DoubleSide, transparent: true, opacity: .95, depthWrite: false });
-  const scoreRings = new Map();
-  const scoreLabels = new Map();
-  const scoreLabelMaterials = new Map();
-  function scoreLabelMaterial(factor, daylight) {
-    const key = `${factor}:${daylight ? 1 : 0}`;
-    if (scoreLabelMaterials.has(key)) return scoreLabelMaterials.get(key);
-    const canvas = document.createElement('canvas');
-    canvas.width = 128; canvas.height = 64;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, 128, 64);
-    // An opaque pill. A stroked glyph on a transparent sprite shrinks to a
-    // tan smudge once the camera filters it down to the ball.
-    ctx.beginPath(); ctx.roundRect(2, 6, 124, 52, 26);
-    ctx.fillStyle = daylight ? '#fff6d4' : '#2a2418'; ctx.fill();
-    ctx.lineWidth = 6; ctx.strokeStyle = daylight ? '#c9842a' : '#e8b446'; ctx.stroke();
-    ctx.font = 'bold 36px "Trebuchet MS", "PingFang SC", sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = daylight ? '#7a4208' : '#fff6d4';
-    ctx.fillText(`×${factor}`, 64, 33);
-    const map = new THREE.CanvasTexture(canvas); map.colorSpace = THREE.SRGBColorSpace; map.needsUpdate = true;
-    const material = new THREE.SpriteMaterial({ map, transparent: true, depthWrite: false, depthTest: false, toneMapped: false });
-    scoreLabelMaterials.set(key, material);
-    return material;
-  }
+  // One instanced ring for every player ball. A per-instance span keeps ×1 thin
+  // and lets ×2/×4/×8 grow outward without a mesh per ball.
+  const RIM_INNER = 12.3, RIM_OUTER = 18.2;
+  const rimGeometry = new THREE.RingGeometry(RIM_INNER, RIM_OUTER, 32);
+  const rimSpan = new THREE.InstancedBufferAttribute(new Float32Array(BALL_CAPACITY), 1);
+  rimSpan.setUsage(THREE.DynamicDrawUsage);
+  rimGeometry.setAttribute('rimSpan', rimSpan);
+  const rimMaterial = new THREE.MeshBasicMaterial({ color: '#ffffff', side: THREE.DoubleSide, transparent: true, opacity: 1, depthWrite: false });
+  rimMaterial.customProgramCacheKey = () => 'ponpon-ball-rim';
+  rimMaterial.onBeforeCompile = shader => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float rimSpan;\nvarying float vRimSpan;\nvarying float vRimBand;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\nvRimSpan = rimSpan;\nvRimBand = clamp((length(position.xy) - ${RIM_INNER.toFixed(1)}) / ${(RIM_OUTER - RIM_INNER).toFixed(1)}, 0.0, 1.0);`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vRimSpan;\nvarying float vRimBand;')
+      .replace('#include <dithering_fragment>', '#include <dithering_fragment>\nif (vRimBand > vRimSpan) discard;');
+  };
+  const rimMesh = new THREE.InstancedMesh(rimGeometry, rimMaterial, BALL_CAPACITY);
+  rimMesh.count = 0; rimMesh.frustumCulled = false; rimMesh.renderOrder = 3;
+  rimMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  table.add(rimMesh);
+  const glowGeometry = new THREE.RingGeometry(15.2, 20.6, 28);
+  const glowMaterial = new THREE.MeshBasicMaterial({ color: '#ffffff', side: THREE.DoubleSide, transparent: true, opacity: .34, depthWrite: false });
+  const glowMesh = new THREE.InstancedMesh(glowGeometry, glowMaterial, BALL_CAPACITY);
+  glowMesh.count = 0; glowMesh.frustumCulled = false; glowMesh.renderOrder = 2;
+  glowMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  table.add(glowMesh);
+  const rimDummy = new THREE.Object3D();
+  const rimColor = new THREE.Color();
+  const glowColor = new THREE.Color();
   const readyBall = new THREE.Mesh(sphere, ballMaterial); readyBall.castShadow = true; table.add(readyBall);
   const springPoints = Array.from({ length: 193 }, (_, i) => { const t = i / 192, a = t * Math.PI * 12; return new THREE.Vector3(Math.cos(a) * 9, t * 52, 9 + Math.sin(a) * 5); });
   const spring = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(springPoints), 192, 1.7, 6, false), material('#a4ac93', 'object', { metalness: .7, roughness: .3 }));
@@ -493,13 +495,10 @@ function create3DRenderer(canvas) {
         ctx.fillText(value, 64, 34); well.texture.needsUpdate = true; well.last = value;
       }
     }
-    const activeIds = new Set(game.balls.map(b => b.id));
     const daylight = palette?.phase?.id !== 'night';
-    for (const [id, ring] of valueRings) if (!activeIds.has(id)) { table.remove(ring); valueRings.delete(id); }
-    for (const [id, ring] of scoreRings) if (!activeIds.has(id)) { table.remove(ring); scoreRings.delete(id); }
-    for (const [id, label] of scoreLabels) if (!activeIds.has(id)) { table.remove(label); scoreLabels.delete(id); }
     ballPositions.clear();
-    let playerCount = 0, bonusCount = 0;
+    let playerCount = 0, bonusCount = 0, rimCount = 0, glowCount = 0;
+    glowMaterial.opacity = daylight ? 0.32 : 0.48;
     for (const ball of game.balls) {
       const mesh = ball.bonus ? bonusBalls : playerBalls;
       const index = ball.bonus ? bonusCount++ : playerCount++;
@@ -512,30 +511,39 @@ function create3DRenderer(canvas) {
         mesh.setMatrixAt(index, ballDummy.matrix);
       }
       ballPositions.set(ball.id, { x: ball.body.position.x, y: ball.body.position.y, z: 12 });
-      const valued = ball.valueFactor > 1;
-      let ring = valueRings.get(ball.id);
-      if (valued && !ring) { ring = new THREE.Mesh(valueRingGeometry, valueRingMaterial); table.add(ring); valueRings.set(ball.id, ring); }
-      if (ring) { ring.visible = valued; if (valued) ring.position.copy(place); }
-      const starred = ball.scoreFactor > 1;
-      let scoreRing = scoreRings.get(ball.id);
-      if (starred && !scoreRing) { scoreRing = new THREE.Mesh(scoreRingGeometry, scoreRingMaterial); scoreRing.renderOrder = 3; table.add(scoreRing); scoreRings.set(ball.id, scoreRing); }
-      if (scoreRing) { scoreRing.visible = starred; if (starred) scoreRing.position.copy(place); }
-      let scoreLabel = scoreLabels.get(ball.id);
-      if (starred && (!scoreLabel || scoreLabel.userData.factor !== ball.scoreFactor || scoreLabel.userData.daylight !== daylight)) {
-        if (scoreLabel) table.remove(scoreLabel);
-        scoreLabel = new THREE.Sprite(scoreLabelMaterial(ball.scoreFactor, daylight));
-        scoreLabel.userData.factor = ball.scoreFactor; scoreLabel.userData.daylight = daylight;
-        scoreLabel.scale.set(52, 26, 1); scoreLabel.renderOrder = 6; table.add(scoreLabel); scoreLabels.set(ball.id, scoreLabel);
-      }
-      if (scoreLabel) {
-        scoreLabel.visible = starred;
-        if (starred) scoreLabel.position.copy(world(ball.body.position.x, ball.body.position.y - 36, 36));
+      if (!ball.bonus && rimCount < BALL_CAPACITY) {
+        const style = ballRimStyle(ballOwnFactor(ball));
+        rimDummy.position.copy(place);
+        rimDummy.position.z += 1;
+        rimDummy.rotation.set(0, 0, 0);
+        rimDummy.scale.set(1, 1, 1);
+        rimDummy.updateMatrix();
+        rimMesh.setMatrixAt(rimCount, rimDummy.matrix);
+        rimColor.set(style.color);
+        rimMesh.setColorAt(rimCount, rimColor);
+        rimSpan.setX(rimCount, style.span);
+        rimCount++;
+        if (style.glow && !state.calm && glowCount < BALL_CAPACITY) {
+          rimDummy.scale.setScalar(style.glowScale);
+          rimDummy.updateMatrix();
+          glowMesh.setMatrixAt(glowCount, rimDummy.matrix);
+          glowColor.set(style.glow);
+          glowMesh.setColorAt(glowCount, glowColor);
+          glowCount++;
+        }
       }
     }
     playerBalls.count = Math.min(playerCount, BALL_CAPACITY);
     bonusBalls.count = Math.min(bonusCount, BALL_CAPACITY);
+    rimMesh.count = rimCount;
+    glowMesh.count = glowCount;
     playerBalls.instanceMatrix.needsUpdate = true;
     bonusBalls.instanceMatrix.needsUpdate = true;
+    rimMesh.instanceMatrix.needsUpdate = true;
+    glowMesh.instanceMatrix.needsUpdate = true;
+    rimSpan.needsUpdate = true;
+    if (rimMesh.instanceColor) rimMesh.instanceColor.needsUpdate = true;
+    if (glowMesh.instanceColor) glowMesh.instanceColor.needsUpdate = true;
     const compression = state.charging ? state.charge * LAUNCH_SQUASH : 0;
     readyBall.position.copy(world(TABLE.launchX, TABLE.launchY + compression, 12));
     readyBall.visible = !game.balls.some(b => b.body.position.x > 683 && b.body.position.y > 730);
