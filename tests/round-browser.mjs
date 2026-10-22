@@ -130,6 +130,10 @@ try {
       const groups = Object.values(Object.groupBy(board.board.map((cell, index) => ({ ...cell, index })), cell => cell.pair));
       await page.locator(`[data-cell="${groups[0][0].index}"]`).evaluate(el => el.click());
       await page.locator(`[data-cell="${groups[1][0].index}"]`).evaluate(el => el.click());
+    } else if (board.kind === 'stars') {
+      await idleStars(page);
+    } else if (board.kind === 'aim') {
+      await page.clock.fastForward(miniWait);
     } else {
       const index = board.board.findIndex((_, cell) => connectedBlocks(board.board, cell).length < 3);
       if (index >= 0) await page.locator(`[data-cell="${index}"]`).evaluate(el => el.click());
@@ -145,6 +149,18 @@ try {
       const groups = Object.values(Object.groupBy(board.board.map((cell, index) => ({ ...cell, index })), cell => cell.pair));
       await page.locator(`[data-cell="${groups[0][0].index}"]`).evaluate(el => el.click());
       await page.locator(`[data-cell="${groups[0][1].index}"]`).evaluate(el => el.click());
+    } else if (board.kind === 'stars') {
+      for (let step = 0; step < 40 && !((await page.evaluate(() => window.__ponpon.miniGame)).hit > 0); step++) {
+        const live = await page.evaluate(() => window.__ponpon.miniGame);
+        const star = live.items.find(item => item.kind === 'star' && !item.resolved);
+        if (star) await parkBasket(page, star.x);
+        await page.clock.fastForward(200);
+      }
+    } else if (board.kind === 'aim') {
+      const elapsed = board.lastSim - board.startedAt;
+      await page.clock.fastForward(Math.max(0, 1440 - elapsed));
+      await dragAim(page, 24, -86);
+      await page.clock.fastForward(1600);
     } else {
       const index = board.board.findIndex((_, cell) => connectedBlocks(board.board, cell).length >= 3);
       await page.locator(`[data-cell="${index}"]`).evaluate(el => el.click());
@@ -154,6 +170,44 @@ try {
       }
     }
     await page.clock.runFor(40);
+  }
+  async function parkBasket(target, x) {
+    await target.evaluate(x => {
+      const field = document.querySelector('#mini-field');
+      const rect = field.getBoundingClientRect();
+      const cx = rect.left + (x / 320) * rect.width;
+      const cy = rect.top + rect.height * 0.9;
+      const opts = { bubbles: true, clientX: cx, clientY: cy, pointerId: 1, pointerType: 'mouse', isPrimary: true };
+      field.dispatchEvent(new PointerEvent('pointerdown', opts));
+      field.dispatchEvent(new PointerEvent('pointerup', opts));
+    }, x);
+  }
+  async function dragAim(target, dx, dy) {
+    await target.evaluate(({ dx, dy }) => {
+      const field = document.querySelector('#mini-field');
+      const rect = field.getBoundingClientRect();
+      const client = (x, y) => ({ x: rect.left + (x / 320) * rect.width, y: rect.top + (y / 420) * rect.height });
+      const rest = client(160, 372);
+      const pulled = client(160 - dx, 372 - dy);
+      const opts = (x, y) => ({ bubbles: true, clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse', isPrimary: true });
+      field.dispatchEvent(new PointerEvent('pointerdown', opts(rest.x, rest.y)));
+      field.dispatchEvent(new PointerEvent('pointermove', opts(pulled.x, pulled.y)));
+      field.dispatchEvent(new PointerEvent('pointerup', opts(pulled.x, pulled.y)));
+    }, { dx, dy });
+  }
+  async function idleStars(target) {
+    for (let i = 0; i < 320; i++) {
+      const snap = await target.evaluate(() => window.__ponpon.miniGame);
+      if (!snap || snap.status !== 'playing') break;
+      const stars = (snap.items || []).filter(item => !item.resolved && item.kind === 'star' && item.y + item.vy * 0.2 >= 392);
+      let x = snap.basketX;
+      if (stars.length) {
+        x = 48;
+        for (let c = 48; c <= 272; c += 8) if (stars.every(item => Math.abs(item.x - c) > 80)) { x = c; break; }
+      }
+      await parkBasket(target, x);
+      await target.clock.fastForward(160);
+    }
   }
   async function confirmMini() {
     assert.equal(await page.locator('#mini-game').getAttribute('data-phase'), 'intro');
