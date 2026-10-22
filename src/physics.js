@@ -15,6 +15,10 @@ export const STEP = 1000 / 120;
 export const DRUM_SIDE_HITS = 5;
 export const DRUM_CENTER_HITS = 30;
 export const ENLARGE_MS = 10000;
+// Clock gifts sit on the hour mark and leave along the outward radius turned
+// clockwise by this much. Straight up from 12 o'clock falls back onto the
+// center peg and the bell and never leaves that line.
+export const CLOCK_LAUNCH_TILT = 15 * Math.PI / 180;
 const FILTER = { world: 1, ascending: 2, playing: 4, returnRamp: 8, launchDoor: 16 };
 // The cup's inner wall sits near r=28. A center that reaches the sink has passed
 // that lip, so the rim can no longer push it back out between checks.
@@ -278,7 +282,11 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   }
   function emitFrom(bumper, angle, kind, ordinal = 0) {
     const radius = bumper.plugin.radius + 26;
-    const ball = spawn(bumper.position.x + Math.cos(angle) * radius, bumper.position.y + Math.sin(angle) * radius, Math.cos(angle) * 12.5, Math.sin(angle) * 12.5, { bonus: true, kind });
+    // The hour angle places the ball. Clock velocity is that outward ray plus
+    // 15° clockwise, toward the way the burst walks the dial. At 12 o'clock
+    // the old ray is vertical, so the tilt is what gives it horizontal speed.
+    const launch = kind === 'clock' ? angle + CLOCK_LAUNCH_TILT : angle;
+    const ball = spawn(bumper.position.x + Math.cos(angle) * radius, bumper.position.y + Math.sin(angle) * radius, Math.cos(launch) * 12.5, Math.sin(launch) * 12.5, { bonus: true, kind });
     if (kind === 'clock') rewards.burstStep = ordinal;
     onSurprise({ kind: 'emit', source: kind, ordinal, angle, x: bumper.position.x, y: bumper.position.y, ballId: ball.id, at: clock });
   }

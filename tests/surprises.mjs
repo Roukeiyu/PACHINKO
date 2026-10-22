@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import Matter from 'matter-js';
-import { createTable, TABLE, STEP, LAUNCH_SQUASH, DRUM_SIDE_HITS, DRUM_CENTER_HITS, ENLARGE_MS } from '../src/physics.js';
+import { createTable, TABLE, STEP, LAUNCH_SQUASH, DRUM_SIDE_HITS, DRUM_CENTER_HITS, ENLARGE_MS, CLOCK_LAUNCH_TILT } from '../src/physics.js';
 import { CANON_NOTES, createCanon, noteFrequency } from '../src/canon.js';
 import { chargeAt, chargePercent, CHARGE_DURATION } from '../src/charge.js';
 
@@ -105,6 +105,61 @@ for (let i = 0; i < 12; i++) {
 assert.ok(shots[11].at - trigger <= 1000);
 assert.equal(new Set(shots.map(s => s.ballId)).size, 12, 'burst creates 12 separate physics bodies');
 console.log(`PASS: center triggers at 30 hits, fires 12 physical balls clockwise from 12 o'clock in ${(shots[11].at - trigger).toFixed(1)}ms.`);
+
+assert.equal(CLOCK_LAUNCH_TILT, 15 * Math.PI / 180);
+const bellShot = 12.5;
+// The old 12 o'clock gift left straight up the outward radius. It meets the
+// center peg and the bell on that same line and keeps bouncing there.
+const trapped = createTable({ slots: 5, random: () => .5 });
+const trappedBell = trapped.bumpers[2];
+const trappedBall = trapped.launch();
+assert.ok(trappedBall);
+trappedBall.entered = true;
+trappedBall.bonus = true;
+trappedBall.kind = 'clock';
+const trappedRadius = trappedBell.plugin.radius + 26;
+Matter.Body.setPosition(trappedBall.body, { x: trappedBell.position.x, y: trappedBell.position.y - trappedRadius });
+Matter.Body.setVelocity(trappedBall.body, { x: 0, y: -bellShot });
+let stayedAbove = true;
+for (let i = 0; i < Math.round(3000 / STEP); i++) {
+  trapped.step();
+  const live = trapped.balls.find(ball => ball.id === trappedBall.id);
+  if (!live || Math.abs(live.body.position.x - trappedBell.position.x) > 2 || live.body.position.y > trappedBell.position.y) { stayedAbove = false; break; }
+}
+assert.equal(stayedAbove, true, 'a straight-up 12 o\'clock shot keeps bouncing above the bell');
+
+const tilted = [];
+const freed = createTable({
+  slots: 5,
+  random: () => .5,
+  onSurprise(event) {
+    if (event.kind !== 'emit' || event.source !== 'clock') return;
+    const ball = freed.balls.find(item => item.id === event.ballId);
+    tilted.push({ id: ball.id, ordinal: event.ordinal, slot: event.angle, vx: ball.body.velocity.x, vy: ball.body.velocity.y, bonus: ball.bonus, valueFactor: ball.valueFactor });
+  },
+});
+assert.equal(freed.queueClock(1), 12);
+for (let i = 0; i < 140 && tilted.length < 12; i++) freed.step();
+assert.equal(tilted.length, 12);
+for (const shot of tilted) {
+  const launch = shot.slot + CLOCK_LAUNCH_TILT;
+  assert.ok(Math.abs(shot.vx - Math.cos(launch) * bellShot) < 1e-6, 'clock speed is the outward ray turned 15° clockwise');
+  assert.ok(Math.abs(shot.vy - Math.sin(launch) * bellShot) < 1e-6);
+  assert.equal(shot.bonus, true);
+  assert.equal(shot.valueFactor, 1);
+}
+const top = tilted[0];
+assert.equal(top.ordinal, 0);
+assert.ok(top.vx > 2, 'the 12 o\'clock gift has horizontal speed');
+const freedBell = freed.bumpers[2];
+let leftColumn = Math.abs(freed.balls.find(ball => ball.id === top.id).body.position.x - freedBell.position.x) > 40;
+for (let i = 0; i < Math.round(2000 / STEP) && !leftColumn; i++) {
+  freed.step();
+  const live = freed.balls.find(ball => ball.id === top.id);
+  leftColumn = !live || Math.abs(live.body.position.x - freedBell.position.x) > 40 || live.body.position.y > freedBell.position.y;
+}
+assert.equal(leftColumn, true, 'the tilted 12 o\'clock gift leaves the column above the bell within 2 seconds');
+console.log('PASS: a 15° clockwise tilt carries the 12 o\'clock clock gift off the bell instead of bouncing above it.');
 
 let scaled;
 const clockFactors = [];
