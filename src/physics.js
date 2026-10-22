@@ -678,6 +678,19 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   }
   // Park one ball so a secret wait can be observed without the field draining
   // into the mini-game. The ball stays in the plunger lane, clear of the drum.
+  function parkBalls(list) {
+    const placed = [];
+    for (const item of list || []) {
+      const ball = spawn(item.x, item.y, 0, 0, { bonus: item.bonus === true, kind: item.bonus ? 'gift' : 'launch' });
+      ball.entered = true;
+      ball.valueFactor = ballValue(item.valueFactor);
+      const stars = Math.floor(Number(item.scoreFactor));
+      ball.scoreFactor = Number.isInteger(stars) && stars > 0 ? stars : 1;
+      Body.setStatic(ball.body, true);
+      placed.push(ball.id);
+    }
+    return placed;
+  }
   function pinBall(x = TABLE.launchX, y = TABLE.launchY - 120) {
     const ball = balls[0] || launch(1);
     if (!ball) return false;
@@ -729,5 +742,5 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     });
     return items.length;
   }
-  return { engine, balls, walls, pins, kickers, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, collector, slotMachine: slotMachine.state, stats, rewards, launch, launchBurst, queueClock, queueJar, setScoreHoles, setEmissionPaused, advanceEnlarge, forceEnlarge, pinBall, takeStored, resetRound, restoreCarried, nudge, get emissionPaused() { return emissionPaused; }, get pendingLaunches() { return pendingLaunches.length; }, get pendingShotCount() { return pendingShots.length; }, get pendingDropCount() { return pendingDrops.length; }, get carriedBalls() { return [...balls.map(ball => ({ scoreFactor: ball.scoreFactor, valueFactor: ballValue(ball.valueFactor) })), ...pendingLaunches.map(shot => ({ scoreFactor: 1, valueFactor: ballValue(shot.valueFactor) }))]; }, step, setSlots, get star() { return activeStar; }, get clock() { return clock; }, get slots() { return slots; } };
+  return { engine, balls, walls, pins, kickers, bumpers, rails, diamonds, spinners, deflectors, guards, dividers, gates, holes, collector, slotMachine: slotMachine.state, stats, rewards, launch, launchBurst, queueClock, queueJar, setScoreHoles, setEmissionPaused, advanceEnlarge, forceEnlarge, pinBall, parkBalls, takeStored, resetRound, restoreCarried, nudge, get emissionPaused() { return emissionPaused; }, get pendingLaunches() { return pendingLaunches.length; }, get pendingShotCount() { return pendingShots.length; }, get pendingDropCount() { return pendingDrops.length; }, get carriedBalls() { return [...balls.map(ball => ({ scoreFactor: ball.scoreFactor, valueFactor: ballValue(ball.valueFactor) })), ...pendingLaunches.map(shot => ({ scoreFactor: 1, valueFactor: ballValue(shot.valueFactor) }))]; }, step, setSlots, get star() { return activeStar; }, get clock() { return clock; }, get slots() { return slots; } };
 }

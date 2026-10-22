@@ -265,8 +265,8 @@ function create3DRenderer(canvas) {
   }
   const playerBalls = makeBalls(sphere, ballMaterial, true);
   const bonusBalls = makeBalls(burstSphere, burstMaterial, false);
-  // One instanced ring for every player ball. A per-instance span keeps ×1 thin
-  // and lets ×2/×4/×8 grow outward without a mesh per ball.
+  // One instanced ring for every ball, including lavender gifts. A per-instance
+  // span and color keep ×1 thin and let ×2/×4/×8 grow outward without a mesh per ball.
   const RIM_INNER = 12.3, RIM_OUTER = 18.2;
   const rimGeometry = new THREE.RingGeometry(RIM_INNER, RIM_OUTER, 32);
   const rimSpan = new THREE.InstancedBufferAttribute(new Float32Array(BALL_CAPACITY), 1);
@@ -529,8 +529,8 @@ function create3DRenderer(canvas) {
         mesh.setMatrixAt(index, ballDummy.matrix);
       }
       ballPositions.set(ball.id, { x: ball.body.position.x, y: ball.body.position.y, z: 12 });
-      if (!ball.bonus && rimCount < BALL_CAPACITY) {
-        const style = ballRimStyle(ballOwnFactor(ball));
+      if (rimCount < BALL_CAPACITY) {
+        const style = ballRimStyle(ballOwnFactor(ball), ball.bonus);
         rimDummy.position.copy(place);
         rimDummy.position.z += 1;
         rimDummy.rotation.set(0, 0, 0);

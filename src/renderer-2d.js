@@ -52,8 +52,8 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     const g = ctx.createRadialGradient(x - 3, y - 4, 0, x, y, 12); g.addColorStop(0, paintColor('#ffffff')); g.addColorStop(.6, paintColor(mid)); g.addColorStop(1, paintColor(edge));
     circle(x, y, 11.5, g);     circle(x - 3, y - 4, 3.5, '#fff'); ctx.restore(); paintingBall = false;
   }
-  function ownRim(x, y, factor, quiet) {
-    const style = ballRimStyle(factor);
+  function ownRim(x, y, factor, quiet, gift = false) {
+    const style = ballRimStyle(factor, gift);
     paintingBall = true;
     ctx.save();
     if (style.glow && !quiet) {
@@ -548,7 +548,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     for (const b of game.balls) {
       if (!state.calm && !(crowded && b.bonus)) b.trail.forEach((pos, i) => { ctx.save(); ctx.globalAlpha = i / b.trail.length * .5; circle(pos.x, pos.y, 3 + i / b.trail.length * 7, b.bonus ? '#d9cff6' : '#f7b863'); ctx.restore(); });
       ball(b.body.position.x, b.body.position.y, 1, crowded && b.bonus, b.bonus);
-      if (!textureMode && !b.bonus) ownRim(b.body.position.x, b.body.position.y, ballOwnFactor(b), state.calm || crowded);
+      if (!textureMode) ownRim(b.body.position.x, b.body.position.y, ballOwnFactor(b), state.calm || crowded, b.bonus);
     }
     ctx.restore();
   }
