@@ -1,12 +1,12 @@
-import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_COLORS, BLOCK_SYMBOLS, MINI_HIT_SHAKE, MINI_HIT_MS, comboMultiplier, formatComboMultiplier, PAIR_DURATION, PAIR_TARGET, PAIR_CLEAR_BONUS, AFK_BALL_TEXT, miniGameIdle } from './mini-games.js';
+import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_COLORS, BLOCK_SYMBOLS, MINI_HIT_SHAKE, MINI_HIT_MS, comboMultiplier, formatComboMultiplier, PAIR_DURATION, PAIR_TARGET, PAIR_CLEAR_BONUS, AFK_BALL_TEXT, miniGameIdle, miniIntro } from './mini-games.js';
 import { PAIR_SVG } from './pair-icons.js';
 import { secretPayout } from './secret-wave.js';
 import { SECRET_BALLS } from './round.js';
 
-export const miniGameMarkup = `<dialog id="mini-game" class="mini-dialog" aria-labelledby="mini-title" aria-describedby="mini-rule"><div class="mini-inner"><div class="mini-heading"><span class="mini-eyebrow">秘密小游戏</span><span id="mini-round"></span></div><h2 id="mini-title"></h2><p id="mini-rule"></p><div class="mini-hud"><span>剩余 <strong id="mini-time">30</strong> 秒</span><span id="mini-combo" class="mini-combo" aria-live="polite"></span><span>本局 <strong id="mini-score">0</strong> 分<span id="mini-bonus" class="mini-bonus">×2</span></span></div><progress id="mini-progress" max="${MINI_DURATION}" value="${MINI_DURATION}" aria-label="小游戏剩余时间"></progress><div id="mini-stage"><div id="mini-fx" class="mini-fx" aria-hidden="true"></div><div id="mini-grid" class="mini-grid"></div></div><p id="mini-message" role="status"></p><div id="mini-result" hidden><div class="mini-result-mark">✦</div><h3 id="mini-result-title"></h3><p id="mini-result-math" class="mini-result-math" hidden></p><p id="mini-result-score"></p><p id="mini-result-balls" class="mini-result-balls" hidden></p><button class="done-button" id="mini-return">返回球台</button></div></div></dialog>`;
+export const miniGameMarkup = `<dialog id="mini-game" class="mini-dialog" aria-labelledby="mini-title" aria-describedby="mini-rule" data-phase="intro"><div class="mini-inner"><div class="mini-heading"><span class="mini-eyebrow">秘密小游戏</span><span id="mini-round" hidden></span></div><h2 id="mini-title"></h2><div id="mini-intro"><p id="mini-rule"></p><dl class="mini-facts"><div><dt>时间</dt><dd id="mini-intro-time"></dd></div><div><dt>目标</dt><dd id="mini-intro-goal"></dd></div><div><dt>奖励</dt><dd id="mini-intro-reward"></dd></div></dl><button type="button" id="mini-start">开始</button></div><div id="mini-play" hidden><div class="mini-hud"><span>剩余 <strong id="mini-time">30</strong> 秒</span><span id="mini-combo" class="mini-combo" aria-live="polite"></span><span>本局 <strong id="mini-score">0</strong> 分<span id="mini-bonus" class="mini-bonus">×2</span></span></div><progress id="mini-progress" max="${MINI_DURATION}" value="${MINI_DURATION}" aria-label="小游戏剩余时间"></progress><div id="mini-stage"><div id="mini-fx" class="mini-fx" aria-hidden="true"></div><div id="mini-grid" class="mini-grid"></div></div><p id="mini-message" role="status"></p><div id="mini-result" hidden><div class="mini-result-mark">✦</div><h3 id="mini-result-title"></h3><p id="mini-result-math" class="mini-result-math" hidden></p><p id="mini-result-score"></p><p id="mini-result-balls" class="mini-result-balls" hidden></p><button class="done-button" id="mini-return">返回球台</button></div></div></div></dialog>`;
 export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {}, vibrate = () => {} }) {
   const $ = selector => root.querySelector(selector);
-  let game=null, source=null, scoreMultiplier=1, revision=-1, fxId=0, settled=false, buttons=[], ballGrant=SECRET_BALLS, busy=false, motionSeen=0, motionToken=0;
+  let game=null, source=null, scoreMultiplier=1, revision=-1, fxId=0, settled=false, buttons=[], ballGrant=SECRET_BALLS, busy=false, motionSeen=0, motionToken=0, pending=null, confirmKey=false;
   const calm = () => document.documentElement.classList.contains('calm');
   const gentle = () => calm() || matchMedia('(prefers-reduced-motion: reduce)').matches;
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -250,21 +250,50 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     }
     if (!busy && s.status !== 'playing' && !settled) showResult(s);
   }
-  function start(kind, origin='secret', multiplier=1, holeBalls=SECRET_BALLS) {
-    if (root.open) return false;
-    source=origin;scoreMultiplier=origin==='secret'&&multiplier>=2?2:1;ballGrant=Math.max(0, Math.floor(Number(holeBalls)) || 0) || SECRET_BALLS;const now=performance.now();visibleAt=now;lastWall=now;game=createMiniGame(kind,{now});settled=false;revision=-1;fxId=0;busy=false;motionSeen=0;motionToken++;root.removeAttribute('data-busy');
-    const definition=MINI_GAMES[kind];$('#mini-title').textContent=definition.title;$('#mini-rule').textContent=definition.rule;
-    root.dataset.kind=kind;$('#mini-grid').hidden=false;$('#mini-grid').classList.remove('is-falling');$('#mini-message').hidden=false;$('#mini-result').hidden=true;
+  function beginRound() {
+    if (!pending || game) return;
+    const kind=pending.kind; pending=null;
+    const now=performance.now(); visibleAt=now; lastWall=now;
+    game=createMiniGame(kind,{now}); settled=false; revision=-1; fxId=0; busy=false; motionSeen=0; motionToken++;
+    root.removeAttribute('data-busy');
+    const definition=MINI_GAMES[kind];
+    root.dataset.phase='play'; root.removeAttribute('aria-describedby');
+    $('#mini-intro').hidden=true; $('#mini-play').hidden=false; $('#mini-round').hidden=false;
+    $('#mini-grid').hidden=false; $('#mini-grid').classList.remove('is-falling'); $('#mini-message').hidden=false; $('#mini-result').hidden=true;
     $('#mini-grid').style.setProperty('--columns',definition.columns);
     buttons=Array.from({length:definition.columns*definition.rows},(_,index)=>{const button=document.createElement('button');button.type='button';button.dataset.cell=index;return button;});
-    $('#mini-grid').replaceChildren(...buttons);$('#mini-return').textContent=source==='gm'?'返回设置':'返回球台';
-    root.showModal();paint();buttons.find(b=>!b.disabled)?.focus();return true;
+    $('#mini-grid').replaceChildren(...buttons);
+    paint(); buttons.find(b=>!b.disabled)?.focus();
   }
+  function start(kind, origin='secret', multiplier=1, holeBalls=SECRET_BALLS) {
+    if (root.open) return false;
+    source=origin; scoreMultiplier=origin==='secret'&&multiplier>=2?2:1; ballGrant=Math.max(0, Math.floor(Number(holeBalls)) || 0) || SECRET_BALLS;
+    pending={kind}; game=null; settled=false; revision=-1; fxId=0; busy=false; motionSeen=0; motionToken++; confirmKey=false;
+    root.removeAttribute('data-busy'); visibleAt=0; lastWall=0;
+    const card=miniIntro(kind,{source,ballGrant,doubled:scoreMultiplier>1});
+    $('#mini-title').textContent=card.title; $('#mini-rule').textContent=card.rule;
+    $('#mini-intro-time').textContent=card.time; $('#mini-intro-goal').textContent=card.goal; $('#mini-intro-reward').textContent=card.reward;
+    root.dataset.kind=kind; root.dataset.phase='intro'; root.setAttribute('aria-describedby','mini-rule');
+    $('#mini-intro').hidden=false; $('#mini-play').hidden=true; $('#mini-round').hidden=true;
+    $('#mini-grid').replaceChildren(); buttons=[];
+    $('#mini-return').textContent=source==='gm'?'返回设置':'返回球台';
+    root.showModal(); $('#mini-start').focus(); return true;
+  }
+  $('#mini-start').addEventListener('click',()=>beginRound());
+  root.addEventListener('keydown',event=>{
+    if (event.key!=='Enter' && event.key!==' ') return;
+    if (root.dataset.phase!=='intro' && !confirmKey) return;
+    event.preventDefault(); event.stopPropagation();
+    if (root.dataset.phase!=='intro' || event.repeat) return;
+    confirmKey=true; beginRound();
+  });
+  root.addEventListener('keyup',event=>{ if (event.key==='Enter' || event.key===' ') confirmKey=false; });
+  window.addEventListener('blur',()=>{ confirmKey=false; });
   $('#mini-grid').addEventListener('click',event=>{
     const button=event.target.closest('[data-cell]');if(!button||!game||settled||busy)return;
     const points=game.select(+button.dataset.cell,visibleNow(performance.now()));if(points)onPoints(points);paint();
   });
-  $('#mini-return').addEventListener('click',()=>{if(!settled)return;motionToken++;busy=false;const origin=source;root.close();game=null;source=null;onExit(origin);});
+  $('#mini-return').addEventListener('click',()=>{if(!settled)return;motionToken++;busy=false;confirmKey=false;pending=null;const origin=source;root.close();game=null;source=null;onExit(origin);});
   root.addEventListener('cancel',event=>event.preventDefault());
   return { start, update(now){if(!(root.open&&game&&!settled)||document.hidden){if(document.hidden)lastWall=0;return;}game.tick(visibleNow(now));paint();}, get open(){return root.open;}, get source(){return source;}, snapshot:()=>game?.snapshot()??null };
 }

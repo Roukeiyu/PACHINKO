@@ -150,9 +150,16 @@ try {
     }
     await page.clock.runFor(40);
   }
+  async function confirmMini() {
+    assert.equal(await page.locator('#mini-game').getAttribute('data-phase'), 'intro');
+    assert.equal(await page.evaluate(() => window.__ponpon.miniGame), null);
+    await page.locator('#mini-start').click();
+    await page.clock.runFor(40);
+  }
   assert.equal(await page.evaluate(() => window.__ponpon.dropHole()), true);
   await page.clock.runFor(80);
   assert.equal(await page.locator('#mini-game').evaluate(el => el.open), true);
+  await confirmMini();
   const idleKind = await page.evaluate(() => window.__ponpon.miniGame.kind);
   assert.equal(await page.evaluate(() => window.__ponpon.lastMiniGame), idleKind);
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('ponpon-settings')).run.lastMiniGame), idleKind, 'keep-progress remembers the mini-game that just started');
@@ -174,6 +181,7 @@ try {
   assert.equal(await page.evaluate(() => window.__ponpon.lastMiniGame), idleKind, 'a reload restores the last mini-game while keep-progress is on');
   assert.equal(await page.evaluate(() => window.__ponpon.dropHole()), true);
   await page.clock.runFor(80);
+  await confirmMini();
   const playedKind = await page.evaluate(() => window.__ponpon.miniGame.kind);
   assert.notEqual(playedKind, idleKind, 'the mini-game after a reload is not the saved one');
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('ponpon-settings')).run.lastMiniGame), playedKind);
@@ -189,6 +197,7 @@ try {
 
   assert.equal(await page.evaluate(() => window.__ponpon.dropHole()), true);
   await page.clock.runFor(80);
+  await confirmMini();
   const thirdKind = await page.evaluate(() => window.__ponpon.miniGame.kind);
   assert.notEqual(thirdKind, playedKind, 'two secret visits in one page never repeat');
   await page.clock.fastForward(miniWait);

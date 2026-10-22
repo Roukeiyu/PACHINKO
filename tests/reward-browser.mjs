@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
-import { PAIR_DURATION } from '../src/mini-games.js';
+import { PAIR_DURATION, BLOCK_DURATION, MINI_DURATION } from '../src/mini-games.js';
 import { TABLE } from '../src/physics.js';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
@@ -110,7 +110,7 @@ try {
   assert.equal(await page.evaluate(() => window.__rewardFixture.snapshot().bursts.length), 0);
   await page.evaluate(()=>window.__rewardPhysics.drain());await page.clock.runFor(50);
   assert.equal(await page.locator('#mini-game').evaluate(el=>el.open),true);
-  await page.clock.fastForward(PAIR_DURATION+2000);await page.locator('#mini-return').click();await page.clock.runFor(50);
+  await page.locator('#mini-start').click();await page.clock.fastForward(Math.max(PAIR_DURATION, BLOCK_DURATION, MINI_DURATION)+2000);await page.locator('#mini-return').click();await page.clock.runFor(50);
   await page.setViewportSize({width:390,height:844});
   await page.evaluate(() => { window.__rewardFixture.reset(); window.__rewardFixture.night(); window.__rewardPhysics.slot(10); window.__rewardFixture.advance(800); });
   await page.clock.runFor(50);

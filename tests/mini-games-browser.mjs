@@ -34,11 +34,27 @@ try {
  await page.evaluate(()=>document.querySelector('#launch').click());s=await state();assert.equal(s.stats.launches,2);assert.equal(s.charging,false);assert.equal(s.miniGame,null,'the secret waits for every current ball');
  await page.screenshot({path:'test-results/secret-wait-mobile.png'});
  await page.evaluate(()=>window.__secretFixture.drain());await page.clock.runFor(50);s=await state();
- assert.equal(s.activeBalls,0);assert.ok(['pairs','blocks','moles'].includes(s.miniGame.kind));
+ assert.equal(s.activeBalls,0);assert.equal(s.miniGame,null,'the intro card does not start the round');
  assert.equal(await page.locator('#mini-game').evaluate(el=>el.open),true);
- const before=await score(),clock=s.gameClock,stockBeforeMini=s.available,firstKind=s.miniGame.kind;
- assert.equal(s.lastMiniGame,firstKind,'starting a secret mini-game remembers it');
+ assert.equal(await page.locator('#mini-game').getAttribute('data-phase'),'intro');
+ assert.equal(await page.locator('#mini-rule').isVisible(),true);
+ assert.equal(await page.locator('#mini-play').evaluate(el=>el.hidden),true);
+ assert.equal(await page.locator('#mini-start').textContent(),'开始');
+ assert.match(await page.locator('#mini-intro-reward').textContent(),/挂机未操作，无小球奖励/);
+ assert.equal(await page.locator('#mini-game').evaluate(el=>el.scrollHeight<=el.clientHeight+1),true,'the phone intro fits without scrolling');
+ const before=await score(),clock=s.gameClock,stockBeforeMini=s.available,firstKind=s.lastMiniGame;
+ assert.ok(['pairs','blocks','moles'].includes(firstKind),'starting a secret mini-game remembers it before confirm');
  await page.keyboard.press('Escape');assert.equal(await page.locator('#mini-game').evaluate(el=>el.open),true);
+ await page.clock.fastForward(5000);s=await state();
+ assert.equal(s.miniGame,null,'waiting on the intro does not create the game');
+ assert.equal(s.gameClock,clock,'the table stays paused on the intro card');
+ await page.keyboard.press('Space');await page.clock.runFor(50);s=await state();
+ assert.equal(s.miniGame.kind,firstKind);assert.equal(s.miniGame.score,0);assert.equal(s.miniGame.played,false);
+ if(s.miniGame.kind==='pairs') assert.equal(s.miniGame.selected,null);
+ if(s.miniGame.kind==='moles') assert.equal(s.miniGame.hit,0);
+ assert.equal(await page.locator('#mini-game').getAttribute('data-phase'),'play');
+ assert.equal(await page.locator('#mini-rule').isVisible(),false,'the long rule leaves the in-game header');
+ assert.equal(await page.locator('#mini-intro').evaluate(el=>el.hidden),true);
  await page.clock.fastForward(Math.max(PAIR_DURATION,BLOCK_DURATION,MINI_DURATION)+2000);s=await state();assert.notEqual(s.miniGame.status,'playing');assert.equal(s.gameClock,clock,'the table pauses during the mini-game');
  assert.equal(s.stats.launches,2);assert.equal(s.score,before+s.miniGame.score);
  assert.equal(s.miniGame.played,false);assert.equal(s.miniGame.score,0);assert.equal(s.available,stockBeforeMini,'an idle secret visit adds no balls');
@@ -53,7 +69,18 @@ try {
  for(let clicks=1;clicks<=3;clicks++){await page.locator('#gm-dot').click();await page.clock.runFor(200);assert.equal((await state()).gm,clicks===3);}
  assert.equal(await page.locator('#gm-tools').isVisible(),true);assert.equal(await page.locator('#gm-dot').getAttribute('aria-pressed'),'true');
  await page.locator('#time-flow').check();await page.clock.fastForward(330000);assert.equal(await page.locator('#time-phase').textContent(),'夜间');
- async function start(kind){await page.locator(`[data-mini="${kind}"]`).click();await page.clock.runFor(50);assert.equal(await page.locator('#settings').evaluate(el=>el.open),false);assert.equal((await mini()).kind,kind);}
+ async function start(kind){
+  await page.locator(`[data-mini="${kind}"]`).click();await page.clock.runFor(50);
+  assert.equal(await page.locator('#settings').evaluate(el=>el.open),false);
+  assert.equal(await page.locator('#mini-game').getAttribute('data-phase'),'intro');
+  assert.equal(await mini(),null);
+  assert.equal(await page.locator('#mini-rule').isVisible(),true);
+  assert.match(await page.locator('#mini-intro-reward').textContent(),/试玩只记快乐积分/);
+  assert.equal(await page.locator('#mini-game').evaluate(el=>el.scrollHeight<=el.clientHeight+1),true,`${kind} intro fits without scrolling`);
+  await page.locator('#mini-start').click();await page.clock.runFor(50);
+  assert.equal((await mini()).kind,kind);
+  assert.equal(await page.locator('#mini-rule').isVisible(),false,'the long rule leaves the in-game header');
+ }
  async function settleMotion(){for(let i=0;i<40;i++){if(await page.locator('#mini-game').getAttribute('data-busy')!=='1')return;await page.clock.runFor(80);}assert.notEqual(await page.locator('#mini-game').getAttribute('data-busy'),'1','gravity animation releases the board');}
  async function cell(index){await page.locator(`[data-cell="${index}"]`).evaluate(el=>el.click());}
  async function back(){await page.locator('#mini-return').click();await page.clock.runFor(50);assert.equal(await page.locator('#settings').evaluate(el=>el.open),true);}
@@ -156,6 +183,9 @@ try {
  assert.equal((await state()).miniGame,null);
  await page.clock.runFor(50);
  assert.equal(await page.locator('#mini-game').count(),1);
+ assert.match(await page.locator('#mini-intro-reward').textContent(),/双球再 ×2/);
+ assert.match(await page.locator('#mini-intro-reward').textContent(),/挂机未操作，无小球奖励/);
+ await page.keyboard.press('Enter');await page.clock.runFor(50);
  assert.equal(await page.locator('#mini-bonus').textContent(),'×2');
  assert.equal(await page.locator('#mini-bonus').evaluate(el=>el.classList.contains('is-on')),true);
  const kind=(await mini()).kind;

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_DURATION, BLOCK_POINT, BLOCK_GROUP_LIMIT, COMBO_WINDOW_MS, COMBO_MULTIPLIER_STEP, comboMultiplier, comboPoints, connectedBlocks, randomMiniGame, miniGameIdle, AFK_BALL_TEXT, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS, PAIR_ICON_LIST, PAIR_SUITS, PAIR_SUIT_COUNT, PAIR_COPIES } from '../src/mini-games.js';
+import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_DURATION, BLOCK_POINT, BLOCK_GROUP_LIMIT, COMBO_WINDOW_MS, COMBO_MULTIPLIER_STEP, comboMultiplier, comboPoints, connectedBlocks, randomMiniGame, miniGameIdle, miniIntro, AFK_BALL_TEXT, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS, PAIR_ICON_LIST, PAIR_SUITS, PAIR_SUIT_COUNT, PAIR_COPIES } from '../src/mini-games.js';
 import { secretPayout } from '../src/secret-wave.js';
 assert.equal(COMBO_MULTIPLIER_STEP,.5);
 assert.deepEqual([0,1,2,3,4].map(comboMultiplier),[1,1,1.5,2,2.5]);
@@ -15,6 +15,14 @@ assert.equal(PAIR_SUIT_COUNT,16);assert.equal(PAIR_COPIES,4);assert.equal(PAIR_S
 assert.equal(new Set(PAIR_SUITS.map(icon=>icon.id)).size,16);assert.ok(PAIR_SUITS.every(icon=>PAIR_ICON_LIST.includes(icon)));
 assert.deepEqual(Object.values(MINI_GAMES).map(d=>[d.columns,d.rows]),[[8,8],[10,10],[4,4]]);
 assert.equal(AFK_BALL_TEXT,'挂机未操作 · 无小球奖励');
+const pairsCard=miniIntro('pairs',{source:'secret',ballGrant:20,doubled:false});
+assert.equal(pairsCard.title,'对对碰');assert.equal(pairsCard.rule,MINI_GAMES.pairs.rule);assert.equal(pairsCard.time,'30 秒');assert.equal(pairsCard.goal,'配完 32 对，或时间到');
+assert.equal(pairsCard.reward,'本局得分计入快乐积分。有效操作另得 20 颗小球。挂机未操作，无小球奖励');
+assert.equal(miniIntro('pairs',{source:'secret',ballGrant:160,doubled:true}).reward,'本局得分计入快乐积分，双球再 ×2。有效操作另得 160 颗小球。挂机未操作，无小球奖励');
+assert.equal(miniIntro('blocks').time,'45 秒');assert.equal(miniIntro('blocks').goal,'点掉 100 块，或时间到');assert.equal(miniIntro('blocks').rule,MINI_GAMES.blocks.rule);
+assert.equal(miniIntro('moles').time,'30 秒，每轮最多 3 秒');assert.equal(miniIntro('moles').goal,'10 轮打完 40 只，或时间到');
+assert.equal(miniIntro('moles',{source:'gm',doubled:true}).reward,'试玩只记快乐积分。挂机未操作不发小球');
+assert.throws(()=>miniIntro('other'),RangeError);
 assert.deepEqual([0,.4,.9].map(r=>randomMiniGame(()=>r)),['pairs','blocks','moles']);
 assert.equal(randomMiniGame(()=>0,'nope'),'pairs','an unknown previous still uses the full pool');
 assert.equal(randomMiniGame(()=>0,'pairs'),'blocks');

@@ -97,6 +97,28 @@ header{height:76px}.intro{padding:20px 0}.intro h1{font-size:27px;margin:6px 0}.
   .mini-dialog[data-kind=pairs] #mini-rule{margin-bottom:6px}
   .mini-dialog[data-kind=pairs] progress{margin-bottom:8px}
 }
+/* Intro is a confirm card. Pairs still goes full-bleed once play starts. */
+.mini-dialog[data-phase=intro]{width:min(480px,calc(100% - 20px));max-width:calc(100% - 20px);max-height:calc(100dvh - 16px);margin:auto;border-radius:22px;border:1px solid var(--flow-line-dedfce,#dedfce)}
+.mini-dialog[data-phase=intro] .mini-inner{padding:18px 18px 16px}
+.mini-dialog[data-phase=intro] .mini-inner h2{font-size:26px;margin:6px 0 8px}
+.mini-dialog[data-phase=intro] #mini-rule{font-size:13px;line-height:1.55;margin:0 0 12px}
+.mini-facts{display:grid;gap:6px;margin:0 0 14px;font-size:13px}
+.mini-facts div{display:grid;grid-template-columns:2.6em minmax(0,1fr);gap:8px;align-items:baseline}
+.mini-facts dt,.mini-facts dd{margin:0}
+.mini-facts dt{font-weight:800;color:var(--flow-ink-647659,#647659)}
+.mini-facts dd{line-height:1.45}
+#mini-start{width:100%;min-height:52px;border:0;border-radius:14px;background:var(--flow-surface-385442,#385442);color:var(--flow-ink-fffdf2,#fffdf2);font-size:16px;font-weight:800;letter-spacing:2px;box-shadow:0 4px 0 var(--flow-shadow-223b2b,#223b2b);touch-action:manipulation}
+#mini-start:hover{background:var(--flow-surface-46644f,#46644f)}
+#mini-start:active{box-shadow:0 1px 0 var(--flow-shadow-223b2b,#223b2b)}
+.mini-dialog[data-phase=play] .mini-inner h2{font-size:22px;margin:4px 0 6px}
+@media(max-width:740px){
+  .mini-dialog[data-phase=intro] .mini-inner{padding:12px}
+  .mini-dialog[data-phase=intro] .mini-heading{font-size:10px}
+  .mini-dialog[data-phase=intro] .mini-inner h2{font-size:22px;margin:2px 0 6px}
+  .mini-dialog[data-phase=intro] #mini-rule{font-size:11px;line-height:1.45;margin:0 0 8px}
+  .mini-dialog[data-phase=intro] .mini-facts{font-size:12px;gap:4px;margin-bottom:10px}
+  .mini-dialog[data-phase=play] .mini-inner h2{font-size:18px;margin:0 0 4px}
+}
 
 .slot-upgrade{position:absolute;left:50%;top:42%;z-index:5;transform:translate(-50%,-50%) scale(.8);padding:10px 18px;border-radius:999px;background:#fff6d4;color:#8a5a12;font-weight:800;letter-spacing:1px;box-shadow:0 8px 24px #e7c56a88;pointer-events:none}.slot-upgrade.is-on{animation:slot-upgrade 1.5s ease}
 @keyframes slot-upgrade{0%{opacity:0;transform:translate(-50%,-40%) scale(.7)}18%{opacity:1;transform:translate(-50%,-50%) scale(1.08)}70%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-62%) scale(.96)}}

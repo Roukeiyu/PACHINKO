@@ -67,6 +67,17 @@ export function randomMiniGame(random = Math.random, previous = null) {
   const pool = Object.hasOwn(MINI_GAMES, previous) ? kinds.filter(kind => kind !== previous) : kinds;
   return pool[integer(random, 0, pool.length - 1)];
 }
+// The card shown before a round exists. The rule text moves here; the clock starts only after confirm.
+export function miniIntro(kind, { source = 'secret', ballGrant = 20, doubled = false } = {}) {
+  if (!MINI_GAMES[kind]) throw new RangeError('Unknown mini-game');
+  const time = kind === 'blocks' ? `${BLOCK_DURATION / 1000} 秒` : kind === 'moles' ? `${MINI_DURATION / 1000} 秒，每轮最多 3 秒` : `${PAIR_DURATION / 1000} 秒`;
+  const goal = kind === 'pairs' ? `配完 ${PAIR_TARGET} 对，或时间到` : kind === 'blocks' ? `点掉 ${BLOCK_CLEAR_TARGET} 块，或时间到` : '10 轮打完 40 只，或时间到';
+  const grant = Math.max(0, Math.floor(Number(ballGrant)) || 0);
+  const reward = source === 'gm'
+    ? '试玩只记快乐积分。挂机未操作不发小球'
+    : `本局得分计入快乐积分${doubled ? '，双球再 ×2' : ''}。有效操作另得 ${grant} 颗小球。挂机未操作，无小球奖励`;
+  return { title: MINI_GAMES[kind].title, rule: MINI_GAMES[kind].rule, time, goal, reward };
+}
 export function connectedBlocks(board, index) {
   if (!board[index]) return [];
   const color = board[index].color, found = new Set([index]), queue = [index];

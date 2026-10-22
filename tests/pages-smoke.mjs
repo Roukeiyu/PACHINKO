@@ -118,6 +118,9 @@ try {
   for(let i=0;i<3;i++) await page.locator('#gm-dot').click();
   assert.equal(await page.locator('#gm-tools').isVisible(),true);
   await page.locator('[data-mini="pairs"]').click();
+  assert.equal(await page.locator('#mini-game').getAttribute('data-phase'),'intro');
+  assert.equal(await page.locator('#mini-grid button').count(),0);
+  await page.locator('#mini-start').click();
   assert.equal(await page.locator('#mini-grid button').count(),64);
   const iconCount=await page.locator('#mini-grid button').evaluateAll(buttons=>new Set(buttons.map(button=>button.dataset.icon)).size);
   assert.equal(iconCount,16, '16 suits, four copies each');
