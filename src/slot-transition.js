@@ -136,5 +136,56 @@ export function blendSlotLayout(fromCount, toCount, t) {
     return { from: fromCount, to: toCount, eased: 1, regions: paintRegions(toCount) };
   }
   if (toCount === 9) return { from: fromCount, to: toCount, eased, regions: morphToNine(fromCount, eased) };
+  if (toCount === 7) return { from: fromCount, to: toCount, eased, regions: morphToSeven(eased) };
   return { from: fromCount, to: toCount, eased, regions: morphRegions(fromCount, toCount, eased) };
+}
+
+// 5→7 grows one wide end pocket from each wall. The five slots already on
+// the row become the inner five. The two edge mouths shrink away, and the
+// four mouths between those inner slots stay open.
+function morphToSeven(eased) {
+  const fromFrame = slotFrame(5);
+  const toFrame = slotFrame(7);
+  const fromMult = slotMultipliers(5);
+  const toMult = slotMultipliers(7);
+  const toSlots = toFrame.regions.filter(region => region.kind === 'slot');
+  const toDrains = toFrame.regions.filter(region => region.kind === 'drain');
+  const regions = [];
+  const place = (fromX0, fromX1, toX0, toX1, fields) => {
+    regions.push({
+      ...fields,
+      x0: fromX0 + (toX0 - fromX0) * eased,
+      x1: fromX1 + (toX1 - fromX1) * eased,
+    });
+  };
+  const slotFields = (column, fresh, fromColumn) => {
+    const toMultiplier = toMult[column];
+    const fromMultiplier = fromColumn === null ? toMultiplier : fromMult[fromColumn];
+    const described = describeSlot(7, column, toMultiplier, fresh, fromColumn, fromMultiplier);
+    if (fromColumn !== null) described.luckyFrom = isLucky(5, fromColumn, fromMultiplier);
+    return described;
+  };
+  const outerLeft = toSlots[0];
+  place(SLOT_ROW_LEFT, SLOT_ROW_LEFT, outerLeft.x0, outerLeft.x1, slotFields(0, true, null));
+  let carried = 0;
+  let innerDrain = 0;
+  for (const region of fromFrame.regions) {
+    if (region.kind === 'slot') {
+      const target = toSlots[1 + carried];
+      place(region.x0, region.x1, target.x0, target.x1, slotFields(target.column, false, region.column));
+      carried += 1;
+      continue;
+    }
+    if (carried === 0 || carried === toSlots.length - 2) {
+      const boundary = carried === 0 ? toSlots[1].x0 : toSlots[5].x1;
+      place(region.x0, region.x1, boundary, boundary, { kind: 'drain', fresh: false });
+      continue;
+    }
+    const target = toDrains[innerDrain];
+    innerDrain += 1;
+    place(region.x0, region.x1, target.x0, target.x1, { kind: 'drain', fresh: false });
+  }
+  const outerRight = toSlots[6];
+  place(SLOT_ROW_RIGHT, SLOT_ROW_RIGHT, outerRight.x0, outerRight.x1, slotFields(6, true, null));
+  return regions;
 }

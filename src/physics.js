@@ -181,17 +181,25 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     const frame = slotFrame(slots);
     // Lips sit inside the pocket, so the painted mouth stays fully open and a
     // ball that misses the lip falls through instead of being guided in.
-    // Seven slots leave the wall itself as the outer edge, so a ball rolling
-    // down the side falls into the end slot instead of onto a lip.
-    // Nine slots have no mouth between them. One wall is centered on each
-    // shared edge, so every catch stays the same width. A lip on both sides
-    // of that edge would stack into a double barrier.
+    // Seven and nine slots leave the cabinet wall as the outer edge, so a
+    // ball rolling down the side falls into the end slot. Where two pockets
+    // meet, one wall is centered on that edge. A lip on both sides would
+    // stack into a double barrier. An open mouth keeps a lip inside each
+    // pocket so the painted gap stays clear.
     const lip = DRAIN_WALL;
     const slotRegions = frame.regions.filter(region => region.kind === 'slot');
-    if (slots === 9) {
+    if (slots === 9 || slots === 7) {
       for (let index = 0; index < slotRegions.length - 1; index++) {
-        const x = slotRegions[index].x1;
-        segment(x, TABLE.slotTop, x, DRAIN_FLOOR, lip, dividers, 'divider', .2);
+        const left = slotRegions[index];
+        const right = slotRegions[index + 1];
+        const gap = right.x0 - left.x1;
+        if (gap <= lip + 0.75) {
+          const x = (left.x1 + right.x0) / 2;
+          segment(x, TABLE.slotTop, x, DRAIN_FLOOR, lip, dividers, 'divider', .2);
+        } else {
+          segment(left.x1 - lip / 2, TABLE.slotTop, left.x1 - lip / 2, DRAIN_FLOOR, lip, dividers, 'divider', .2);
+          segment(right.x0 + lip / 2, TABLE.slotTop, right.x0 + lip / 2, DRAIN_FLOOR, lip, dividers, 'divider', .2);
+        }
       }
     } else {
       const flush = slots !== 5;

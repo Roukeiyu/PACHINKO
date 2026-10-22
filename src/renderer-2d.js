@@ -158,10 +158,9 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
         if (lucky > 0.04) { ctx.save(); ctx.globalAlpha = Math.min(1, lucky); text('LUCKY', mid, TABLE.slotTop + 73, 8, '#aa8243'); ctx.restore(); }
       }
     }
-    // Nine slots meet edge to edge. The thin wall fills the card inset; it is
-    // a solid lip, not the diagonal 漏 hatch. Wide drains still shrinking
-    // during the upgrade keep that hatch until they close.
-    if (layout.to === 9) {
+    // Pockets that meet get one solid lip in the card inset. A wide mouth
+    // keeps the diagonal 漏 hatch instead, until that mouth has closed.
+    {
       const pictured = layout.regions.filter(region => region.kind === 'slot' && region.x1 - region.x0 >= 8);
       for (let i = 0; i < pictured.length - 1; i++) {
         const left = pictured[i], right = pictured[i + 1];

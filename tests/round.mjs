@@ -67,16 +67,34 @@ for (const count of [5, 7, 9]) {
     assert.equal(frame.regions[0].column, 0);
     assert.equal(frame.regions.at(-1).column, count - 1);
   } else if (count === 7) {
+    const inner = slots.slice(1, 6).map(slot => slot.x1 - slot.x0);
+    const outerLeft = slots[0].x1 - slots[0].x0;
+    const outerRight = slots[6].x1 - slots[6].x0;
     assert.equal(frame.opening, WIDE_DRAIN_OPENING);
+    assert.equal(frame.mouths, 4);
     assert.equal(frame.apron, 0);
-    assert.ok(frame.opening >= BALL_DIAMETER + 6, `${count}-slot drains are wider than a ball`);
-    assert.equal(drains.length, count - 1);
+    assert.ok(frame.opening >= BALL_DIAMETER + 6, '7-slot inner drains are wider than a ball');
+    assert.equal(drains.length, 4, '7 slots keep the four inner mouths');
     assert.equal(frame.regions[0].kind, 'slot');
+    assert.equal(frame.regions[1].kind, 'slot', 'the left outer mouth is gone');
     assert.equal(frame.regions.at(-1).kind, 'slot');
+    assert.equal(frame.regions.at(-2).kind, 'slot', 'the right outer mouth is gone');
     assert.equal(frame.regions[0].column, 0);
-    assert.equal(frame.regions.at(-1).column, count - 1);
+    assert.equal(frame.regions.at(-1).column, 6);
     assert.ok(Math.abs(frame.regions[0].x0 - TABLE.left) < 1e-6);
     assert.ok(Math.abs(frame.regions.at(-1).x1 - TABLE.right) < 1e-6);
+    assert.ok(Math.abs(outerLeft - outerRight) < 1, `end slots ${outerLeft.toFixed(3)} and ${outerRight.toFixed(3)} match`);
+    assert.ok(Math.max(...inner) - Math.min(...inner) < 1, 'the five inner slots match');
+    assert.ok(outerLeft > inner[0] + WIDE_DRAIN_OPENING - 1, 'each end slot absorbed one outer mouth');
+    assert.ok(Math.abs(slots[0].x1 - slots[1].x0) < 1e-6, 'the left end slot meets the next slot');
+    assert.ok(Math.abs(slots[5].x1 - slots[6].x0) < 1e-6, 'the right end slot meets the previous slot');
+    drains.forEach((drain, index) => {
+      assert.ok(Math.abs(drain.x1 - drain.x0 - WIDE_DRAIN_OPENING) < 0.6, `inner mouth ${index} stays 32px`);
+      assert.ok(Math.abs(drain.x0 - slots[index + 1].x1) < 1e-6);
+      assert.ok(Math.abs(drain.x1 - slots[index + 2].x0) < 1e-6);
+    });
+    assert.equal(classifyBottom(slots[0].x1 - 16, 7).column, 0, 'the freed left mouth scores the end slot');
+    assert.equal(classifyBottom(slots[6].x0 + 16, 7).column, 6, 'the freed right mouth scores the end slot');
   } else {
     const mouths = count + 1;
     const natural = (TABLE.right - TABLE.left - count * POCKET_WIDTH) / mouths;
@@ -128,6 +146,16 @@ for (const count of [7, 9]) {
     assert.equal(game.stats.drains, 0, `${count}-slot ${name} scores the end slot`);
     assert.equal(game.stats.scored, 1);
   }
+  if (count === 7) {
+    const slots7 = frame.regions.filter(region => region.kind === 'slot');
+    for (const [column, x] of [[0, slots7[0].x1 - 16], [6, slots7[6].x0 + 16]]) {
+      const game = drop(x);
+      assert.equal(game.stats.timeouts, 0, `7-slot former outer mouth ${column} settles`);
+      assert.equal(game.balls.length, 0);
+      assert.equal(game.stats.drains, 0, `7-slot former outer mouth ${column} scores`);
+      assert.equal(game.stats.scored, 1);
+    }
+  }
   if (count === 9) {
     for (let column = 0; column < count; column++) {
       const game = drop(pocketCenter(count, column));
@@ -161,11 +189,18 @@ for (const count of [7, 9]) {
   for (let index = 1; index < centers.length; index++) {
     assert.ok(centers[index] - centers[index - 1] > 40, '9-slot walls are not stacked into a filler');
   }
-  for (const count of [5, 7]) {
-    const lips = count === 5 ? count * 2 : count * 2 - 2;
-    const table = createTable({ slots: count, random: () => 0.2 });
-    assert.equal(table.dividers.length, lips, `${count} slots keep their drain lips`);
+  const seven = createTable({ slots: 7, random: () => 0.2 });
+  const sevenFrame = slotFrame(7);
+  const sevenSlots = sevenFrame.regions.filter(region => region.kind === 'slot');
+  assert.equal(seven.dividers.length, 10, '7 slots keep one wall on each closed end and two lips on each inner mouth');
+  const sevenCenters = seven.dividers.map(body => body.position.x).sort((a, b) => a - b);
+  assert.ok(Math.abs(sevenCenters[0] - sevenSlots[0].x1) < 0.51, 'the left end wall sits on the closed gap');
+  assert.ok(Math.abs(sevenCenters.at(-1) - sevenSlots[5].x1) < 0.51, 'the right end wall sits on the closed gap');
+  for (const drain of sevenFrame.regions.filter(region => region.kind === 'drain')) {
+    assert.equal(sevenCenters.some(x => x > drain.x0 + 1 && x < drain.x1 - 1), false, 'an inner mouth stays open');
   }
+  const five = createTable({ slots: 5, random: () => 0.2 });
+  assert.equal(five.dividers.length, 10, '5 slots keep two drain lips on every pocket');
 }
 assert.equal(classifyBottom(TABLE.left - 1, 5), null);
 assert.equal(classifyBottom(TABLE.right, 5), null);

@@ -69,8 +69,8 @@ try {
   await page.evaluate(()=>document.querySelector('#settings-button').click());
   for(const count of [7,9,5]) {
     await page.evaluate(n=>window.__ponpon.setSlots(n),count);await page.clock.runFor(50);
-    const lips = count === 9 ? count - 1 : count === 5 ? count * 2 : count * 2 - 2;
-    assert.equal(await page.evaluate(()=>window.__ponpon.rendering.bodies.filter(b=>b.kind==='divider').length),lips, count === 9 ? 'nine equal slots share one thin wall' : count === 5 ? 'each pocket keeps two drain lips' : 'the side walls close the end slots');
+    const lips = count === 9 ? count - 1 : count === 7 ? 10 : count * 2;
+    assert.equal(await page.evaluate(()=>window.__ponpon.rendering.bodies.filter(b=>b.kind==='divider').length),lips, count === 9 ? 'nine equal slots share one thin wall' : count === 7 ? 'seven slots close only the two outer gaps' : 'each pocket keeps two drain lips');
     assert.equal(await page.evaluate(()=>window.__ponpon.rendering.alignmentError),0);
   }
   assert.equal(await page.evaluate(()=>window.__ponpon.rendering.geometries),geometryCount);

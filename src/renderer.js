@@ -208,14 +208,22 @@ function create3DRenderer(canvas) {
     layoutKey = key;
     const frame = animating ? blendSlotLayout(shift.from, shift.to, elapsed) : slotFrame(game.slots);
     const openDrains = frame.regions.some(region => region.kind === 'drain');
-    const cardPad = openDrains ? 2 : DRAIN_WALL / 2;
-    for (const region of frame.regions) {
+    const openPad = openDrains ? 2 : DRAIN_WALL / 2;
+    for (let index = 0; index < frame.regions.length; index++) {
+      const region = frame.regions[index];
       const cx = (region.x0 + region.x1) / 2, width = region.x1 - region.x0;
       if (region.kind === 'drain') {
         if (width < 6) continue;
         layoutBox(cx, TABLE.slotTop + 50, Math.max(4, width - 2), 96, 2, hazardSide, -6, 2);
       } else if (region.kind === 'slot' && width >= 14) {
-        layoutBox(cx, TABLE.slotTop + 43, Math.max(4, width - cardPad * 2), 78, 3, goldSide, -.5, 6);
+        const previous = frame.regions[index - 1];
+        const following = frame.regions[index + 1];
+        const leftClosed = previous?.kind === 'slot' && region.x0 - previous.x1 <= DRAIN_WALL + 0.75;
+        const rightClosed = following?.kind === 'slot' && following.x0 - region.x1 <= DRAIN_WALL + 0.75;
+        const leftPad = leftClosed ? DRAIN_WALL / 2 : openPad;
+        const rightPad = rightClosed ? DRAIN_WALL / 2 : openPad;
+        const cardWidth = Math.max(4, width - leftPad - rightPad);
+        layoutBox(region.x0 + leftPad + cardWidth / 2, TABLE.slotTop + 43, cardWidth, 78, 3, goldSide, -.5, 6);
       }
     }
     for (const outlet of game.collector.outlets) layoutBox(outlet.x, outlet.y, 52, 17, 7, purpleSide, 0, 6);
@@ -223,25 +231,21 @@ function create3DRenderer(canvas) {
     // the lips on the easing mouths instead of the settled bodies.
     if (animating) {
       const pictured = frame.regions.filter(region => region.kind === 'slot' && region.x1 - region.x0 >= 16);
-      if (shift.to === 9) {
-        for (let i = 0; i < pictured.length - 1; i++) {
-          const left = pictured[i], right = pictured[i + 1];
-          const gap = right.x0 - left.x1;
-          if (gap > DRAIN_WALL + 0.75) {
-            layoutBox(left.x1 - DRAIN_WALL / 2, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
-            layoutBox(right.x0 + DRAIN_WALL / 2, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
-          } else {
-            layoutBox((left.x1 + right.x0) / 2, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
-          }
-        }
-      } else {
-        const flush = shift.to !== 5;
-        for (const region of pictured) {
-          const outerLeft = flush && region === pictured[0];
-          const outerRight = flush && region === pictured[pictured.length - 1];
-          if (!outerLeft) layoutBox(region.x0 + DRAIN_WALL / 2, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
-          if (!outerRight) layoutBox(region.x1 - DRAIN_WALL / 2, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
-        }
+      const flush = shift.to !== 5;
+      const lipBox = x => layoutBox(x, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
+      for (let i = 0; i < pictured.length; i++) {
+        const region = pictured[i];
+        const prev = pictured[i - 1];
+        const next = pictured[i + 1];
+        const gapBefore = prev ? region.x0 - prev.x1 : Infinity;
+        const gapAfter = next ? next.x0 - region.x1 : Infinity;
+        if (!prev) {
+          if (!flush) lipBox(region.x0 + DRAIN_WALL / 2);
+        } else if (gapBefore > DRAIN_WALL + 0.75) lipBox(region.x0 + DRAIN_WALL / 2);
+        if (!next) {
+          if (!flush) lipBox(region.x1 - DRAIN_WALL / 2);
+        } else if (gapAfter > DRAIN_WALL + 0.75) lipBox(region.x1 - DRAIN_WALL / 2);
+        else lipBox((region.x1 + next.x0) / 2);
       }
     } else {
       for (const b of game.dividers) bodyModel(b, hazardSide, 9);

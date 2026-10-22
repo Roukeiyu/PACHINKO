@@ -59,6 +59,25 @@ for (const [from, to] of [[5, 7], [7, 9], [5, 9]]) {
       const before = region.x1 - region.x0;
       assert.ok(during.x1 - during.x0 < before - 0.5, `${from}→${to} shrinks a striped drain`);
     });
+  } else if (to === 7) {
+    const endSlots = next.regions.filter(region => region.kind === 'slot');
+    const endDrains = next.regions.filter(region => region.kind === 'drain');
+    assert.equal(endDrains.length, 4, '5→7 keeps the four inner mouths');
+    assert.equal(next.regions[0].kind, 'slot');
+    assert.equal(next.regions[1].kind, 'slot', 'the left outer mouth closes');
+    assert.equal(next.regions.at(-1).kind, 'slot');
+    assert.equal(next.regions.at(-2).kind, 'slot', 'the right outer mouth closes');
+    const outer = endSlots[0].x1 - endSlots[0].x0;
+    const inner = endSlots[1].x1 - endSlots[1].x0;
+    assert.ok(Math.abs(outer - (endSlots[6].x1 - endSlots[6].x0)) < 1, 'both end slots take the same freed width');
+    assert.ok(outer > inner + 30, 'each end slot absorbs the mouth beside it');
+    for (const drain of endDrains) assert.ok(Math.abs(drain.x1 - drain.x0 - next.opening) < 0.6);
+    old.regions.forEach((region, index) => {
+      const during = mid.regions[1 + index];
+      assert.equal(during.kind, region.kind, '5→7 keeps the old mouths while they move');
+      if (region.kind !== 'drain' || (index !== 0 && index !== old.regions.length - 1)) return;
+      assert.ok(during.x1 - during.x0 < region.x1 - region.x0 - 0.5, '5→7 shrinks an edge mouth');
+    });
   } else {
     const extra = (next.regions.length - old.regions.length) / 2;
     old.regions.forEach((region, index) => {
@@ -87,15 +106,20 @@ for (const [from, to] of [[5, 7], [7, 9], [5, 9]]) {
     assert.ok(Math.abs(region.x0 - next.regions[index].x0) < 1e-6);
     assert.ok(Math.abs(region.x1 - next.regions[index].x1) < 1e-6);
   });
-  if (to === 9) {
+  if (to === 9 || to === 7) {
     const easedSlots = almost.regions.filter(region => region.kind === 'slot');
-    assert.equal(easedSlots.length, next.regions.length);
+    const finalSlots = next.regions.filter(region => region.kind === 'slot');
+    assert.equal(easedSlots.length, finalSlots.length);
     easedSlots.forEach((region, index) => {
-      assert.ok(Math.abs(region.x0 - next.regions[index].x0) < 3);
-      assert.ok(Math.abs(region.x1 - next.regions[index].x1) < 3);
+      assert.ok(Math.abs(region.x0 - finalSlots[index].x0) < 3);
+      assert.ok(Math.abs(region.x1 - finalSlots[index].x1) < 3);
     });
-    for (const drain of almost.regions.filter(region => region.kind === 'drain')) {
-      assert.ok(drain.x1 - drain.x0 < 1, `${from}→${to} has closed the striped drains`);
+    const open = almost.regions.filter(region => region.kind === 'drain' && region.x1 - region.x0 >= 1);
+    const closed = almost.regions.filter(region => region.kind === 'drain' && region.x1 - region.x0 < 1);
+    if (to === 9) assert.equal(open.length, 0, `${from}→${to} has closed the striped drains`);
+    else {
+      assert.equal(open.length, 4, '5→7 keeps four inner mouths open through the ease');
+      assert.ok(closed.length >= 2, '5→7 closes the two edge mouths');
     }
   } else {
     almost.regions.forEach((region, index) => {
