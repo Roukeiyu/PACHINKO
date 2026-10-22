@@ -28,7 +28,7 @@ console.log('PASS: both fixed centerline spring studs actively rebound balls and
 const fixedPositions = createTable({ random: seeded(1) }).pins.map(p => ({ ...p.position }));
 for (const seed of [0, 1, 100]) {
   const game = createTable({ random: seeded(seed) });
-  assert.equal(game.pins.length, 26);
+  assert.equal(game.pins.length, 25);
   const positions = game.pins.map(p => ({ ...p.position }));
   assert.deepEqual(positions, fixedPositions, 'random gameplay must not change pin placement');
   for (const p of positions) assert.ok(positions.some(q => q.x === 700 - p.x && q.y === p.y), 'each pin has a same-height counterpart across the vertical x=350 axis');
@@ -132,6 +132,32 @@ console.log('PASS: lower diamonds travel ±20px out of phase, spin opposite ways
   assert.ok(game.stats.hits.wall > 0 && ball.body.position.y < 400, 'left guard physically intercepts a descending ball');
 }
 console.log('PASS: left guard blocks descending balls and the restored upper divider contains the shooter lane.');
+{
+  // A ball set on the merged peg, or on a nearby drum crown, has to roll or be nudged off.
+  const spots = [
+    { x: 350, y: 270 - 7.5 - 12, name: 'center peg' },
+    { x: 238, y: 236 - 32 - 12, name: 'bunny crown' },
+    { x: 462, y: 236 - 32 - 12, name: 'bear crown' },
+    { x: 350, y: 410 - 39 - 12, name: 'cat crown' },
+    { x: 238 + 32 + 12, y: 236 - 8, name: 'bunny inner rim' },
+    { x: 462 - 32 - 12, y: 236 - 8, name: 'bear inner rim' },
+  ];
+  for (const spot of spots) {
+    const game = createTable({ random: seeded(11) });
+    const ball = game.launch();
+    ball.entered = true;
+    Matter.Body.setPosition(ball.body, spot);
+    Matter.Body.setVelocity(ball.body, { x: 0, y: 0 });
+    let freed = false;
+    for (let step = 0; step < Math.ceil(4000 / STEP); step++) {
+      game.step();
+      if (!game.balls.includes(ball) || Math.hypot(ball.body.position.x - spot.x, ball.body.position.y - spot.y) > 36) { freed = true; break; }
+    }
+    assert.equal(game.stats.timeouts, 0, `${spot.name} does not time out`);
+    assert.ok(freed, `${spot.name} lets a resting ball go`);
+  }
+}
+console.log('PASS: a ball resting on the center peg or a nearby drum rim does not stay there.');
 const totals = { scored: 0, jackpots: 0, returns: 0, timeouts: 0 };
 // Sample several launch/reward sequences per slot count on the fixed layout.
 for (const slots of [5, 7, 9]) for (const seedOffset of [0, 100, 200]) {

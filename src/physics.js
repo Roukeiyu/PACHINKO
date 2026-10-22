@@ -119,12 +119,15 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   segment(665, 413, 615, 438, 13, walls);
   // Fixed left/right pairs mirrored across the center bumper's vertical x=350 axis.
   // Coordinates leave space for moving rails, enlarged bumpers and the hole.
-  const pinAnchors = [[150, 155], [280, 155], [110, 235], [320, 270],
+  // The side-by-side pair between the bunny and bear drums, (320,270) and
+  // (380,270), is one peg at their midpoint. It is added once: mirroring a
+  // center peg would create it twice.
+  const pinAnchors = [[150, 155], [280, 155], [110, 235],
     [250, 325], [95, 350], [190, 420], [250, 500], [250, 600],
     // The two pegs that sat beside the lower spring, just above the outer reel
     // squares, are gone. They crowded the reels without guiding a path.
     [185, 640], [310, 640], [120, 730], [200, 730]];
-  const pinPositions = pinAnchors.flatMap(([x, y]) => [[x, y], [700 - x, y]]);
+  const pinPositions = [...pinAnchors.flatMap(([x, y]) => [[x, y], [700 - x, y]]), [350, 270]];
   pinPositions.forEach(([x, y], index) => {
     add(Bodies.circle(x, y, 7.5, { isStatic: true, label: 'pin', restitution: .85, friction: 0 }), pins, { index });
   });

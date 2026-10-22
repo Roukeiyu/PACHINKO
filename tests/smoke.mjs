@@ -17,7 +17,7 @@ try {
     await page.locator('#auto').click();
     await page.locator('#done-settings').click();
   }
-  await page.waitForFunction(() => window.__ponpon?.pins === 26);
+  await page.waitForFunction(() => window.__ponpon?.pins === 25);
   assert.equal(await page.locator('#settings #auto[role="switch"]').count(), 1, 'automatic launch is a settings switch');
   assert.equal(await page.locator('.launch-row #launch').count(), 1, 'only the manual launch button remains outside settings');
   assert.equal(await page.locator('.launch-row #double-ball').count(), 1, 'the cost badge sits on the launch button');
