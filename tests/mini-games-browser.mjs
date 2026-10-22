@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { connectedBlocks, BLOCK_CLEAR_TARGET, comboPoints, formatComboMultiplier, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS } from '../src/mini-games.js';
+import { connectedBlocks, BLOCK_CLEAR_TARGET, BLOCK_DURATION, MINI_DURATION, comboPoints, formatComboMultiplier, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS } from '../src/mini-games.js';
 const executablePath=process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined);
 const browser=await chromium.launch({executablePath,args:process.platform==='linux'?['--no-sandbox']:[]});
 await mkdir('test-results',{recursive:true});
@@ -36,7 +36,7 @@ try {
  assert.equal(s.activeBalls,0);assert.ok(['pairs','blocks','moles'].includes(s.miniGame.kind));
  assert.equal(await page.locator('#mini-game').evaluate(el=>el.open),true);
  const before=await score(),clock=s.gameClock;await page.keyboard.press('Escape');assert.equal(await page.locator('#mini-game').evaluate(el=>el.open),true);
- await page.clock.fastForward(PAIR_DURATION+2000);s=await state();assert.notEqual(s.miniGame.status,'playing');assert.equal(s.gameClock,clock,'the table pauses during the mini-game');
+ await page.clock.fastForward(Math.max(PAIR_DURATION,BLOCK_DURATION,MINI_DURATION)+2000);s=await state();assert.notEqual(s.miniGame.status,'playing');assert.equal(s.gameClock,clock,'the table pauses during the mini-game');
  assert.equal(s.stats.launches,2);assert.equal(s.score,before+s.miniGame.score);
  await page.clock.fastForward(5000);assert.equal(await score(),s.score,'results are credited exactly once');
  await page.locator('#mini-return').click();await page.clock.runFor(50);s=await state();assert.equal(s.secretPending,false);assert.equal(s.emissionPaused,false);assert.equal(s.auto,true);
@@ -47,6 +47,7 @@ try {
  assert.equal(await page.locator('#gm-tools').isVisible(),true);assert.equal(await page.locator('#gm-dot').getAttribute('aria-pressed'),'true');
  await page.locator('#time-flow').check();await page.clock.fastForward(330000);assert.equal(await page.locator('#time-phase').textContent(),'夜间');
  async function start(kind){await page.locator(`[data-mini="${kind}"]`).click();await page.clock.runFor(50);assert.equal(await page.locator('#settings').evaluate(el=>el.open),false);assert.equal((await mini()).kind,kind);}
+ async function settleMotion(){for(let i=0;i<40;i++){if(await page.locator('#mini-game').getAttribute('data-busy')!=='1')return;await page.clock.runFor(80);}assert.notEqual(await page.locator('#mini-game').getAttribute('data-busy'),'1','gravity animation releases the board');}
  async function cell(index){await page.locator(`[data-cell="${index}"]`).evaluate(el=>el.click());}
  async function back(){await page.locator('#mini-return').click();await page.clock.runFor(50);assert.equal(await page.locator('#settings').evaluate(el=>el.open),true);}
  await page.setViewportSize({width:375,height:812});
@@ -80,9 +81,11 @@ try {
  for(let i=0;i<4;i++)for(let j=i+1;j<4;j++)assert.ok(Math.max(...colors[i].map((v,k)=>Math.abs(v-colors[j][k])))>=10,'night puzzle colors remain visually distinct');
  await page.screenshot({path:'test-results/mini-blocks-night-mobile.png'});await page.screenshot({path:'test-results/mini-blocks-preview.jpg',type:'jpeg',quality:55});
  let moves=0;
- while((await mini()).status==='playing'&&(await mini()).removed<BLOCK_CLEAR_TARGET&&moves++<80){const board=(await mini()).board;const index=board.findIndex((_,i)=>connectedBlocks(board,i).length>=3);assert.ok(index>=0);await cell(index);await page.clock.runFor(200);}
+ let sawLock=false;
+ while((await mini()).status==='playing'&&(await mini()).removed<BLOCK_CLEAR_TARGET&&moves++<120){const board=(await mini()).board;const index=board.findIndex((_,i)=>connectedBlocks(board,i).length>=3);assert.ok(index>=0);await cell(index);if(!sawLock){assert.equal(await page.locator('#mini-game').getAttribute('data-busy'),'1','a clear locks input while tiles fall');sawLock=true;}await settleMotion();}
+ await settleMotion();
  const blocks=await mini();
- assert.equal(blocks.status,'complete','50 cleared blocks end 消消乐');
+ assert.equal(blocks.status,'complete','100 cleared blocks end 消消乐');
  assert.equal(blocks.removed,BLOCK_CLEAR_TARGET);
  assert.ok(blocks.baseScore>=BLOCK_CLEAR_TARGET*10);
  assert.equal(blocks.score,Math.round(blocks.baseScore*blocks.bestMultiplier));
@@ -145,7 +148,7 @@ try {
  assert.equal(await page.locator('#mini-bonus').textContent(),'×2');
  assert.equal(await page.locator('#mini-bonus').evaluate(el=>el.classList.contains('is-on')),true);
  const kind=(await mini()).kind;
- for(let step=0;step<40 && (await mini()).status==='playing' && (kind==='blocks'?(await mini()).removed<BLOCK_CLEAR_TARGET:(await mini()).score<1000);step++){
+ for(let step=0;step<50 && (await mini()).status==='playing' && (kind==='blocks'?(await mini()).removed<BLOCK_CLEAR_TARGET:(await mini()).score<1000);step++){
   const board=(await mini()).board;
   if(kind==='pairs'){
    const open=board.flatMap((cell,index)=>cell?[{...cell,index}]:[]);
@@ -156,6 +159,7 @@ try {
    const index=board.findIndex((_,i)=>connectedBlocks(board,i).length>=3);
    if(index<0) break;
    await cell(index);
+   await settleMotion();
   }else{
    const mole=board.findIndex(cell=>cell.type==='mole'&&!cell.hit);
    if(mole>=0) await cell(mole);
@@ -169,7 +173,7 @@ try {
  assert.equal(await page.locator('#mini-score').textContent(),await page.evaluate(n=>n.toLocaleString(),raw));
  const alreadyPaid=mid.status!=='playing';
  assert.equal(await score(),holeBase+3000+(alreadyPaid?raw*2:0),'mini-game points are credited when the round ends');
- if(!alreadyPaid) await page.clock.fastForward(PAIR_DURATION+2000);
+ if(!alreadyPaid) await page.clock.fastForward(Math.max(PAIR_DURATION,BLOCK_DURATION,MINI_DURATION)+2000);
  const done=await mini();
  assert.notEqual(done.status,'playing');
  assert.ok(done.score>=raw);

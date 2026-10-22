@@ -286,3 +286,5 @@ html:not(.calm) .ball-count.is-low{animation:ball-low 900ms ease-in-out infinite
 }
 .launch-control{position:relative}
 .toast{position:absolute;top:auto;bottom:calc(100% + 8px);max-width:min(280px,calc(100vw - 24px))}
+.mini-dialog[data-kind=blocks] .mini-grid.is-falling{overflow:visible;pointer-events:none}
+.mini-dialog[data-kind=blocks] .mini-grid.is-falling .mini-cell{transition:none;will-change:transform}
