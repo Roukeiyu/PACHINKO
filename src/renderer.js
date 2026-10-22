@@ -231,7 +231,6 @@ function create3DRenderer(canvas) {
     // the lips on the easing mouths instead of the settled bodies.
     if (animating) {
       const pictured = frame.regions.filter(region => region.kind === 'slot' && region.x1 - region.x0 >= 16);
-      const flush = shift.to !== 5;
       const lipBox = x => layoutBox(x, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
       for (let i = 0; i < pictured.length; i++) {
         const region = pictured[i];
@@ -239,11 +238,9 @@ function create3DRenderer(canvas) {
         const next = pictured[i + 1];
         const gapBefore = prev ? region.x0 - prev.x1 : Infinity;
         const gapAfter = next ? next.x0 - region.x1 : Infinity;
-        if (!prev) {
-          if (!flush) lipBox(region.x0 + DRAIN_WALL / 2);
-        } else if (gapBefore > DRAIN_WALL + 0.75) lipBox(region.x0 + DRAIN_WALL / 2);
+        if (prev && gapBefore > DRAIN_WALL + 0.75) lipBox(region.x0 + DRAIN_WALL / 2);
         if (!next) {
-          if (!flush) lipBox(region.x1 - DRAIN_WALL / 2);
+          // The cabinet wall is the outer edge on every row.
         } else if (gapAfter > DRAIN_WALL + 0.75) lipBox(region.x1 - DRAIN_WALL / 2);
         else lipBox((region.x1 + next.x0) / 2);
       }

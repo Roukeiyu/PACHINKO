@@ -96,14 +96,43 @@ for (const count of [5, 7, 9]) {
     assert.equal(classifyBottom(slots[0].x1 - 16, 7).column, 0, 'the freed left mouth scores the end slot');
     assert.equal(classifyBottom(slots[6].x0 + 16, 7).column, 6, 'the freed right mouth scores the end slot');
   } else {
-    const mouths = count + 1;
-    const natural = (TABLE.right - TABLE.left - count * POCKET_WIDTH) / mouths;
-    const baseline = Math.max(natural, DRAIN_MIN_OPENING);
-    assert.ok(Math.abs(frame.opening - baseline * DRAIN_WIDTH_SCALE) < 1e-6, `${count} drain mouths are half of the previous width`);
-    assert.ok(Math.abs(frame.pocket * count + frame.opening * mouths - (TABLE.right - TABLE.left)) < 1e-6, `${count} slots still fill the row`);
-    assert.ok(frame.pocket > POCKET_WIDTH, `${count} slots receive the reclaimed drain width`);
-    assert.equal(drains.length, count + 1);
+    const span = TABLE.right - TABLE.left;
+    const legacyMouths = count + 1;
+    const natural = (span - count * POCKET_WIDTH) / legacyMouths;
+    const opening = Math.max(natural, DRAIN_MIN_OPENING) * DRAIN_WIDTH_SCALE;
+    const pocket = (span - 6 * opening) / count;
+    const inner = slots.slice(1, 4).map(slot => slot.x1 - slot.x0);
+    const outerLeft = slots[0].x1 - slots[0].x0;
+    const outerRight = slots[4].x1 - slots[4].x0;
+    assert.equal(frame.mouths, 4);
     assert.equal(frame.apron, 0);
+    assert.ok(Math.abs(frame.opening - opening) < 1e-6, '5-slot inner mouths keep half of the old six-mouth budget');
+    assert.ok(Math.abs(frame.pocket - pocket) < 1e-6, 'the three inner slots keep the old pocket width');
+    assert.ok(frame.pocket > POCKET_WIDTH, '5 slots still receive the reclaimed drain width');
+    assert.equal(drains.length, 4, '5 slots keep the four mouths between the pockets');
+    assert.equal(frame.regions[0].kind, 'slot');
+    assert.equal(frame.regions[1].kind, 'drain', 'the first striped mouth now sits between ×2 and ×3');
+    assert.equal(frame.regions.at(-1).kind, 'slot');
+    assert.equal(frame.regions.at(-2).kind, 'drain', 'the last striped mouth now sits between ×3 and ×2');
+    assert.equal(frame.regions[0].column, 0);
+    assert.equal(frame.regions.at(-1).column, 4);
+    assert.ok(Math.abs(outerLeft - (pocket + opening)) < 1e-6, 'the left ×2 grows outward by one mouth');
+    assert.ok(Math.abs(outerRight - (pocket + opening)) < 1e-6, 'the right ×2 grows outward by one mouth');
+    assert.ok(Math.abs(outerLeft - outerRight) < 1, `end slots ${outerLeft.toFixed(3)} and ${outerRight.toFixed(3)} match`);
+    assert.ok(Math.max(...inner) - Math.min(...inner) < 1e-6, 'the three inner slots match');
+    for (const width of inner) assert.ok(Math.abs(width - pocket) < 1e-6);
+    let legacyX = TABLE.left + opening + pocket;
+    drains.forEach((drain, index) => {
+      assert.ok(Math.abs(drain.x0 - legacyX) < 1e-6, `inner mouth ${index} stays on the old six-mouth row`);
+      assert.ok(Math.abs(drain.x1 - drain.x0 - opening) < 1e-6, `inner mouth ${index} keeps the old width`);
+      assert.ok(Math.abs(drain.x0 - slots[index].x1) < 1e-6);
+      assert.ok(Math.abs(drain.x1 - slots[index + 1].x0) < 1e-6);
+      legacyX = drain.x1 + pocket;
+    });
+    assert.equal(classifyBottom(TABLE.left + opening / 2, 5).kind, 'slot');
+    assert.equal(classifyBottom(TABLE.left + opening / 2, 5).column, 0, 'the freed left mouth scores the end slot');
+    assert.equal(classifyBottom(TABLE.right - opening / 2, 5).kind, 'slot');
+    assert.equal(classifyBottom(TABLE.right - opening / 2, 5).column, 4, 'the freed right mouth scores the end slot');
   }
   slots.forEach((slot, column) => {
     assert.equal(classifyBottom(pocketCenter(count, column), count).column, column);
@@ -115,7 +144,7 @@ for (const count of [5, 7, 9]) {
   }
   assert.equal(classifyBottom(347, count).column, (count - 1) / 2);
 }
-for (const count of [7, 9]) {
+for (const count of [5, 7, 9]) {
   const frame = slotFrame(count);
   const drop = (x, vx = 0, y = 770) => {
     const game = createTable({ slots: count, random: () => 0.25 });
@@ -145,6 +174,15 @@ for (const count of [7, 9]) {
     assert.equal(game.stats.timeouts, 0);
     assert.equal(game.stats.drains, 0, `${count}-slot ${name} scores the end slot`);
     assert.equal(game.stats.scored, 1);
+  }
+  if (count === 5) {
+    for (const [column, x] of [[0, TABLE.left + frame.opening / 2], [4, TABLE.right - frame.opening / 2]]) {
+      const game = drop(x);
+      assert.equal(game.stats.timeouts, 0, `5-slot former outer mouth ${column} settles`);
+      assert.equal(game.balls.length, 0);
+      assert.equal(game.stats.drains, 0, `5-slot former outer mouth ${column} scores`);
+      assert.equal(game.stats.scored, 1);
+    }
   }
   if (count === 7) {
     const slots7 = frame.regions.filter(region => region.kind === 'slot');
@@ -200,7 +238,17 @@ for (const count of [7, 9]) {
     assert.equal(sevenCenters.some(x => x > drain.x0 + 1 && x < drain.x1 - 1), false, 'an inner mouth stays open');
   }
   const five = createTable({ slots: 5, random: () => 0.2 });
-  assert.equal(five.dividers.length, 10, '5 slots keep two drain lips on every pocket');
+  const fiveFrame = slotFrame(5);
+  assert.equal(five.dividers.length, 8, '5 slots keep two lips on each of the four inner mouths');
+  const fiveCenters = five.dividers.map(body => body.position.x).sort((a, b) => a - b);
+  const lip = DRAIN_WALL;
+  for (const drain of fiveFrame.regions.filter(region => region.kind === 'drain')) {
+    assert.equal(fiveCenters.some(x => x > drain.x0 + 1 && x < drain.x1 - 1), false, 'an inner mouth stays open');
+    assert.ok(fiveCenters.some(x => Math.abs(x - (drain.x0 - lip / 2)) < 0.51), 'a lip sits inside the pocket left of the mouth');
+    assert.ok(fiveCenters.some(x => Math.abs(x - (drain.x1 + lip / 2)) < 0.51), 'a lip sits inside the pocket right of the mouth');
+  }
+  assert.ok(fiveCenters[0] > TABLE.left + lip, 'no lip is planted on the left cabinet wall');
+  assert.ok(fiveCenters.at(-1) < TABLE.right - lip, 'no lip is planted on the right cabinet wall');
 }
 assert.equal(classifyBottom(TABLE.left - 1, 5), null);
 assert.equal(classifyBottom(TABLE.right, 5), null);

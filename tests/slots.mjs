@@ -75,8 +75,14 @@ for (const [from, to] of [[5, 7], [7, 9], [5, 9]]) {
     old.regions.forEach((region, index) => {
       const during = mid.regions[1 + index];
       assert.equal(during.kind, region.kind, '5→7 keeps the old mouths while they move');
-      if (region.kind !== 'drain' || (index !== 0 && index !== old.regions.length - 1)) return;
-      assert.ok(during.x1 - during.x0 < region.x1 - region.x0 - 0.5, '5→7 shrinks an edge mouth');
+      if (region.kind !== 'drain') return;
+      const width = during.x1 - during.x0;
+      const drainIndex = old.regions.slice(0, index).filter(item => item.kind === 'drain').length;
+      const target = endDrains[drainIndex];
+      const before = region.x1 - region.x0;
+      const halfway = before + ((target.x1 - target.x0) - before) * mid.eased;
+      assert.ok(width > 28, '5→7 keeps an inner mouth open while it moves');
+      assert.ok(Math.abs(width - halfway) < 0.6, '5→7 eases an inner mouth toward 32px');
     });
   } else {
     const extra = (next.regions.length - old.regions.length) / 2;
@@ -119,7 +125,7 @@ for (const [from, to] of [[5, 7], [7, 9], [5, 9]]) {
     if (to === 9) assert.equal(open.length, 0, `${from}→${to} has closed the striped drains`);
     else {
       assert.equal(open.length, 4, '5→7 keeps four inner mouths open through the ease');
-      assert.ok(closed.length >= 2, '5→7 closes the two edge mouths');
+      assert.equal(closed.length, 0, '5→7 has no edge mouth left to close');
     }
   } else {
     almost.regions.forEach((region, index) => {

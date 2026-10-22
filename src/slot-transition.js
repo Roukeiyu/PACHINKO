@@ -140,9 +140,9 @@ export function blendSlotLayout(fromCount, toCount, t) {
   return { from: fromCount, to: toCount, eased, regions: morphRegions(fromCount, toCount, eased) };
 }
 
-// 5→7 grows one wide end pocket from each wall. The five slots already on
-// the row become the inner five. The two edge mouths shrink away, and the
-// four mouths between those inner slots stay open.
+// 5→7 grows one new end pocket from each wall. The five slots already on
+// the row become the inner five. The four mouths between those slots stay
+// open; the 5-row no longer has edge mouths to shrink.
 function morphToSeven(eased) {
   const fromFrame = slotFrame(5);
   const toFrame = slotFrame(7);

@@ -110,10 +110,10 @@ export const DRUM_ENLARGE_BALLS = 0;
 export const DRUM_CLOCK_BALLS = 0;
 
 // Bottom geometry. The slot row is TABLE.left … TABLE.right (616px).
-// Five slots still alternate drain, slot, …, drain. The mouth budget starts
-// from POCKET_WIDTH pockets and never begins below DRAIN_MIN_OPENING.
-// DRAIN_WIDTH_SCALE then halves every mouth and returns that width to the
-// scoring slots, so the row still fills the span.
+// Five slots keep the four mouths between the pockets. The two mouths that
+// used to sit against the side walls are gone: each end ×2 pocket grows
+// outward by that width and meets the cabinet wall. The inner mouth width
+// is still half of the old six-mouth budget, so those four gaps do not move.
 // Seven slots have no edge drain and no side slope. The two end pockets
 // absorb the mouth that used to sit beside them, so only the four inner
 // mouths stay open at 32px. A thin wall closes each end gap.
@@ -164,21 +164,27 @@ export function slotFrame(count) {
     regions.push({ kind: 'slot', column: 6, x0: x, x1: SLOT_ROW_RIGHT });
     return { count, opening, pocket, mouths, apron: 0, regions };
   }
-  const mouths = count + 1;
-  let opening = (span - count * POCKET_WIDTH) / mouths;
+  const legacyMouths = count + 1;
+  let opening = (span - count * POCKET_WIDTH) / legacyMouths;
   if (opening < DRAIN_MIN_OPENING) opening = DRAIN_MIN_OPENING;
   opening *= DRAIN_WIDTH_SCALE;
-  const pocket = (span - mouths * opening) / count;
+  const mouths = 4;
+  const pocket = (span - (mouths + 2) * opening) / count;
   const regions = [];
   let x = SLOT_ROW_LEFT;
-  for (let column = 0; column < count; column++) {
+  regions.push({ kind: 'slot', column: 0, x0: x, x1: x + pocket + opening });
+  x += pocket + opening;
+  for (let column = 1; column <= 3; column++) {
     const drainEnd = x + opening;
-    regions.push({ kind: 'drain', index: column, x0: x, x1: drainEnd });
-    const pocketEnd = drainEnd + pocket;
-    regions.push({ kind: 'slot', column, x0: drainEnd, x1: pocketEnd });
+    regions.push({ kind: 'drain', index: column - 1, x0: x, x1: drainEnd });
+    x = drainEnd;
+    const pocketEnd = x + pocket;
+    regions.push({ kind: 'slot', column, x0: x, x1: pocketEnd });
     x = pocketEnd;
   }
-  regions.push({ kind: 'drain', index: count, x0: x, x1: SLOT_ROW_RIGHT });
+  regions.push({ kind: 'drain', index: 3, x0: x, x1: x + opening });
+  x += opening;
+  regions.push({ kind: 'slot', column: 4, x0: x, x1: SLOT_ROW_RIGHT });
   return { count, opening, pocket, mouths, apron: 0, regions };
 }
 
