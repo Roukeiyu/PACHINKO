@@ -79,14 +79,15 @@ function morphRegions(fromCount, toCount, eased) {
   return regions;
 }
 
-// 7→9 and 5→9 do not keep the old drain/slot alternation. The carried slots
-// ease into the middle of the equal nine, the striped mouths shrink to the
-// shared edges, and the new end slots grow out of the side walls.
+// 7→9 and 5→9 carry the slots already on the row into the middle. New end
+// slots grow from the walls. A mouth that lands on a 9-slot leak eases to
+// that opening; a mouth that lands on a shared edge shrinks to a wall.
 function morphToNine(fromCount, eased) {
   const fromFrame = slotFrame(fromCount);
   const toFrame = slotFrame(9);
   const fromMult = slotMultipliers(fromCount);
   const toMult = slotMultipliers(9);
+  const toSlots = toFrame.regions.filter(region => region.kind === 'slot');
   const side = (9 - fromCount) / 2;
   const regions = [];
   const place = (fromX0, fromX1, toX0, toX1, fields) => {
@@ -103,27 +104,42 @@ function morphToNine(fromCount, eased) {
     if (fromColumn !== null) described.luckyFrom = isLucky(fromCount, fromColumn, fromMultiplier);
     return described;
   };
-  for (let i = 0; i < side; i++) {
-    const target = toFrame.regions[i];
-    place(SLOT_ROW_LEFT, SLOT_ROW_LEFT, target.x0, target.x1, slotFields(i, true, null));
+  const gapTarget = (leftColumn, rightColumn) => {
+    const left = toSlots[leftColumn];
+    const right = toSlots[rightColumn];
+    const drain = toFrame.regions.find(region => region.kind === 'drain' && Math.abs(region.x0 - left.x1) < 1e-4);
+    return drain ? [drain.x0, drain.x1] : [left.x1, right.x0];
+  };
+  for (let column = 0; column < side; column++) {
+    const target = toSlots[column];
+    place(SLOT_ROW_LEFT, SLOT_ROW_LEFT, target.x0, target.x1, slotFields(column, true, null));
   }
-  let slotSeen = 0;
+  const lead = toSlots[side];
+  const leadDrain = toFrame.regions.find(region => region.kind === 'drain' && Math.abs(region.x1 - lead.x0) < 1e-4);
+  if (leadDrain) place(SLOT_ROW_LEFT, SLOT_ROW_LEFT, leadDrain.x0, leadDrain.x1, { kind: 'drain', fresh: true });
+  let carried = 0;
+  let prevWasDrain = false;
   for (const region of fromFrame.regions) {
     if (region.kind === 'slot') {
-      const column = side + slotSeen;
-      const target = toFrame.regions[column];
-      place(region.x0, region.x1, target.x0, target.x1, slotFields(column, false, region.column));
-      slotSeen += 1;
+      if (carried > 0 && !prevWasDrain) {
+        const [toX0, toX1] = gapTarget(side + carried - 1, side + carried);
+        place(region.x0, region.x0, toX0, toX1, { kind: 'drain', fresh: true });
+      }
+      const target = toSlots[side + carried];
+      place(region.x0, region.x1, target.x0, target.x1, slotFields(target.column, false, region.column));
+      carried += 1;
+      prevWasDrain = false;
       continue;
     }
-    const boundary = slotSeen === 0
-      ? toFrame.regions[side].x0
-      : toFrame.regions[side + slotSeen - 1].x1;
-    place(region.x0, region.x1, boundary, boundary, { kind: 'drain', fresh: false });
+    const [toX0, toX1] = gapTarget(side + carried - 1, side + carried);
+    place(region.x0, region.x1, toX0, toX1, { kind: 'drain', fresh: false });
+    prevWasDrain = true;
   }
-  for (let i = 0; i < side; i++) {
-    const column = 9 - side + i;
-    const target = toFrame.regions[column];
+  const last = toSlots[side + fromCount - 1];
+  const tailDrain = toFrame.regions.find(region => region.kind === 'drain' && Math.abs(region.x0 - last.x1) < 1e-4);
+  if (tailDrain) place(SLOT_ROW_RIGHT, SLOT_ROW_RIGHT, tailDrain.x0, tailDrain.x1, { kind: 'drain', fresh: true });
+  for (let column = side + fromCount; column < 9; column++) {
+    const target = toSlots[column];
     place(SLOT_ROW_RIGHT, SLOT_ROW_RIGHT, target.x0, target.x1, slotFields(column, true, null));
   }
   return regions;

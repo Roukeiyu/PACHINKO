@@ -228,24 +228,38 @@ function create3DRenderer(canvas) {
     }
     for (const outlet of game.collector.outlets) layoutBox(outlet.x, outlet.y, 52, 17, 7, purpleSide, 0, 6);
     // Physics walls are already on the new row. While the picture eases, draw
-    // the lips on the easing mouths instead of the settled bodies.
+    // the lips on the easing mouths instead of the settled bodies. A closed
+    // gap is a plain separator and uses the cabinet wall color. Only an open
+    // 漏 mouth keeps the dark lip.
+    const closedGap = (left, right) => {
+      const gap = right.x0 - left.x1;
+      return gap <= DRAIN_WALL + 0.75 ? (left.x1 + right.x0) / 2 : null;
+    };
+    const dividerSide = x => {
+      const pictured = frame.regions.filter(region => region.kind === 'slot' && region.x1 - region.x0 >= 8);
+      for (let i = 0; i < pictured.length - 1; i++) {
+        const mid = closedGap(pictured[i], pictured[i + 1]);
+        if (mid != null && Math.abs(x - mid) <= DRAIN_WALL) return wallSide;
+      }
+      return hazardSide;
+    };
     if (animating) {
       const pictured = frame.regions.filter(region => region.kind === 'slot' && region.x1 - region.x0 >= 16);
-      const lipBox = x => layoutBox(x, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, hazardSide, 1, 1);
+      const lipBox = (x, side) => layoutBox(x, TABLE.slotTop + 48, DRAIN_WALL, 94, 9, side, 1, 1);
       for (let i = 0; i < pictured.length; i++) {
         const region = pictured[i];
         const prev = pictured[i - 1];
         const next = pictured[i + 1];
         const gapBefore = prev ? region.x0 - prev.x1 : Infinity;
         const gapAfter = next ? next.x0 - region.x1 : Infinity;
-        if (prev && gapBefore > DRAIN_WALL + 0.75) lipBox(region.x0 + DRAIN_WALL / 2);
+        if (prev && gapBefore > DRAIN_WALL + 0.75) lipBox(region.x0 + DRAIN_WALL / 2, hazardSide);
         if (!next) {
           // The cabinet wall is the outer edge on every row.
-        } else if (gapAfter > DRAIN_WALL + 0.75) lipBox(region.x1 - DRAIN_WALL / 2);
-        else lipBox((region.x1 + next.x0) / 2);
+        } else if (gapAfter > DRAIN_WALL + 0.75) lipBox(region.x1 - DRAIN_WALL / 2, hazardSide);
+        else lipBox((region.x1 + next.x0) / 2, wallSide);
       }
     } else {
-      for (const b of game.dividers) bodyModel(b, hazardSide, 9);
+      for (const b of game.dividers) bodyModel(b, dividerSide(b.position.x), 9);
     }
   }
   const BALL_CAPACITY = 512;

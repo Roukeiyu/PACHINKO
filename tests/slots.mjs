@@ -48,17 +48,21 @@ for (const [from, to] of [[5, 7], [7, 9], [5, 9]]) {
   assert.ok(start.regions.at(-1).x1 - start.regions.at(-1).x0 < 1e-6, 'the new right piece starts shut');
   assert.ok(mid.regions[0].x1 - mid.regions[0].x0 > 1, 'the new left piece has grown by halfway');
   if (to === 9) {
-    assert.equal(next.regions.filter(region => region.kind === 'drain').length, 0, `${from}→${to} removes the filler mouths`);
-    const widths = next.regions.map(region => region.x1 - region.x0);
-    assert.ok(Math.max(...widths) - Math.min(...widths) < 1, `${from}→${to} ends on equal pockets`);
-    const side = (to - from) / 2;
-    old.regions.forEach((region, index) => {
-      const during = mid.regions[side + index];
-      assert.equal(during.kind, region.kind, `${from}→${to} keeps the old mouths while they move`);
-      if (region.kind !== 'drain') return;
-      const before = region.x1 - region.x0;
-      assert.ok(during.x1 - during.x0 < before - 0.5, `${from}→${to} shrinks a striped drain`);
+    const endSlots = next.regions.filter(region => region.kind === 'slot');
+    const endDrains = next.regions.filter(region => region.kind === 'drain');
+    const slotWidths = endSlots.map(slot => slot.x1 - slot.x0);
+    const drainWidths = endDrains.map(drain => drain.x1 - drain.x0);
+    const leakAfter = [1, 3, 4, 6];
+    assert.equal(endDrains.length, 4, `${from}→${to} keeps four leak mouths`);
+    assert.ok(Math.max(...slotWidths) - Math.min(...slotWidths) < 1, `${from}→${to} ends on equal pockets`);
+    assert.ok(Math.max(...drainWidths) - Math.min(...drainWidths) < 1, `${from}→${to} ends on equal leaks`);
+    endDrains.forEach((drain, index) => {
+      assert.ok(Math.abs(drain.x0 - endSlots[leakAfter[index]].x1) < 1e-6, `leak ${index} follows slot ${leakAfter[index]}`);
+      assert.ok(Math.abs(drain.x1 - endSlots[leakAfter[index] + 1].x0) < 1e-6);
     });
+    for (const pair of [[0, 1], [2, 3], [5, 6], [7, 8]]) {
+      assert.ok(Math.abs(endSlots[pair[0]].x1 - endSlots[pair[1]].x0) < 1e-6, `slots ${pair.join('|')} share a plain wall`);
+    }
   } else if (to === 7) {
     const endSlots = next.regions.filter(region => region.kind === 'slot');
     const endDrains = next.regions.filter(region => region.kind === 'drain');
@@ -67,10 +71,8 @@ for (const [from, to] of [[5, 7], [7, 9], [5, 9]]) {
     assert.equal(next.regions[1].kind, 'slot', 'the left outer mouth closes');
     assert.equal(next.regions.at(-1).kind, 'slot');
     assert.equal(next.regions.at(-2).kind, 'slot', 'the right outer mouth closes');
-    const outer = endSlots[0].x1 - endSlots[0].x0;
-    const inner = endSlots[1].x1 - endSlots[1].x0;
-    assert.ok(Math.abs(outer - (endSlots[6].x1 - endSlots[6].x0)) < 1, 'both end slots take the same freed width');
-    assert.ok(outer > inner + 30, 'each end slot absorbs the mouth beside it');
+    const slotWidths = endSlots.map(slot => slot.x1 - slot.x0);
+    assert.ok(Math.max(...slotWidths) - Math.min(...slotWidths) < 1, '5→7 ends on equal scoring slots');
     for (const drain of endDrains) assert.ok(Math.abs(drain.x1 - drain.x0 - next.opening) < 0.6);
     old.regions.forEach((region, index) => {
       const during = mid.regions[1 + index];
@@ -122,7 +124,7 @@ for (const [from, to] of [[5, 7], [7, 9], [5, 9]]) {
     });
     const open = almost.regions.filter(region => region.kind === 'drain' && region.x1 - region.x0 >= 1);
     const closed = almost.regions.filter(region => region.kind === 'drain' && region.x1 - region.x0 < 1);
-    if (to === 9) assert.equal(open.length, 0, `${from}→${to} has closed the striped drains`);
+    if (to === 9) assert.equal(open.length, 4, `${from}→${to} keeps four leak mouths open through the ease`);
     else {
       assert.equal(open.length, 4, '5→7 keeps four inner mouths open through the ease');
       assert.equal(closed.length, 0, '5→7 has no edge mouth left to close');

@@ -158,8 +158,8 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
         if (lucky > 0.04) { ctx.save(); ctx.globalAlpha = Math.min(1, lucky); text('LUCKY', mid, TABLE.slotTop + 73, 8, '#aa8243'); ctx.restore(); }
       }
     }
-    // Pockets that meet get one solid lip in the card inset. A wide mouth
-    // keeps the diagonal 漏 hatch instead, until that mouth has closed.
+    // Pockets that meet share one board-colored wall. A wide mouth keeps the
+    // dark 漏 hatch instead, so a plain separator never uses the leak color.
     {
       const pictured = layout.regions.filter(region => region.kind === 'slot' && region.x1 - region.x0 >= 8);
       for (let i = 0; i < pictured.length - 1; i++) {
@@ -167,7 +167,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
         const gap = right.x0 - left.x1;
         if (gap > DRAIN_WALL + 0.75) continue;
         const x = (left.x1 + right.x0) / 2;
-        box(x - DRAIN_WALL / 2, TABLE.slotTop, DRAIN_WALL, 90, 1, '#6e2c32');
+        box(x - DRAIN_WALL / 2, TABLE.slotTop, DRAIN_WALL, 90, 1, '#aebf99', '#dce6ce');
       }
     }
     for (const hole of game.holes) {

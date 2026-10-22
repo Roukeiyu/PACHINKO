@@ -971,7 +971,7 @@ function updateCollections() {
 }
 function updateSlotTier() {
   const tier = $('#slot-tier');
-  if (tier) tier.textContent = `当前 ${state.slots} 槽。本局 ${SLOT_UNLOCK_7.toLocaleString()} 分立刻升至 7 槽，${SLOT_UNLOCK_9.toLocaleString()} 分立刻升至 9 槽，台上有球也切换。底部大约 ${(SLOT_TRANSITION_MS / 1000).toFixed(1)} 秒收窄旧槽、从两侧长出新槽，颜色和倍率一起缓动。5 槽、7 槽和 9 槽最外侧贴着侧墙，没有漏槽也没有斜面。5 槽最外侧两格向两侧墙加宽，只去掉贴墙的两条斜纹漏口，中间四条漏口还在。7 槽最外侧两格向内加宽，只去掉它们旁边的两条斜纹漏口，中间四条漏口还在。9 槽九格等宽铺满整行，中间只留薄隔板，不再有斜纹漏口。再来一局回到 5 槽；刷新重新开始。GM 保持分数模式才会接着这一局。`;
+  if (tier) tier.textContent = `当前 ${state.slots} 槽。本局 ${SLOT_UNLOCK_7.toLocaleString()} 分立刻升至 7 槽，${SLOT_UNLOCK_9.toLocaleString()} 分立刻升至 9 槽，台上有球也切换。底部大约 ${(SLOT_TRANSITION_MS / 1000).toFixed(1)} 秒收窄旧槽、从两侧长出新槽，颜色和倍率一起缓动。5 槽、7 槽和 9 槽最外侧贴着侧墙，没有贴墙的漏槽。5 槽五格等宽，只去掉贴墙的两条斜纹漏口，中间四条漏口还在并且一样宽。7 槽七格等宽，只去掉最外侧两格旁边的两条斜纹漏口，中间四条漏口还在并且一样宽。9 槽九格等宽，四条斜纹漏口留在 ×3 与 ×5、×10 与 ×20、×20 与 ×10、×5 与 ×3 之间，一样宽；其余相邻计分槽只留浅色隔板。再来一局回到 5 槽；刷新重新开始。GM 保持分数模式才会接着这一局。`;
 }
 function updateLayout() {
   updateCollections(); updateSlotTier(); updateTimeFlow(performance.now(), true);
