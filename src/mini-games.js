@@ -32,10 +32,15 @@ export const PAIR_POINT = 40;
 export const PAIR_TARGET = 32;
 export const PAIR_DURATION = 30000;
 export const PAIR_CLEAR_BONUS = 200;
+// Each 打地鼠 batch lasts this long, or until every mole in it is hit.
+// The board then flips before the next batch is dealt. The round clock pauses
+// for the flip, so the animation does not shorten the 30 seconds or the next 3.
+export const MOLE_WAVE_MS = 3000;
+export const MOLE_FLIP_MS = 320;
 export const MINI_GAMES = Object.freeze({
   pairs: { title: '对对碰', rule: `64 张牌排成 8×8，16 种图案，每种 4 张，同花色任意两张都能配对。配完全部 ${PAIR_TARGET} 对，或玩满 ${PAIR_DURATION / 1000} 秒，先到先结算。每对 ${PAIR_POINT} 分。连续配对会累加连击，点错则连击重置。${PAIR_DURATION / 1000} 秒内配完，额外 +${PAIR_CLEAR_BONUS}。只翻开一张，或翻错，都不算有效操作。整局没有配成一对，秘密洞不发小球。`, columns: 8, rows: 8 },
   blocks: { title: '消消乐', rule: `点击上下左右相连的同色方块，至少 3 块才能消除。每块 ${BLOCK_POINT} 分。只有自己点掉的块计入 ${BLOCK_CLEAR_TARGET} 块；掉落连锁照样加基础分，但不计入这 ${BLOCK_CLEAR_TARGET} 块，也不会因此结束。开局同色相连不超过 ${BLOCK_GROUP_LIMIT} 块。点掉的块累计到 ${BLOCK_CLEAR_TARGET}，或玩满 ${BLOCK_DURATION / 1000} 秒，先到先结算。一次点击超过剩余块数时，只把点掉的块算到 ${BLOCK_CLEAR_TARGET}。${COMBO_WINDOW_MS / 1000} 秒内再点出消除，连击 +1；超过 ${COMBO_WINDOW_MS / 1000} 秒，或点了消不掉的地方，连击归零。连击和倍率没有上限。掉落连锁不加连击。结束时按本局最高连击一次性乘算。点了消不掉的地方不算有效操作。整局没有一次消除，秘密洞不发小球。`, columns: 10, rows: 10 },
-  moles: { title: '打地鼠', rule: '点击地鼠，白菜留着！每只 25 分，共 10 轮、40 只；每轮最多 3 秒，打完提前换轮。不是地鼠的格子都是白菜。连续打中会累加连击；打到白菜，或这一轮有地鼠漏掉，连击重置。只点白菜，或重复点已经打过的地鼠，都不算有效操作。整局没有打中，秘密洞不发小球。', columns: 4, rows: 4 },
+  moles: { title: '打地鼠', rule: '点击地鼠，白菜留着！每只 25 分，共 10 轮、40 只；每轮最多 3 秒，打完或到点后洞口一起翻面，翻完才换轮。不是地鼠的格子都是白菜。连续打中会累加连击；打到白菜，或这一轮有地鼠漏掉，连击重置。只点白菜、重复点已经打过的地鼠，或翻面时点击，都不算有效操作。整局没有打中，秘密洞不发小球。', columns: 4, rows: 4 },
 });
 export const BLOCK_COLORS = Object.freeze(['红','蓝','黄','绿']);
 export const BLOCK_SYMBOLS = Object.freeze(['♥','●','✦','◆']);
@@ -94,7 +99,7 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
   let nextId = 0, fxId = 0;
   const tile = (extra = {}) => ({ id: nextId++, color: integer(random,0,3), fall: 0, spawned: false, ...extra });
   const roundMs = kind === 'pairs' ? PAIR_DURATION : kind === 'blocks' ? BLOCK_DURATION : MINI_DURATION;
-  const state = { kind, status: 'playing', score: 0, played: false, combo: 0, multiplier: 1, bestCombo: 0, bestMultiplier: 1, baseScore: 0, lastClearAt: null, inputLocked: false, payoutSettled: false, clearBonus: 0, startedAt: now, deadline: now + roundMs, revision: 0, selected: null, removed: 0, hit: 0, wave: 0, waveUntil: 0, board: [], molePlan: [], message: '', fx: null, motion: [], motionSeq: 0 };
+  const state = { kind, status: 'playing', score: 0, played: false, combo: 0, multiplier: 1, bestCombo: 0, bestMultiplier: 1, baseScore: 0, lastClearAt: null, inputLocked: false, payoutSettled: false, clearBonus: 0, startedAt: now, deadline: now + roundMs, revision: 0, selected: null, removed: 0, hit: 0, wave: 0, waveUntil: 0, flipFrom: 0, flipUntil: 0, board: [], molePlan: [], message: '', fx: null, motion: [], motionSeq: 0 };
   function ensurePlayable() {
     if (state.board.some((_,i) => connectedBlocks(state.board,i).length >= 3)) return;
     const color = integer(random,0,3);
@@ -111,12 +116,23 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
   }
   function finish(status) { if (state.status !== 'playing') return; settleBlocks(); state.status = status; state.selected = null; state.revision++; }
   function missMoles() { return state.board.some(cell => cell?.type === 'mole' && !cell.hit); }
-  function nextWave(at) {
+  // Deal the next batch. The opening deal calls this directly. Later deals run
+  // only after the flip that armFlip scheduled has reached flipUntil.
+  function spawnWave(at) {
     if (missMoles()) { state.combo = 0; state.multiplier = 1; }
+    state.flipFrom = 0; state.flipUntil = 0;
     if (state.wave === 10) { finish('complete'); return; }
     const count = state.molePlan[state.wave++];
     state.board = shuffle([...Array(count).fill('mole'), ...Array(16 - count).fill('cabbage')], random).map(type => ({ id: nextId++, type, hit: false }));
-    state.waveUntil = at + 3000; state.revision++;
+    state.waveUntil = at + MOLE_WAVE_MS; state.revision++;
+  }
+  function armFlip(at) {
+    if (state.flipUntil) return;
+    state.flipFrom = at;
+    state.flipUntil = at + MOLE_FLIP_MS;
+    state.deadline += MOLE_FLIP_MS;
+    state.message = '洞口翻面，下一轮马上出来';
+    state.revision++;
   }
   if (kind === 'pairs') state.board = shuffle(PAIR_SUITS.flatMap((icon, suit) => Array.from({ length: PAIR_COPIES }, () => ({ id: nextId++, pair: suit, icon: icon.id, name: icon.name }))), random);
   function largestGroup() {
@@ -159,7 +175,7 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
       const rest=9-round, count=integer(random,Math.max(2,remaining-rest*6),Math.min(6,remaining-rest*2));
       state.molePlan.push(count);remaining-=count;
     }
-    nextWave(now);
+    spawnWave(now);
   }
   function expireCombo(at) {
     if (state.inputLocked || kind !== 'blocks' || state.combo <= 0 || state.lastClearAt == null) return;
@@ -175,7 +191,16 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
   function tick(at) {
     if (state.status !== 'playing') return;
     expireCombo(at);
-    if (kind === 'moles' && state.status === 'playing' && at >= state.waveUntil) nextWave(state.waveUntil);
+    if (kind === 'moles' && state.status === 'playing') {
+      if (state.flipUntil) {
+        if (at >= state.flipUntil) spawnWave(state.flipUntil);
+      } else if (at >= state.deadline && state.wave < 10) {
+        finish('timeout');
+      } else if (at >= state.waveUntil) {
+        armFlip(state.waveUntil);
+        if (at >= state.flipUntil) spawnWave(state.flipUntil);
+      }
+    }
     if (state.status === 'playing' && at >= state.deadline) finish('timeout');
   }
   function breakCombo(message) {
@@ -227,6 +252,8 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
   function select(index, at) {
     tick(at);
     if (state.status !== 'playing' || !Number.isInteger(index) || !state.board[index]) return 0;
+    // A flip is a reset, not a swing. Ignore it so it cannot miss, score, or count as play.
+    if (kind === 'moles' && state.flipUntil) return 0;
     let points = 0;
     if (kind === 'pairs') {
       if (state.selected === index) state.selected = null;
@@ -301,7 +328,7 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
       state.message = `全部配对！额外 +${PAIR_CLEAR_BONUS}`;
       finish('complete');
     }
-    if (kind === 'moles' && state.board.every(c=>c.type !== 'mole'||c.hit)) nextWave(at);
+    if (kind === 'moles' && !state.flipUntil && state.board.every(c=>c.type !== 'mole'||c.hit)) armFlip(at);
     return points;
   }
   return { state, tick, select, setInputLock, remaining: at => Math.max(0, Math.min(roundMs, state.deadline - at)), snapshot: () => structuredClone(state) };

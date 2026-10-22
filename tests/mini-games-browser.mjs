@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { connectedBlocks, BLOCK_CLEAR_TARGET, BLOCK_DURATION, MINI_DURATION, comboPoints, formatComboMultiplier, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS, AFK_BALL_TEXT } from '../src/mini-games.js';
+import { connectedBlocks, BLOCK_CLEAR_TARGET, BLOCK_DURATION, MINI_DURATION, comboPoints, formatComboMultiplier, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS, AFK_BALL_TEXT, MOLE_WAVE_MS, MOLE_FLIP_MS } from '../src/mini-games.js';
 import { SECRET_BALLS } from '../src/round.js';
 const executablePath=process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined);
 const browser=await chromium.launch({executablePath,args:process.platform==='linux'?['--no-sandbox']:[]});
@@ -139,13 +139,13 @@ try {
   await cell(moles.board.findIndex(c=>c.type==='cabbage'));
   assert.equal((await mini()).score,beforeCabbage);assert.equal((await mini()).combo,0);
   for(const index of moles.board.flatMap((c,i)=>c.type==='mole'?[i]:[]))await cell(index);
-  await page.clock.runFor(50);
+  await page.clock.runFor(MOLE_FLIP_MS+40);
  }
  assert.equal((await mini()).status,'complete');assert.equal((await mini()).hit,40);assert.equal((await mini()).played,true);assert.equal(await score(),initial+(await mini()).score);await back();
  // A timed wave advances even if the player does not hit any mole.
  await start('moles');
- for(let wave=2;wave<=10;wave++){await page.clock.fastForward(3000);assert.equal((await mini()).wave,wave,'each visible slice advances one wave');}
- await page.clock.fastForward(3000);assert.equal((await mini()).status,'complete');assert.equal((await mini()).score,0);assert.equal((await mini()).played,false);
+ for(let wave=2;wave<=10;wave++){await page.clock.fastForward(MOLE_WAVE_MS+MOLE_FLIP_MS);assert.equal((await mini()).wave,wave,'each visible slice advances one wave');}
+ await page.clock.fastForward(MOLE_WAVE_MS+MOLE_FLIP_MS);assert.equal((await mini()).status,'complete');assert.equal((await mini()).score,0);assert.equal((await mini()).played,false);
  assert.equal(await page.locator('#mini-result-balls').textContent(),AFK_BALL_TEXT);
  assert.equal(await page.locator('#mini-return').textContent(),'返回设置');await back();
  await start('moles');const pausedWave=(await mini()).wave;
@@ -154,7 +154,7 @@ try {
  assert.equal((await mini()).wave,pausedWave,'background time does not skip mole waves');
  assert.equal((await mini()).status,'playing');
  await page.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});
- for(let i=0;i<12&&(await mini()).status==='playing';i++)await page.clock.fastForward(3000);
+ for(let i=0;i<14&&(await mini()).status==='playing';i++)await page.clock.fastForward(MOLE_WAVE_MS+MOLE_FLIP_MS);
  assert.equal((await mini()).status,'complete');await back();
  for(let i=0;i<3;i++){await page.locator('#gm-dot').click();await page.clock.runFor(200);}assert.equal((await state()).gm,false);assert.equal(await page.locator('#gm-tools').isVisible(),false);
  assert.equal(await page.locator('#gm-dot').getAttribute('aria-pressed'),'false');
@@ -206,7 +206,7 @@ try {
   }else{
    const mole=board.findIndex(cell=>cell.type==='mole'&&!cell.hit);
    if(mole>=0) await cell(mole);
-   else await page.clock.fastForward(3000);
+   else await page.clock.fastForward((await mini()).flipUntil?MOLE_FLIP_MS+40:MOLE_WAVE_MS+MOLE_FLIP_MS);
   }
  }
  const mid=await mini();
@@ -216,7 +216,7 @@ try {
  assert.equal(await page.locator('#mini-score').textContent(),await page.evaluate(n=>n.toLocaleString(),raw));
  const alreadyPaid=mid.status!=='playing';
  assert.equal(await score(),holeBase+3000+(alreadyPaid?raw*2:0),'mini-game points are credited when the round ends');
- if(!alreadyPaid) await page.clock.fastForward(Math.max(PAIR_DURATION,BLOCK_DURATION,MINI_DURATION)+2000);
+ if(!alreadyPaid) await page.clock.fastForward(Math.max(PAIR_DURATION,BLOCK_DURATION,MINI_DURATION)+MOLE_FLIP_MS*10+2000);
  const done=await mini();
  assert.notEqual(done.status,'playing');
  assert.ok(done.score>=raw);

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { existsSync } from 'node:fs';
 import { START_BALLS, BURST_COST, SECRET_BALLS } from '../src/round.js';
-import { PAIR_DURATION, BLOCK_DURATION, MINI_DURATION, AFK_BALL_TEXT, connectedBlocks } from '../src/mini-games.js';
+import { PAIR_DURATION, BLOCK_DURATION, MINI_DURATION, AFK_BALL_TEXT, connectedBlocks, MOLE_FLIP_MS } from '../src/mini-games.js';
 import { BURST_READY_AT } from '../src/charge.js';
 
 const executablePath = process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
@@ -115,7 +115,7 @@ try {
   assert.equal(await page.evaluate(() => window.__ponpon.slots), 5, '2500 has not unlocked 7 slots');
   assert.equal(await page.evaluate(() => window.__ponpon.keepProgress), true);
   const beforeSecret = await page.evaluate(() => window.__ponpon.available);
-  const miniWait = Math.max(PAIR_DURATION, BLOCK_DURATION, MINI_DURATION) + 2000;
+  const miniWait = Math.max(PAIR_DURATION, BLOCK_DURATION, MINI_DURATION) + MOLE_FLIP_MS * 10 + 2000;
   async function missOnce() {
     const board = await page.evaluate(() => window.__ponpon.miniGame);
     if (board.kind === 'moles') {

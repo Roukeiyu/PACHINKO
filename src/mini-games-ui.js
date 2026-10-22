@@ -1,4 +1,4 @@
-import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_COLORS, BLOCK_SYMBOLS, MINI_HIT_SHAKE, MINI_HIT_MS, comboMultiplier, formatComboMultiplier, PAIR_DURATION, PAIR_TARGET, PAIR_CLEAR_BONUS, AFK_BALL_TEXT, miniGameIdle, miniIntro } from './mini-games.js';
+import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_COLORS, BLOCK_SYMBOLS, MINI_HIT_SHAKE, MINI_HIT_MS, comboMultiplier, formatComboMultiplier, PAIR_DURATION, PAIR_TARGET, PAIR_CLEAR_BONUS, AFK_BALL_TEXT, miniGameIdle, miniIntro, MOLE_FLIP_MS } from './mini-games.js';
 import { PAIR_SVG } from './pair-icons.js';
 import { secretPayout } from './secret-wave.js';
 import { SECRET_BALLS } from './round.js';
@@ -6,7 +6,7 @@ import { SECRET_BALLS } from './round.js';
 export const miniGameMarkup = `<dialog id="mini-game" class="mini-dialog" aria-labelledby="mini-title" aria-describedby="mini-rule" data-phase="intro"><div class="mini-inner"><div class="mini-heading"><span class="mini-eyebrow">秘密小游戏</span><span id="mini-round" hidden></span></div><h2 id="mini-title"></h2><div id="mini-intro"><p id="mini-rule"></p><dl class="mini-facts"><div><dt>时间</dt><dd id="mini-intro-time"></dd></div><div><dt>目标</dt><dd id="mini-intro-goal"></dd></div><div><dt>奖励</dt><dd id="mini-intro-reward"></dd></div></dl><button type="button" id="mini-start">开始</button></div><div id="mini-play" hidden><div class="mini-hud"><span>剩余 <strong id="mini-time">30</strong> 秒</span><span id="mini-combo" class="mini-combo" aria-live="polite"></span><span>本局 <strong id="mini-score">0</strong> 分<span id="mini-bonus" class="mini-bonus">×2</span></span></div><progress id="mini-progress" max="${MINI_DURATION}" value="${MINI_DURATION}" aria-label="小游戏剩余时间"></progress><div id="mini-stage"><div id="mini-fx" class="mini-fx" aria-hidden="true"></div><div id="mini-grid" class="mini-grid"></div></div><p id="mini-message" role="status"></p><div id="mini-result" hidden><div class="mini-result-mark">✦</div><h3 id="mini-result-title"></h3><p id="mini-result-math" class="mini-result-math" hidden></p><p id="mini-result-score"></p><p id="mini-result-balls" class="mini-result-balls" hidden></p><button class="done-button" id="mini-return">返回球台</button></div></div></div></dialog>`;
 export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {}, vibrate = () => {} }) {
   const $ = selector => root.querySelector(selector);
-  let game=null, source=null, scoreMultiplier=1, revision=-1, fxId=0, settled=false, buttons=[], ballGrant=SECRET_BALLS, busy=false, motionSeen=0, motionToken=0, pending=null, confirmKey=false;
+  let game=null, source=null, scoreMultiplier=1, revision=-1, fxId=0, settled=false, buttons=[], ballGrant=SECRET_BALLS, busy=false, motionSeen=0, motionToken=0, pending=null, confirmKey=false, flipping=false, flipToken=0;
   const calm = () => document.documentElement.classList.contains('calm');
   const gentle = () => calm() || matchMedia('(prefers-reduced-motion: reduce)').matches;
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -63,6 +63,49 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     root.animate([{transform:'translate(0,0)'},{transform:`translate(${distance}px,${distance*-.4}px)`},{transform:`translate(${-distance}px,0)`},{transform:'translate(0,0)'}],{duration:MINI_HIT_MS,easing:'ease-out'});
     try { vibrate(Math.min(18, 10+tier)); } catch { /* the page can refuse vibration */ }
     setTimeout(()=>{ layer.replaceChildren(); buttons.forEach(button=>button.classList.remove('mini-squash','mini-fly','mini-burst')); }, 280);
+  }
+  function endFlip() {
+    flipping = false;
+    busy = false;
+    root.removeAttribute('data-busy');
+    $('#mini-grid').classList.remove('is-flipping');
+    buttons.forEach(button => {
+      button.getAnimations().forEach(anim => anim.cancel());
+      button.classList.remove('mini-squash');
+      button.style.transform = '';
+      button.style.opacity = '';
+    });
+  }
+  // Every hole turns over together, on the game clock. Reduced motion fades.
+  function playFlip(s) {
+    if (flipToken === s.flipUntil) return;
+    flipToken = s.flipUntil;
+    flipping = true;
+    busy = true;
+    root.dataset.busy = '1';
+    $('#mini-grid').classList.add('is-flipping');
+    buttons.forEach(button => {
+      button.disabled = true;
+      button.classList.remove('mini-squash');
+      button.getAnimations().forEach(anim => anim.cancel());
+    });
+  }
+  function poseFlip(s, now) {
+    const soft = gentle();
+    const duration = soft ? 180 : 260;
+    buttons.forEach((button, index) => {
+      const delay = soft ? 0 : index * 4;
+      const elapsed = Math.min(MOLE_FLIP_MS, Math.max(0, now - s.flipFrom)) - delay;
+      const local = Math.min(1, Math.max(0, elapsed / duration));
+      if (soft) {
+        button.style.transform = '';
+        button.style.opacity = String(1 - Math.sin(local * Math.PI) * 0.85);
+      } else {
+        const angle = local <= 0.5 ? local * 180 : (1 - local) * 180;
+        button.style.opacity = '';
+        button.style.transform = `rotateY(${angle.toFixed(2)}deg)`;
+      }
+    });
   }
   function rowStride() {
     if (buttons.length < 11) return 0;
@@ -240,7 +283,9 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
       revision = s.revision;
       $('#mini-message').textContent = s.message;
       const falling = s.kind === 'blocks' && s.motionSeq !== motionSeen && s.motion?.length;
+      const clearing = s.kind === 'moles' && s.flipUntil > 0;
       if (falling) { motionSeen = s.motionSeq; playMotion(s.motion); }
+      else if (clearing) { if (!flipping) renderBoard(s); playFlip(s); }
       else if (!busy) renderBoard(s);
       if (s.fx && s.fx.id !== fxId) {
         fxId = s.fx.id;
@@ -248,18 +293,23 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
         burst({ ...s.fx, cells });
       }
     }
+    if (flipping && s.flipUntil > 0) poseFlip(s, visibleAt);
+    if (flipping && !(s.flipUntil > 0)) {
+      endFlip();
+      if (s.status === 'playing') renderBoard(s);
+    }
     if (!busy && s.status !== 'playing' && !settled) showResult(s);
   }
   function beginRound() {
     if (!pending || game) return;
     const kind=pending.kind; pending=null;
     const now=performance.now(); visibleAt=now; lastWall=now;
-    game=createMiniGame(kind,{now}); settled=false; revision=-1; fxId=0; busy=false; motionSeen=0; motionToken++;
+    game=createMiniGame(kind,{now}); settled=false; revision=-1; fxId=0; busy=false; flipping=false; flipToken=0; motionSeen=0; motionToken++;
     root.removeAttribute('data-busy');
     const definition=MINI_GAMES[kind];
     root.dataset.phase='play'; root.removeAttribute('aria-describedby');
     $('#mini-intro').hidden=true; $('#mini-play').hidden=false; $('#mini-round').hidden=false;
-    $('#mini-grid').hidden=false; $('#mini-grid').classList.remove('is-falling'); $('#mini-message').hidden=false; $('#mini-result').hidden=true;
+    $('#mini-grid').hidden=false; $('#mini-grid').classList.remove('is-falling','is-flipping'); $('#mini-message').hidden=false; $('#mini-result').hidden=true;
     $('#mini-grid').style.setProperty('--columns',definition.columns);
     buttons=Array.from({length:definition.columns*definition.rows},(_,index)=>{const button=document.createElement('button');button.type='button';button.dataset.cell=index;return button;});
     $('#mini-grid').replaceChildren(...buttons);

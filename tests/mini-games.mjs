@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_DURATION, BLOCK_POINT, BLOCK_GROUP_LIMIT, COMBO_WINDOW_MS, COMBO_MULTIPLIER_STEP, comboMultiplier, comboPoints, connectedBlocks, randomMiniGame, miniGameIdle, miniIntro, AFK_BALL_TEXT, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS, PAIR_ICON_LIST, PAIR_SUITS, PAIR_SUIT_COUNT, PAIR_COPIES } from '../src/mini-games.js';
+import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_DURATION, BLOCK_POINT, BLOCK_GROUP_LIMIT, COMBO_WINDOW_MS, COMBO_MULTIPLIER_STEP, comboMultiplier, comboPoints, connectedBlocks, randomMiniGame, miniGameIdle, miniIntro, AFK_BALL_TEXT, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS, PAIR_ICON_LIST, PAIR_SUITS, PAIR_SUIT_COUNT, PAIR_COPIES, MOLE_WAVE_MS, MOLE_FLIP_MS } from '../src/mini-games.js';
 import { secretPayout } from '../src/secret-wave.js';
 assert.equal(COMBO_MULTIPLIER_STEP,.5);
 assert.deepEqual([0,1,2,3,4].map(comboMultiplier),[1,1,1.5,2,2.5]);
@@ -105,15 +105,38 @@ for(let seed=0;seed<25;seed++) {
       if(j<indices.length-1) assert.equal(moles.select(index,time),0,'repeat clicks never score twice');
       assert.equal(moles.state.combo,j+1,'a repeat click does not break the streak');
     }
+    const stamp=moles.state.board.map(cell=>cell.id).join();
+    assert.ok(moles.state.flipUntil>time,'clearing a batch arms the flip before the next batch');
+    moles.tick(moles.state.flipUntil-1);
+    assert.equal(moles.state.wave,wave,'the next batch waits until the flip finishes');
+    assert.equal(moles.state.board.map(cell=>cell.id).join(),stamp);
+    const during=moles.state.score, duringCombo=moles.state.combo, duringPlayed=moles.state.played;
+    assert.equal(moles.select(0,moles.state.flipUntil-1),0,'a click during the flip is ignored');
+    assert.equal(moles.state.score,during);assert.equal(moles.state.combo,duringCombo);assert.equal(moles.state.played,duringPlayed);
+    moles.tick(moles.state.flipUntil);
+    if(wave<10) assert.equal(moles.state.wave,wave+1);
   }
   assert.equal(moles.state.status,'complete');assert.equal(moles.state.hit,40);assert.ok(moles.state.score>0);
 }
 const noHit=createMiniGame('moles');
-for(let round=1;round<=9;round++){noHit.tick(round*3000);assert.equal(noHit.state.wave,round+1);}
-noHit.tick(30000);assert.equal(noHit.state.status,'complete');assert.equal(noHit.state.score,0);assert.equal(noHit.state.hit,0);assert.equal(noHit.state.played,false);assert.equal(miniGameIdle(noHit.state),true);
+for(let round=1;round<=9;round++){
+  const end=noHit.state.waveUntil;
+  noHit.tick(end);
+  assert.equal(noHit.state.wave,round,'a timed batch flips before it deals');
+  assert.equal(noHit.state.flipUntil,end+MOLE_FLIP_MS);
+  assert.equal(noHit.state.deadline,MINI_DURATION+round*MOLE_FLIP_MS,'the round clock pauses for each flip');
+  const flipEnd=noHit.state.flipUntil;
+  noHit.tick(flipEnd);
+  assert.equal(noHit.state.wave,round+1);
+  assert.equal(noHit.state.flipUntil,0);
+  assert.equal(noHit.state.waveUntil,flipEnd+MOLE_WAVE_MS,'the next batch gets its own 3 seconds after the flip');
+}
+noHit.tick(noHit.state.waveUntil);
+noHit.tick(noHit.state.flipUntil);
+assert.equal(noHit.state.status,'complete');assert.equal(noHit.state.score,0);assert.equal(noHit.state.hit,0);assert.equal(noHit.state.played,false);assert.equal(miniGameIdle(noHit.state),true);
 const jumped=createMiniGame('moles',{now:0});
 jumped.tick(16000);assert.equal(jumped.state.wave,2,'one tick advances at most one mole wave');assert.equal(jumped.state.status,'playing');
-jumped.tick(30000);assert.equal(jumped.state.status,'timeout');assert.equal(jumped.state.score,0);
+jumped.tick(jumped.state.deadline);assert.equal(jumped.state.status,'timeout');assert.equal(jumped.state.score,0);
 for(const kind of ['pairs','blocks']) {
   const game=createMiniGame(kind,{random:seeded(4),now:500});
   if(kind==='pairs'){const partner=game.state.board.findIndex((c,i)=>i>0&&c.pair===game.state.board[0].pair);game.select(0,501);game.select(partner,502);}
@@ -305,5 +328,13 @@ const mole=swing.state.board.findIndex(cell=>cell.type==='mole'&&!cell.hit);
 assert.ok(swing.select(mole,2)>0);assert.equal(swing.state.played,true);assert.equal(swing.state.hit,1);
 assert.equal(swing.select(mole,3),0,'a repeat hit does not score');assert.equal(swing.state.played,true);assert.equal(miniGameIdle(swing.state),false);
 const idleMoles=createMiniGame('moles',{random:seeded(6),now:0});
+idleMoles.tick(idleMoles.state.waveUntil);
+assert.ok(idleMoles.state.flipUntil>0);
+const idleBefore=idleMoles.snapshot();
+assert.equal(idleMoles.select(0,idleMoles.state.flipUntil-1),0);
+assert.equal(idleMoles.state.played,false,'a flip click is not a scoring action');
+assert.equal(idleMoles.state.hit,idleBefore.hit);
+assert.equal(idleMoles.state.combo,idleBefore.combo);
+assert.equal(miniGameIdle(idleMoles.state),true);
 idleMoles.tick(MINI_DURATION);assert.equal(idleMoles.state.played,false);assert.equal(idleMoles.state.score,0);assert.equal(idleMoles.state.hit,0);
 console.log('PASS: combo multipliers, broken streaks, a 100-block cap, timer finish, drop chains, gravity order, secret ×2 on the full total, idle rounds, and no repeated mini-game.');
