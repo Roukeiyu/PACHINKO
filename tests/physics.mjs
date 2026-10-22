@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import Matter from 'matter-js';
-import { createTable, TABLE, STEP, SECRET_HOLE_FACING } from '../src/physics.js';
+import { createTable, TABLE, STEP, SECRET_HOLE_FACING, SECRET_HOLE_X, SECRET_HOLE_Y } from '../src/physics.js';
 import { reelBox } from '../src/slot-machine.js';
 
 function seeded(seed) { return () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 32; }; }
@@ -197,14 +197,16 @@ for (const slots of [5, 7, 9]) for (const seedOffset of [0, 100, 200]) {
 }
 assert.ok(totals.jackpots > 0 && totals.jackpots < 108, 'physical bonus cups should be attainable and uncommon (<10% in seeded sample)');
 
-// Approach the remaining right cup through the down-left mouth. Capture scores
-// exactly once, while a trajectory into the closed arc does not receive a jackpot.
+// Approach the cup through the down-left mouth. Capture scores exactly once,
+// while a trajectory into the closed arc does not receive a jackpot.
 {
   const scores = [], game = createTable({ onScore: score => scores.push(score) });
   assert.equal(game.holes.length, 1, 'only the right secret hole remains');
   const h = game.holes[0];
   assert.ok(h.x > TABLE.width / 2);
   assert.equal(h.facing, SECRET_HOLE_FACING, 'the mouth faces 7:30, 45° down-left');
+  assert.equal(h.x, SECRET_HOLE_X);
+  assert.equal(h.y, SECRET_HOLE_Y);
   const open = game.guards.filter(guard => guard.plugin.hole);
   assert.equal(open.length, 12);
   for (const guard of open) {
@@ -347,11 +349,11 @@ function stillWedged(table, ball, hole, ms = 2500) {
 }
 {
   const samples = [
-    { name: 'right cusp', x: 657, y: 463, vx: 0, vy: 0 },
-    { name: 'top seam', x: 618.5, y: 443, vx: 0, vy: 2 },
-    { name: 'mouth tangent', x: 615 + Math.cos(SECRET_HOLE_FACING + 0.5) * 34, y: 482 + Math.sin(SECRET_HOLE_FACING + 0.5) * 34, vx: -Math.cos(SECRET_HOLE_FACING) * 5, vy: -Math.sin(SECRET_HOLE_FACING) * 5 },
+    { name: 'right cusp', x: 648, y: 450, vx: 0, vy: 0 },
+    { name: 'top seam', x: 600, y: 448, vx: 0, vy: 2 },
+    { name: 'mouth tangent', x: SECRET_HOLE_X + Math.cos(SECRET_HOLE_FACING + 0.5) * 34, y: SECRET_HOLE_Y + Math.sin(SECRET_HOLE_FACING + 0.5) * 34, vx: -Math.cos(SECRET_HOLE_FACING) * 5, vy: -Math.sin(SECRET_HOLE_FACING) * 5 },
   ];
-  const hole = { x: 615, y: 482 };
+  const hole = { x: SECRET_HOLE_X, y: SECRET_HOLE_Y };
   for (let deg = 0; deg < 360; deg += 45) for (const speed of [2, 8]) for (const tangent of [0, 1]) {
     const a = deg * Math.PI / 180;
     samples.push({
@@ -384,7 +386,7 @@ function stillWedged(table, ball, hole, ms = 2500) {
   }
   const parked = createTable({ slots: 7, random: () => 0 });
   const wedged = parked.launch(); wedged.entered = true;
-  Matter.Body.setPosition(wedged.body, { x: 657, y: 463 });
+  Matter.Body.setPosition(wedged.body, { x: 648, y: 450 });
   Matter.Body.setVelocity(wedged.body, { x: 0, y: 0 });
   parked.step();
   parked.setSlots(5);

@@ -141,7 +141,9 @@ for (let i = 0; i < 30 && excluded.balls.includes(stored); i++) excluded.step();
 assert.equal(excluded.stats.absorbed, 1); assert.equal(excluded.slotMachine.entries, 0);
 const returned = excluded.launch(); Matter.Body.setPosition(returned.body, { x: TABLE.launchX, y: 820 }); Matter.Body.setVelocity(returned.body, { x: 0, y: 3 });
 excluded.step(); assert.equal(excluded.stats.returns, 1); assert.equal(excluded.slotMachine.entries, 0);
-const miss = excluded.launch(); put(miss, 615 - 48, 482 - 48, 3, 0);
+const missHole = excluded.holes[0];
+const missClosed = missHole.facing - 1.15;
+const miss = excluded.launch(); put(miss, missHole.x + Math.cos(missClosed) * 48, missHole.y + Math.sin(missClosed) * 48, -Math.cos(missClosed) * 3, -Math.sin(missClosed) * 3);
 for (let i = 0; i < 15; i++) excluded.step();
 assert.equal(excluded.slotMachine.entries, 0, 'near misses and impacts cannot grant slot progress');
 // The reels sit below the enlarged drum and the swinging bar, above the pockets.

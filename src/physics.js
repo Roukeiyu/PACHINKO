@@ -29,6 +29,10 @@ const FILTER = { world: 1, ascending: 2, playing: 4, returnRamp: 8, launchDoor: 
 const HOLE_SINK = 30, HOLE_RIM = 56, HOLE_IGNORE = 200, HOLE_GROUP = -2;
 // Mouth direction. Angle 0 points right and increases clockwise, because y
 // grows downward. 3π/4 is 7:30: 45° down-left, 225° clockwise from 12 o'clock.
+// The cup sits just off the seam's lower-left end. Balls rolling off that end
+// still reach this down-left mouth, so the opening stays at 7:30.
+export const SECRET_HOLE_X = 580;
+export const SECRET_HOLE_Y = 470;
 export const SECRET_HOLE_FACING = Math.PI * 3 / 4;
 const DWELL_RADIUS = 12, DWELL_LIMIT = 1500, COLLECTOR_HOLD = 48;
 // Same negative group: a phased ball skips the secret-hole ring only.
@@ -39,7 +43,7 @@ const DWELL_RADIUS = 12, DWELL_LIMIT = 1500, COLLECTOR_HOLD = 48;
 export function createTable({ slots = 7, collections = null, random = Math.random, starRandom = Math.random, slotRandom = Math.random, onHit = () => {}, onScore = () => {}, onReturn = () => {}, onDrain = () => {}, onSurprise = () => {}, centerHitWeight = null, giftScale = null } = {}) {
   const engine = Engine.create({ gravity: { x: 0, y: 1.05 }, positionIterations: 8, velocityIterations: 8 });
   const balls = [], walls = [], pins = [], kickers = [], bumpers = [], rails = [], diamonds = [], spinners = [], guards = [], dividers = [], gates = [];
-  const holes = [{ x: 615, y: 482, facing: SECRET_HOLE_FACING, glow: 0 }];
+  const holes = [{ x: SECRET_HOLE_X, y: SECRET_HOLE_Y, facing: SECRET_HOLE_FACING, glow: 0 }];
   const deflectors = [], pendingDeflections = [];
   let activeStar = null, nextStarAt = 0, nextStarId = 1, lastStarLocation = -1, nextStarMultiplier = 2;
   let clock = 0, nextId = 1;
@@ -126,7 +130,8 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     rim.plugin.storage = true;
   }
   // Cover the outer seam between the recessed cup and the side wall, so a
-  // falling ball cannot wedge into the narrow space behind the cup.
+  // falling ball cannot wedge into the narrow space behind the cup. The cup
+  // sits just off this rail's lower-left end, on the side balls roll off.
   segment(665, 413, 615, 438, 13, walls);
   // Fixed left/right pairs mirrored across the center bumper's vertical x=350 axis.
   // Coordinates leave space for moving rails, enlarged bumpers and the hole.

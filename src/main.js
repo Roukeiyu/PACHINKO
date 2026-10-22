@@ -1,4 +1,4 @@
-import { createTable, STEP, TABLE, DRUM_SIDE_HITS, DRUM_CENTER_HITS, ENLARGE_MS } from './physics.js';
+import { createTable, STEP, TABLE, DRUM_SIDE_HITS, DRUM_CENTER_HITS, ENLARGE_MS, SECRET_HOLE_X, SECRET_HOLE_Y } from './physics.js';
 import { createRenderer } from './renderer.js';
 import { createCanon } from './canon.js';
 import { SLOT_SYMBOLS, BALL_SYMBOL, ballPayout, SLOT_DISPLAY, slotBonusLabel, REEL_WEIGHTS, BALL_ONE, BALL_PAIR, BALL_JACKPOT } from './slot-machine.js';
@@ -191,7 +191,7 @@ const miniGames = createMiniGamesUI({ root: $('#mini-game'), onFinish: result =>
   if (result.bestCombo) state.bestCombo = Math.max(state.bestCombo, result.bestCombo);
   if (result.source === 'secret' && !result.idle) {
     const gifts = secretHoleBalls({ valueFactor: secretGiftFactor });
-    grantBalls(gifts.holeBalls, 615, 450, false);
+    grantBalls(gifts.holeBalls, SECRET_HOLE_X, SECRET_HOLE_Y - 32, false);
     secretBallFlash = gifts.holeBalls;
   }
 },
@@ -201,8 +201,8 @@ const miniGames = createMiniGamesUI({ root: $('#mini-game'), onFinish: result =>
       if (secretBallFlash) {
         const bonus = secretBallFlash;
         secretBallFlash = 0;
-        flyBalls(bonus, 615, 450, `+${bonus} 球`);
-        fx.popups.push({ x: 615, y: 430, text: `+${bonus} 球`, life: 1.6, decay: .008, rise: .35, big: true, color: '#8a5a12', size: 28 });
+        flyBalls(bonus, SECRET_HOLE_X, SECRET_HOLE_Y - 52, `+${bonus} 球`);
+        fx.popups.push({ x: SECRET_HOLE_X, y: SECRET_HOLE_Y - 52, text: `+${bonus} 球`, life: 1.6, decay: .008, rise: .35, big: true, color: '#8a5a12', size: 28 });
         toast(`+${bonus} 球`);
       }
     }

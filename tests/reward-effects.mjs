@@ -3,7 +3,7 @@ import { celebrateReward, advanceCelebrations, rewardProfile, rewardSceneAt, mar
 
 const makeFx = () => ({ celebrations: [], particles: [], ripples: [], shake: 0 });
 const result = multiplier => ({ kind: 'slot', multiplier, x: 350, y: 865 });
-const events = [2, 3, 5, 10].map(result).concat([{ kind: 'jackpot', x: 615, y: 482 }, { kind: 'clock', x: 350, y: 410 }]);
+const events = [2, 3, 5, 10].map(result).concat([{ kind: 'jackpot', x: 580, y: 470 }, { kind: 'clock', x: 350, y: 410 }]);
 let previous = { particles: 0, duration: 0, radius: 0, notes: 0 };
 for (const event of events) {
   const fx = makeFx(), profile = celebrateReward(fx, event, false, () => .5);
