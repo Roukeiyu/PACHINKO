@@ -99,8 +99,9 @@ export const LUCKY_BALLS = 0;
 // The whole secret-hole visit. The mini-game pays points only.
 export const SECRET_BALLS = 20;
 
-// Perfect 32-pair clear (10×(1+2+…+33) = 5600). The balance sim samples
-// mini-game happiness from this cap. Mini-games no longer pay balls.
+// Balance-sim sample cap for mini-game happiness. It is not the live pairs
+// total (a 32-streak is now 11200 plus the clear bonus) and it does not pay
+// balls: secretHoleBalls ignores the score.
 export const MINI_BALLS_FULL_SCORE = 5600;
 
 // Drums. The left drum and the clock already launch real balls; those balls

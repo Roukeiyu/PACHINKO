@@ -9,7 +9,7 @@ assert.equal(MINI_DURATION,30000);
 assert.equal(BLOCK_CLEAR_TARGET,100);
 assert.equal(BLOCK_DURATION,45000);
 assert.equal(BLOCK_POINT,10);
-assert.equal(PAIR_POINT,20);assert.equal(PAIR_TARGET,32);assert.equal(PAIR_DURATION,30000);assert.equal(PAIR_CLEAR_BONUS,200);assert.equal(BLOCK_GROUP_LIMIT,12);
+assert.equal(PAIR_POINT,40);assert.equal(PAIR_TARGET,32);assert.equal(PAIR_DURATION,30000);assert.equal(PAIR_CLEAR_BONUS,200);assert.equal(BLOCK_GROUP_LIMIT,12);
 assert.equal(PAIR_ICON_LIST.length,32);assert.equal(new Set(PAIR_ICON_LIST.map(icon=>icon.id)).size,32);
 assert.equal(PAIR_SUIT_COUNT,16);assert.equal(PAIR_COPIES,4);assert.equal(PAIR_SUITS.length,16);
 assert.equal(new Set(PAIR_SUITS.map(icon=>icon.id)).size,16);assert.ok(PAIR_SUITS.every(icon=>PAIR_ICON_LIST.includes(icon)));
@@ -57,7 +57,7 @@ for(let seed=0;seed<25;seed++) {
     }
   }
   const pairTotal=Array.from({length:PAIR_TARGET},(_,i)=>comboPoints(PAIR_POINT,i+1)).reduce((a,b)=>a+b);
-  assert.equal(pairTotal,5600);
+  assert.equal(pairTotal,11200);
   assert.equal(pairs.state.score,pairTotal+PAIR_CLEAR_BONUS);assert.equal(pairs.state.clearBonus,PAIR_CLEAR_BONUS);assert.equal(pairs.state.status,'complete');
   assert.equal(pairs.state.removed,PAIR_TARGET*2);
   assert.equal(pairs.state.board.filter(Boolean).length,0);

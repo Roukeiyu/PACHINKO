@@ -27,8 +27,8 @@ export const BLOCK_GROUP_LIMIT = 12;
 export const MINI_HIT_SHAKE = 1.5;
 export const MINI_HIT_MS = 160;
 // 8×8 is 16 suits × 4 cards. Any two of one suit match, so the board is still 32 pairs.
-// Base 20 with the shared combo makes a perfect 32-streak worth 5600, plus the clear bonus.
-export const PAIR_POINT = 20;
+// Base 40 with the shared combo makes a perfect 32-streak worth 11200, plus the 200 clear bonus.
+export const PAIR_POINT = 40;
 export const PAIR_TARGET = 32;
 export const PAIR_DURATION = 30000;
 export const PAIR_CLEAR_BONUS = 200;
