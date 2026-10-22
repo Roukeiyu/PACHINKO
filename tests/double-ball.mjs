@@ -24,8 +24,10 @@ const layout = createTable();
 assert.equal(layout.bumpers[2].position.y, 410, 'the center drum moves down into the old reel gap');
 assert.equal(REEL_TOP, 724);
 assert.ok(SLOT_DISPLAY.y > layout.bumpers[2].position.y + layout.bumpers[2].plugin.baseRadius * 1.5);
-assert.ok(layout.pins.some(pin => pin.position.x === 310 && pin.position.y === 704));
-assert.ok(layout.pins.some(pin => pin.position.x === 390 && pin.position.y === 704));
+assert.equal(layout.pins.length, 26);
+assert.ok(layout.pins.some(pin => pin.position.x === 310 && pin.position.y === 640), 'the pegs above the diamonds stay');
+assert.ok(layout.pins.some(pin => pin.position.x === 390 && pin.position.y === 640), 'the pegs above the diamonds stay');
+assert.equal(layout.pins.some(pin => pin.position.y === 704 && (pin.position.x === 310 || pin.position.x === 390)), false, 'the two pegs beside the lower spring are gone');
 assert.equal(layout.pins.some(pin => pin.position.y === 730 && (pin.position.x === 310 || pin.position.x === 390)), false);
 let spinnerTop = Infinity;
 for (let t = 0; t <= 9000; t += STEP) {
