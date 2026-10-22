@@ -253,7 +253,7 @@ function playRound(seed) {
       game.setEmissionPaused(false);
     }
     const clock = steps * STEP;
-    const spendable = stock + game.collector.stored.length;
+    const spendable = stock + game.collector.refundable;
     const burstWanted = random() < 0.12;
     const used = spendFactor(slots, spendable, burstWanted);
     const burst = burstWanted && used > 0;
@@ -282,7 +282,7 @@ function playRound(seed) {
     steps += 1;
     if (game.balls.length > peakBalls) peakBalls = game.balls.length;
     const pending = game.collector.remaining;
-    const stored = game.collector.stored.length;
+    const stored = game.collector.refundable;
     if (stock <= 0 && stored === 0 && pending === 0 && game.pendingLaunches === 0 && game.balls.length === 0 && !secretWait) break;
   }
   const physicsMs = steps * STEP;

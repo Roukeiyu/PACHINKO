@@ -181,8 +181,18 @@ export function pocketCenter(count, column) {
   return (slot.x0 + slot.x1) / 2;
 }
 
-// Every one of these has to be clear. A ball still on the table, in the tank,
-// waiting to drop, or tied to a secret visit keeps the round alive.
+// Player balls banked in the jar count toward the hand. A plain number is that
+// older shape. Gift entries advance the 20-count only and do not keep the round alive.
+export function jarRefundable(stored) {
+  if (!Array.isArray(stored)) return 0;
+  return stored.reduce((count, item) => {
+    if (typeof item === 'number') return count + 1;
+    return count + (item && item.refund === true ? 1 : 0);
+  }, 0);
+}
+
+// Every one of these has to be clear. A ball still on the table, a player ball
+// banked in the tank, a drop waiting to fall, or a secret visit keeps the round alive.
 export function roundCanEnd({ balls = 0, onTable = 0, stored = 0, pendingDrops = 0, pendingLaunches = 0, secretPending = false, miniOpen = false } = {}) {
   return balls <= 0 && onTable <= 0 && stored <= 0 && pendingDrops <= 0 && pendingLaunches <= 0 && !secretPending && !miniOpen;
 }

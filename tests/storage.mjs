@@ -82,3 +82,71 @@ assert.equal(live.stats.launches + live.stats.bonusBalls, live.stats.scored + li
 const partial = live.collector.stored.length;
 live.setSlots(9); assert.equal(live.collector.stored.length, partial, 'partial stock survives a layout change');
 console.log('PASS: top drops traverse the real board, resolve without missing balls, and score normally.');
+
+function sink(game, ball) {
+  ball.entered = true;
+  Matter.Body.setPosition(ball.body, { x: game.collector.x, y: game.collector.y - 44 });
+  Matter.Body.setVelocity(ball.body, { x: 0, y: 5 });
+  for (let i = 0; i < 30 && game.balls.includes(ball); i++) game.step();
+  assert.equal(game.balls.includes(ball), false);
+}
+const hands = createTable({ random: seeded(9) });
+const launched = hands.launch();
+launched.scoreFactor = 4;
+sink(hands, launched);
+assert.equal(hands.collector.stored.length, 1);
+assert.equal(hands.collector.refundable, 1, 'a launched ball returns to the hand');
+assert.equal(hands.collector.stored[0].scoreFactor, 4);
+hands.queueClock(1);
+for (let i = 0; i < 8 && !hands.balls.some(ball => ball.bonus); i++) hands.step();
+const clockBall = hands.balls.find(ball => ball.bonus && ball.kind === 'clock');
+assert.ok(clockBall, 'the clock emits a gift ball');
+clockBall.scoreFactor = 5;
+sink(hands, clockBall);
+for (const extra of hands.balls.slice()) {
+  Matter.Composite.remove(hands.engine.world, extra.body);
+  hands.balls.splice(hands.balls.indexOf(extra), 1);
+}
+assert.equal(hands.collector.stored.length, 2, 'a gift still fills the jar');
+assert.equal(hands.collector.refundable, 1, 'a gift ball does not return a ball to the hand');
+assert.equal(hands.takeStored(1), 1);
+assert.equal(hands.collector.stored.length, 1);
+assert.equal(hands.collector.refundable, 0);
+assert.equal(hands.collector.stored[0].scoreFactor, 5, 'spending the hand leaves the gift in the jar');
+assert.equal(hands.takeStored(1), 0, 'a gift entry cannot be spent');
+const released = [];
+const finisher = createTable({ random: seeded(11), onSurprise: event => {
+  if (event.kind !== 'emit' || event.source !== 'storage') return;
+  released.push(event.scoreFactor);
+  const ball = finisher.balls.find(item => item.id === event.ballId);
+  if (!ball) return;
+  Matter.Composite.remove(finisher.engine.world, ball.body);
+  finisher.balls.splice(finisher.balls.indexOf(ball), 1);
+} });
+for (let n = 0; n < 19; n++) {
+  const gift = finisher.launch();
+  gift.bonus = true;
+  gift.scoreFactor = 2;
+  sink(finisher, gift);
+}
+assert.equal(finisher.collector.stored.length, 19);
+assert.equal(finisher.collector.refundable, 0);
+const closing = finisher.launch();
+closing.scoreFactor = 3;
+sink(finisher, closing);
+assert.equal(finisher.collector.stored.length, 0);
+assert.equal(finisher.collector.refundable, 0);
+assert.equal(finisher.collector.remaining, 20, 'gifts still count toward the same 20-ball release');
+assert.equal(finisher.stats.storageBursts, 1);
+for (let i = 0; i < 800 && released.length < 20; i++) finisher.step();
+assert.equal(released.length, 20, 'the jar still drops one ball per stored ball');
+assert.equal(released.filter(factor => factor === 2).length, 19, 'each stored gift keeps its star factor');
+assert.equal(released.filter(factor => factor === 3).length, 1, 'the launched ball that closed the jar keeps its star factor');
+const reentry = createTable({ random: seeded(12) });
+const drop = reentry.launch();
+drop.bonus = true;
+drop.kind = 'storage';
+sink(reentry, drop);
+assert.equal(reentry.collector.stored.length, 1);
+assert.equal(reentry.collector.refundable, 0, 'a ball the jar itself released does not refund');
+console.log('PASS: gift balls fill the jar without returning a ball, and the 20-ball release stays intact.');

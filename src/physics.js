@@ -3,7 +3,7 @@ import { collectSlot } from './collections.js';
 import { slotMultipliers } from './slots.js';
 export { slotMultipliers };
 import { createSlotMachine, SLOT_DISPLAY } from './slot-machine.js';
-import { SLOT_ROW_LEFT, SLOT_ROW_RIGHT, DRAIN_WALL, DRAIN_FLOOR, slotFrame, classifyBottom, ballValue, tablePoints } from './round.js';
+import { SLOT_ROW_LEFT, SLOT_ROW_RIGHT, DRAIN_WALL, DRAIN_FLOOR, slotFrame, classifyBottom, ballValue, tablePoints, jarRefundable } from './round.js';
 export { slotFrame, classifyBottom };
 
 const { Engine, Bodies, Body, Composite, Events } = Matter;
@@ -36,6 +36,7 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   let emissionPaused = false;
   let scoreHoles = true;
   const collector = { x: 100, y: 650, radius: 26, capacity: 20, stored: [], remaining: 0, glow: 0, outlets: [] };
+  Object.defineProperty(collector, 'refundable', { get() { return jarRefundable(collector.stored); } });
   const rewards = { hits: [0, 0, 0], goals: [DRUM_SIDE_HITS, DRUM_SIDE_HITS, DRUM_CENTER_HITS], enlargedUntil: 0, burstUntil: 0, burstStep: -1, gateGlow: 0, ordinaryStars: 0 };
   const slotMachine = createSlotMachine({ random: slotRandom, onEvent: event => onSurprise({ ...event, x: SLOT_DISPLAY.x, y: SLOT_DISPLAY.y }) });
   const stats = { launches: 0, entered: 0, scored: 0, jackpots: 0, returns: 0, drains: 0, timeouts: 0, redirected: 0, bonusBalls: 0, randomShots: 0, clockBursts: 0, enlargements: 0, absorbed: 0, storageBursts: 0, storageDrops: 0, impacts: 0, hits: { pin: 0, kicker: 0, bumper: 0, rail: 0, spinner: 0, diamond: 0, wall: 0, deflector: 0 } };
@@ -248,8 +249,15 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     return refund;
   }
   function takeStored(count) {
-    const n = Math.max(0, Math.min(collector.stored.length, Math.floor(count) || 0));
-    return collector.stored.splice(0, n).length;
+    let left = Math.max(0, Math.floor(count) || 0);
+    let removed = 0;
+    for (let i = 0; i < collector.stored.length && left > 0;) {
+      if (collector.stored[i]?.refund !== true && typeof collector.stored[i] !== 'number') { i++; continue; }
+      collector.stored.splice(i, 1);
+      removed++;
+      left--;
+    }
+    return removed;
   }
   function resetRound() {
     clearBalls();
@@ -292,12 +300,15 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     // One stored ball per capture. Star multipliers stay on that ball. The paid
     // ×N is not copied onto the drop. giftScale, when the sim passes it, repeats
     // the whole release as extra ×1 balls. The default scale is 1, a 1:1 drop.
-    collector.stored.push(ball.scoreFactor); stats.absorbed++; collector.glow = 1;
-    onSurprise({ kind: 'store', x: collector.x, y: collector.y, count: collector.stored.length, capacity: collector.capacity, ballId: ball.id, scoreFactor: ball.scoreFactor });
+    // A launched ball returns to the player's hand. A gift (bonus) only fills the jar.
+    const refund = ball.bonus !== true;
+    collector.stored.push({ scoreFactor: ball.scoreFactor, refund }); stats.absorbed++; collector.glow = 1;
+    onSurprise({ kind: 'store', x: collector.x, y: collector.y, count: collector.stored.length, capacity: collector.capacity, ballId: ball.id, scoreFactor: ball.scoreFactor, refund });
     if (collector.stored.length < collector.capacity) return;
     const stored = collector.stored.splice(0);
+    const kept = stored.map(item => (typeof item === 'number' ? item : item.scoreFactor));
     const scale = scaledCount(ball);
-    const factors = scale === 1 ? stored : stored.concat(Array((scale - 1) * stored.length).fill(1));
+    const factors = scale === 1 ? kept : kept.concat(Array((scale - 1) * kept.length).fill(1));
     const columns = shuffledColumns(factors.length);
     let due = Math.max(clock + 250, (pendingDrops.at(-1)?.due ?? clock) + 100);
     factors.forEach((scoreFactor, i) => {

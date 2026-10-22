@@ -85,7 +85,8 @@ Matter.Body.setPosition(stored.body, { x: jar.collector.x, y: jar.collector.y - 
 Matter.Body.setVelocity(stored.body, { x: 0, y: 5 });
 for (let i = 0; i < 30 && jar.balls.includes(stored); i++) jar.step();
 assert.equal(jar.collector.stored.length, 1, 'a ×2 ball counts as one stored ball');
-assert.equal(jar.collector.stored[0], 3, 'only the star factor is kept');
+assert.equal(jar.collector.stored[0].scoreFactor, 3, 'only the star factor is kept');
+assert.equal(jar.collector.stored[0].refund, true, 'a launched ball returns to the hand');
 for (let n = 0; n < 19; n++) {
   const filler = jar.launch();
   filler.entered = true;
@@ -106,7 +107,8 @@ Matter.Body.setPosition(paidBall.body, { x: costlyJar.collector.x, y: costlyJar.
 Matter.Body.setVelocity(paidBall.body, { x: 0, y: 5 });
 for (let i = 0; i < 30 && costlyJar.balls.includes(paidBall); i++) costlyJar.step();
 assert.equal(costlyJar.collector.stored.length, 1, 'an ×8 ball still counts as one stored ball');
-assert.equal(costlyJar.collector.stored[0], 5, 'the jar keeps the star factor and drops ×8');
+assert.equal(costlyJar.collector.stored[0].scoreFactor, 5, 'the jar keeps the star factor and drops ×8');
+assert.equal(costlyJar.collector.refundable, 1, 'an ×8 launched ball still returns one ball');
 
 const holeScores = [];
 const hole = createTable({ onScore: result => holeScores.push(result) });
