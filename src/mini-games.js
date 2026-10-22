@@ -8,20 +8,27 @@ export const PAIR_COPIES = 4;
 export const PAIR_SUITS = Object.freeze(PAIR_ICON_LIST.slice(0, PAIR_SUIT_COUNT));
 export const MINI_DURATION = 30000;
 // 消消乐 ends at this many cleared blocks, or when its own timer runs out.
-// The last clear that crosses the line only scores the blocks that fit.
+// Clicked blocks and later cascade waves both count. A wave that crosses the
+// line scores only the blocks that still fit, then stops.
 // The board is already 10×10; this is the finish line, not the grid size.
-export const BLOCK_CLEAR_TARGET = 100;
-export const BLOCK_POINT = 10;
-// Gravity locks input while tiles fall, so 100 clears get a longer clock than the other games.
+export const BLOCK_CLEAR_TARGET = 200;
+// Five pair-set fruits. Cherry, orange, grapes, watermelon, strawberry.
+export const BLOCK_ICON_IDS = Object.freeze(['cherry', 'orange', 'grapes', 'watermelon', 'strawberry']);
+export const BLOCK_ICONS = Object.freeze(BLOCK_ICON_IDS.map(id => PAIR_ICON_LIST.find(icon => icon.id === id)));
+export const BLOCK_TYPE_COUNT = BLOCK_ICONS.length;
+// Base points per cleared block, click or cascade. The round pays that total
+// once, times the best single-click chain. Combo 1 is 1× and each later wave
+// in that same click adds 0.5×. A full 200 with a 9-wave chain (the click plus
+// the 8-wave guard) is 200 × 11 × 5 = 11000.
+export const BLOCK_POINT = 11;
+// Gravity locks input while tiles fall. 45s still covers an engaged 200-clear.
 export const BLOCK_DURATION = 45000;
-// Another correct click inside this window continues the 消消乐 streak.
-export const COMBO_WINDOW_MS = 500;
 // First clear is combo 1 at 1×. Each further clear in the streak adds half a multiplier.
 export const COMBO_MULTIPLIER_STEP = 0.5;
-// Cascade loop guard only. It is not a combo cap.
+// Cascade loop guard only. It is not a combo cap. One click is wave 1, so the
+// longest chain this guard can record is 9.
 export const MAX_BLOCK_CHAINS = 8;
-// Opening boards never contain a connected region this large. A fresh tap
-// therefore cannot reach the 100-block cap by itself.
+// Opening boards never contain a connected region this large.
 export const BLOCK_GROUP_LIMIT = 12;
 // Light hit shake, the same 1.5 step used for light reward shakes. Charge camera shake stays separate.
 export const MINI_HIT_SHAKE = 1.5;
@@ -39,11 +46,10 @@ export const MOLE_WAVE_MS = 3000;
 export const MOLE_FLIP_MS = 320;
 export const MINI_GAMES = Object.freeze({
   pairs: { title: '对对碰', rule: `64 张牌排成 8×8，16 种图案，每种 4 张，同花色任意两张都能配对。配完全部 ${PAIR_TARGET} 对，或玩满 ${PAIR_DURATION / 1000} 秒，先到先结算。每对 ${PAIR_POINT} 分。连续配对会累加连击，点错则连击重置。${PAIR_DURATION / 1000} 秒内配完，额外 +${PAIR_CLEAR_BONUS}。只翻开一张，或翻错，都不算有效操作。整局没有配成一对，秘密洞不发小球。`, columns: 8, rows: 8 },
-  blocks: { title: '消消乐', rule: `点击上下左右相连的同色方块，至少 3 块才能消除。每块 ${BLOCK_POINT} 分。只有自己点掉的块计入 ${BLOCK_CLEAR_TARGET} 块；掉落连锁照样加基础分，但不计入这 ${BLOCK_CLEAR_TARGET} 块，也不会因此结束。开局同色相连不超过 ${BLOCK_GROUP_LIMIT} 块。点掉的块累计到 ${BLOCK_CLEAR_TARGET}，或玩满 ${BLOCK_DURATION / 1000} 秒，先到先结算。一次点击超过剩余块数时，只把点掉的块算到 ${BLOCK_CLEAR_TARGET}。${COMBO_WINDOW_MS / 1000} 秒内再点出消除，连击 +1；超过 ${COMBO_WINDOW_MS / 1000} 秒，或点了消不掉的地方，连击归零。连击和倍率没有上限。掉落连锁不加连击。结束时按本局最高连击一次性乘算。点了消不掉的地方不算有效操作。整局没有一次消除，秘密洞不发小球。`, columns: 10, rows: 10 },
+  blocks: { title: '消消乐', rule: `上下左右相连的同色图案，至少 3 个才能消除。五种水果。每块 ${BLOCK_POINT} 分，点掉和连锁都计入 ${BLOCK_CLEAR_TARGET} 个。开局同色不超过 ${BLOCK_GROUP_LIMIT} 个。满 ${BLOCK_CLEAR_TARGET} 个或 ${BLOCK_DURATION / 1000} 秒就结算；多出的只算到 ${BLOCK_CLEAR_TARGET}。连击是这一次点击的波数：点掉为 1，每波连锁 +1，下次点击从 1 重计。结束时按最高连击乘算。没有可消的会洗牌。点不满 3 个不算有效操作。整局没有消除，秘密洞不发小球。`, columns: 10, rows: 10 },
   moles: { title: '打地鼠', rule: '点击地鼠，白菜留着！每只 25 分，共 10 轮、40 只；每轮最多 3 秒，打完或到点后洞口一起翻面，翻完才换轮。不是地鼠的格子都是白菜。连续打中会累加连击；打到白菜，或这一轮有地鼠漏掉，连击重置。只点白菜、重复点已经打过的地鼠，或翻面时点击，都不算有效操作。整局没有打中，秘密洞不发小球。', columns: 4, rows: 4 },
 });
-export const BLOCK_COLORS = Object.freeze(['红','蓝','黄','绿']);
-export const BLOCK_SYMBOLS = Object.freeze(['♥','●','✦','◆']);
+export const BLOCK_COLORS = Object.freeze(BLOCK_ICONS.map(icon => icon.name));
 export const comboMultiplier = combo => combo > 0 ? 1 + (combo - 1) * COMBO_MULTIPLIER_STEP : 1;
 export const comboPoints = (base, combo) => Math.round(base * comboMultiplier(combo));
 export const formatComboMultiplier = combo => {
@@ -97,14 +103,28 @@ export function connectedBlocks(board, index) {
 export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
   if (!MINI_GAMES[kind]) throw new RangeError('Unknown mini-game');
   let nextId = 0, fxId = 0;
-  const tile = (extra = {}) => ({ id: nextId++, color: integer(random,0,3), fall: 0, spawned: false, ...extra });
+  const tile = (extra = {}) => ({ id: nextId++, color: integer(random, 0, BLOCK_TYPE_COUNT - 1), fall: 0, spawned: false, ...extra });
   const roundMs = kind === 'pairs' ? PAIR_DURATION : kind === 'blocks' ? BLOCK_DURATION : MINI_DURATION;
   const state = { kind, status: 'playing', score: 0, played: false, combo: 0, multiplier: 1, bestCombo: 0, bestMultiplier: 1, baseScore: 0, lastClearAt: null, inputLocked: false, payoutSettled: false, clearBonus: 0, startedAt: now, deadline: now + roundMs, revision: 0, selected: null, removed: 0, hit: 0, wave: 0, waveUntil: 0, flipFrom: 0, flipUntil: 0, board: [], molePlan: [], message: '', fx: null, motion: [], motionSeq: 0 };
-  function ensurePlayable() {
-    if (state.board.some((_,i) => connectedBlocks(state.board,i).length >= 3)) return;
-    const color = integer(random,0,3);
-    for (let i=0;i<3;i++) state.board[i] = tile({ color });
-    state.message = '新方块已补上，继续消除吧';
+  // A stuck board is shuffled back into a legal move. The last resort paints
+  // three neighbors the same color so a round can never sit with nothing to tap.
+  function reshuffle() {
+    if (largestGroup() >= 3) return false;
+    const colors = state.board.map(cell => cell.color);
+    for (let guard = 0; guard < 40 && largestGroup() < 3; guard++) {
+      const order = shuffle(colors, random);
+      state.board.forEach((cell, index) => {
+        cell.color = order[index];
+        cell.fall = 0;
+        cell.spawned = false;
+      });
+    }
+    if (largestGroup() < 3) {
+      const color = state.board[0].color;
+      state.board[1].color = color;
+      state.board[2].color = color;
+    }
+    return true;
   }
   function settleBlocks() {
     if (kind !== 'blocks' || state.payoutSettled) return;
@@ -156,7 +176,7 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
         if (group.length > BLOCK_GROUP_LIMIT) { oversized = group; break; }
       }
       if (!oversized) break;
-      const next = (state.board[oversized[0]].color + 1) % 4;
+      const next = (state.board[oversized[0]].color + 1) % BLOCK_TYPE_COUNT;
       for (let i = 0; i < oversized.length; i += 2) state.board[oversized[i]] = tile({ color: next });
     }
   }
@@ -166,8 +186,13 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
       if (largestGroup() <= BLOCK_GROUP_LIMIT) break;
     }
     breakOversized();
-    ensurePlayable();
+    reshuffle();
     breakOversized();
+    if (largestGroup() < 3) {
+      const color = state.board[0].color;
+      state.board[1].color = color;
+      state.board[2].color = color;
+    }
   }
   if (kind === 'moles') {
     let remaining=40;
@@ -177,13 +202,11 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
     }
     spawnWave(now);
   }
-  function expireCombo(at) {
-    if (state.inputLocked || kind !== 'blocks' || state.combo <= 0 || state.lastClearAt == null) return;
-    if (at - state.lastClearAt > COMBO_WINDOW_MS) {
-      state.combo = 0; state.multiplier = 1; state.revision++;
-    }
+  function expireCombo() {
+    // The old 500ms window is gone. A block combo is the wave count of one click,
+    // so the clock must not clear it while tiles are falling or afterwards.
   }
-  // The fall animation blocks the next click. Hold the combo until the board accepts input again.
+  // The fall animation blocks the next click. The lock still rejects input until the drop finishes.
   function setInputLock(locked, at) {
     state.inputLocked = !!locked;
     if (!state.inputLocked && kind === 'blocks' && state.status === 'playing' && state.combo > 0) state.lastClearAt = at;
@@ -235,17 +258,16 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
     state.board = next;
     state.motion.push({ pops, moves, board: next.map(cell => ({ id: cell.id, color: cell.color })) });
   }
+  // Any connected 3+ after a fall is a cascade, including a group made only of
+  // tiles that fell together or only of tiles that just spawned.
   function chainGroup() {
-    let best=null; const seen=new Set();
-    for (let i=0;i<100;i++) {
-      if (seen.has(i)) continue;
-      const group=connectedBlocks(state.board,i);
-      group.forEach(n=>seen.add(n));
-      if (group.length<3) continue;
-      const moved=group.some(n=>state.board[n].fall>0 && !state.board[n].spawned);
-      const stayed=group.some(n=>state.board[n].fall<=0 && !state.board[n].spawned);
-      const spawnedOnto=group.some(n=>state.board[n].spawned) && stayed;
-      if ((moved && stayed) || spawnedOnto) if (!best || group.length>best.length) best=group;
+    let best = null;
+    const seen = new Set();
+    for (let i = 0; i < state.board.length; i++) {
+      if (seen.has(i) || !state.board[i]) continue;
+      const group = connectedBlocks(state.board, i);
+      group.forEach(n => seen.add(n));
+      if (group.length >= 3 && (!best || group.length > best.length)) best = group;
     }
     return best;
   }
@@ -270,41 +292,51 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
       } else { state.selected = index; breakCombo('翻错了，连击重置'); return 0; }
     }
     if (kind === 'blocks') {
+      if (largestGroup() < 3) {
+        reshuffle();
+        state.message = '没有可以消除的图案，已经重新洗牌';
+        state.revision++;
+        return 0;
+      }
       const group = connectedBlocks(state.board,index);
       if (group.length < 3) { breakCombo('至少 3 块同色相连才能消除'); return 0; }
       state.motion = [];
       const cleared = [];
       let counted = 0;
-      const scoreCells = (cells, countTowardCap) => {
-        const room = countTowardCap ? BLOCK_CLEAR_TARGET - state.removed : cells.length;
+      const scoreCells = cells => {
+        const room = BLOCK_CLEAR_TARGET - state.removed;
         const used = Math.max(0, Math.min(cells.length, room));
-        if (countTowardCap) { state.removed += used; counted += used; }
+        state.removed += used;
+        counted += used;
         const gained = used * BLOCK_POINT;
         points += gained;
         state.score += gained;
         cleared.push(...cells);
         collapse(new Set(cells));
-        return countTowardCap && state.removed >= BLOCK_CLEAR_TARGET;
+        return state.removed >= BLOCK_CLEAR_TARGET;
       };
-      let capped = scoreCells(group, true);
-      const continuing = state.combo > 0 && state.lastClearAt != null && at - state.lastClearAt <= COMBO_WINDOW_MS;
-      state.combo = continuing ? state.combo + 1 : 1;
+      // This click starts its own chain. Wave 1 is the tap; each cascade is another wave.
+      state.combo = 1;
       state.lastClearAt = at;
       state.multiplier = comboMultiplier(state.combo);
-      state.bestCombo = Math.max(state.bestCombo, state.combo);
-      state.bestMultiplier = comboMultiplier(state.bestCombo);
+      let capped = scoreCells(group);
       let chains = 0;
       if (!capped) {
         for (let step = 0; step < MAX_BLOCK_CHAINS; step++) {
           const chain = chainGroup();
           if (!chain) break;
           chains += 1;
-          scoreCells(chain, false);
+          state.combo += 1;
+          state.multiplier = comboMultiplier(state.combo);
+          capped = scoreCells(chain);
+          if (capped) break;
         }
       }
-      if (!capped) ensurePlayable();
+      state.bestCombo = Math.max(state.bestCombo, state.combo);
+      state.bestMultiplier = comboMultiplier(state.bestCombo);
+      const shuffled = !capped && reshuffle();
       if (state.motion.length) state.motionSeq += 1;
-      state.message = `消除 ${counted} 块！基础 +${points}${chains ? ` · 连锁 ${chains}` : ''}${capped ? ` · 已到 ${BLOCK_CLEAR_TARGET} 块` : ''} · ${state.combo} 连击 ${formatComboMultiplier(state.combo)}`;
+      state.message = `消除 ${counted} 块！基础 +${points}${chains ? ` · 连锁 ${chains}` : ''}${capped ? ` · 已到 ${BLOCK_CLEAR_TARGET} 块` : ''} · ${state.combo} 连击 ${formatComboMultiplier(state.combo)}${shuffled ? ' · 已重新洗牌' : ''}`;
       state.fx = { id:++fxId, kind, broken:false, points, combo:state.combo, multiplier:state.multiplier, cells:cleared, chains };
     }
     if (kind === 'moles') {

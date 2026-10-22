@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { connectedBlocks, BLOCK_CLEAR_TARGET, BLOCK_DURATION, MINI_DURATION, comboPoints, formatComboMultiplier, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS, AFK_BALL_TEXT, MOLE_WAVE_MS, MOLE_FLIP_MS } from '../src/mini-games.js';
+import { connectedBlocks, BLOCK_CLEAR_TARGET, BLOCK_DURATION, BLOCK_POINT, MINI_DURATION, comboPoints, formatComboMultiplier, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS, AFK_BALL_TEXT, MOLE_WAVE_MS, MOLE_FLIP_MS } from '../src/mini-games.js';
 import { SECRET_BALLS } from '../src/round.js';
 const executablePath=process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined);
 const browser=await chromium.launch({executablePath,args:process.platform==='linux'?['--no-sandbox']:[]});
@@ -81,7 +81,7 @@ try {
   assert.equal((await mini()).kind,kind);
   assert.equal(await page.locator('#mini-rule').isVisible(),false,'the long rule leaves the in-game header');
  }
- async function settleMotion(){for(let i=0;i<40;i++){if(await page.locator('#mini-game').getAttribute('data-busy')!=='1')return;await page.clock.runFor(80);}assert.notEqual(await page.locator('#mini-game').getAttribute('data-busy'),'1','gravity animation releases the board');}
+ async function settleMotion(){for(let i=0;i<80;i++){if(await page.locator('#mini-game').getAttribute('data-busy')!=='1')return;await page.clock.runFor(80);}assert.notEqual(await page.locator('#mini-game').getAttribute('data-busy'),'1','gravity animation releases the board');}
  async function cell(index){await page.locator(`[data-cell="${index}"]`).evaluate(el=>el.click());}
  async function back(){await page.locator('#mini-return').click();await page.clock.runFor(50);assert.equal(await page.locator('#settings').evaluate(el=>el.open),true);}
  await page.setViewportSize({width:375,height:812});
@@ -112,17 +112,18 @@ try {
  assert.equal((await mini()).played,true);assert.equal(await page.locator('#mini-result-balls').evaluate(el=>el.hidden),true,'a played GM round does not show a ball grant');
  await back();
  await start('blocks');assert.equal(await page.locator('#mini-grid button').count(),100);initial=await score();
- const colors=await page.evaluate(()=>[0,1,2,3].map(i=>{const el=document.querySelector(`.mini-color-${i}`),c=document.createElement('canvas').getContext('2d');c.fillStyle=getComputedStyle(el).backgroundColor;c.fillRect(0,0,1,1);return [...c.getImageData(0,0,1,1).data].slice(0,3);}));
- for(let i=0;i<4;i++)for(let j=i+1;j<4;j++)assert.ok(Math.max(...colors[i].map((v,k)=>Math.abs(v-colors[j][k])))>=10,'night puzzle colors remain visually distinct');
+ const colors=await page.evaluate(()=>{const probe=document.createElement('div');probe.className='mini-cell';document.body.append(probe);const read=i=>{probe.className=`mini-cell mini-color-${i}`;const c=document.createElement('canvas').getContext('2d');c.fillStyle=getComputedStyle(probe).backgroundColor;c.fillRect(0,0,1,1);return [...c.getImageData(0,0,1,1).data].slice(0,3);};const found=[0,1,2,3,4].map(read);probe.remove();return found;});
+ for(let i=0;i<5;i++)for(let j=i+1;j<5;j++)assert.ok(Math.max(...colors[i].map((v,k)=>Math.abs(v-colors[j][k])))>=10,'night puzzle colors remain visually distinct');
+ assert.equal(await page.locator('#mini-grid .mini-cell svg').count(),100,'block tiles use the pair fruit icons');
  await page.screenshot({path:'test-results/mini-blocks-night-mobile.png'});await page.screenshot({path:'test-results/mini-blocks-preview.jpg',type:'jpeg',quality:55});
  let moves=0;
  let sawLock=false;
- while((await mini()).status==='playing'&&(await mini()).removed<BLOCK_CLEAR_TARGET&&moves++<120){const board=(await mini()).board;const index=board.findIndex((_,i)=>connectedBlocks(board,i).length>=3);assert.ok(index>=0);await cell(index);if(!sawLock){assert.equal(await page.locator('#mini-game').getAttribute('data-busy'),'1','a clear locks input while tiles fall');sawLock=true;}await settleMotion();}
+ while((await mini()).status==='playing'&&(await mini()).removed<BLOCK_CLEAR_TARGET&&moves++<220){const board=(await mini()).board;const index=board.findIndex((_,i)=>connectedBlocks(board,i).length>=3);assert.ok(index>=0);await cell(index);if(!sawLock){assert.equal(await page.locator('#mini-game').getAttribute('data-busy'),'1','a clear locks input while tiles fall');sawLock=true;}await settleMotion();}
  await settleMotion();
  const blocks=await mini();
- assert.equal(blocks.status,'complete','100 cleared blocks end 消消乐');
+ assert.equal(blocks.status,'complete','200 cleared blocks end 消消乐');
  assert.equal(blocks.removed,BLOCK_CLEAR_TARGET);
- assert.ok(blocks.baseScore>=BLOCK_CLEAR_TARGET*10);
+ assert.equal(blocks.baseScore,BLOCK_CLEAR_TARGET*BLOCK_POINT);
  assert.equal(blocks.score,Math.round(blocks.baseScore*blocks.bestMultiplier));
  assert.equal(await page.locator('#mini-round').textContent(),`已消除 ${BLOCK_CLEAR_TARGET}/${BLOCK_CLEAR_TARGET}`);
  assert.equal(await score(),initial+blocks.score);
@@ -191,7 +192,7 @@ try {
  const kind=(await mini()).kind;
  assert.notEqual(kind,previousKind,'the next secret mini-game differs from the previous one');
  assert.equal((await state()).lastMiniGame,kind);
- for(let step=0;step<50 && (await mini()).status==='playing' && (kind==='blocks'?(await mini()).removed<BLOCK_CLEAR_TARGET:(await mini()).score<1000);step++){
+ for(let step=0;step<160 && (await mini()).status==='playing' && (kind==='blocks'?(await mini()).removed<BLOCK_CLEAR_TARGET:(await mini()).score<1000);step++){
   const board=(await mini()).board;
   if(kind==='pairs'){
    const open=board.flatMap((cell,index)=>cell?[{...cell,index}]:[]);

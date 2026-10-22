@@ -1,4 +1,4 @@
-import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_COLORS, BLOCK_SYMBOLS, MINI_HIT_SHAKE, MINI_HIT_MS, comboMultiplier, formatComboMultiplier, PAIR_DURATION, PAIR_TARGET, PAIR_CLEAR_BONUS, AFK_BALL_TEXT, miniGameIdle, miniIntro, MOLE_FLIP_MS } from './mini-games.js';
+import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_ICONS, MINI_HIT_SHAKE, MINI_HIT_MS, comboMultiplier, formatComboMultiplier, PAIR_DURATION, PAIR_TARGET, PAIR_CLEAR_BONUS, AFK_BALL_TEXT, miniGameIdle, miniIntro, MOLE_FLIP_MS } from './mini-games.js';
 import { PAIR_SVG } from './pair-icons.js';
 import { secretPayout } from './secret-wave.js';
 import { SECRET_BALLS } from './round.js';
@@ -116,11 +116,12 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
   }
   function faceBlock(button, cell, index) {
     button.dataset.tileId = String(cell.id);
+    const icon = BLOCK_ICONS[cell.color];
     button.className = `mini-cell mini-color-${cell.color}`;
     button.hidden = false;
     button.disabled = true;
-    button.textContent = BLOCK_SYMBOLS[cell.color];
-    button.setAttribute('aria-label', `${BLOCK_COLORS[cell.color]}色方块，第 ${Math.floor(index / 10) + 1} 行 ${index % 10 + 1} 列`);
+    button.innerHTML = icon.svg;
+    button.setAttribute('aria-label', `${icon.name}，第 ${Math.floor(index / 10) + 1} 行 ${index % 10 + 1} 列`);
     button.style.opacity = '';
     button.style.transform = '';
   }
@@ -140,9 +141,10 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
       if (!cell) { button.classList.add('mini-removed'); button.disabled = true; button.textContent = ''; delete button.dataset.icon; button.setAttribute('aria-label', '已消除'); return; }
       if (s.kind === 'pairs') { button.dataset.icon = cell.icon; button.innerHTML = PAIR_SVG[cell.icon] || ''; button.setAttribute('aria-label', `${cell.name}，第 ${index + 1} 格`); button.classList.toggle('mini-selected', s.selected === index); }
       if (s.kind === 'blocks') {
+        const icon = BLOCK_ICONS[cell.color];
         button.classList.add(`mini-color-${cell.color}`);
-        button.textContent = BLOCK_SYMBOLS[cell.color];
-        button.setAttribute('aria-label', `${BLOCK_COLORS[cell.color]}色方块，第 ${Math.floor(index / 10) + 1} 行 ${index % 10 + 1} 列`);
+        button.innerHTML = icon.svg;
+        button.setAttribute('aria-label', `${icon.name}，第 ${Math.floor(index / 10) + 1} 行 ${index % 10 + 1} 列`);
       }
       if (s.kind === 'moles') {
         button.classList.add('mini-hole');
