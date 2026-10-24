@@ -179,10 +179,8 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       const gradient = ctx.createRadialGradient(hole.x, hole.y, 0, hole.x, hole.y, 19); gradient.addColorStop(0, paintColor('#293b39')); gradient.addColorStop(.7, paintColor('#536753')); gradient.addColorStop(1, paintColor('#b5b697'));
       circle(hole.x, hole.y, 18, gradient, '#ede0a2', 3);
       star(hole.x, hole.y, 7, '#ecda90', t * .25);
-      // The launch wall is immediately right of the cup, so both captions sit
-      // on the playfield side of the ring.
-      text(`+${500 * bonus.multiplier}`, hole.x - 24, hole.y - 46, 15, '#b39153', 'bold');
-      text('秘密洞', hole.x - 18, hole.y + 50, 12, '#9e9375');
+      text(`+${500 * bonus.multiplier}`, hole.x, hole.y - 51, 15, '#b39153', 'bold');
+      text('秘密洞', hole.x, hole.y + 52, 12, '#9e9375');
     }
     for (const guard of game.guards) bodyShape(guard, guard.plugin.storage ? '#b9a6ce' : '#d8c69c', guard.plugin.storage ? '#f4eafb' : '#efe5c8', false);
     const storage = game.collector;

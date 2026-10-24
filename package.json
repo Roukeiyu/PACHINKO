@@ -19,8 +19,8 @@
     "test:3d": "node tests/scene-motion.mjs && node tests/3d-browser.mjs",
     "test:rewards": "node tests/reward-effects.mjs && node tests/reward-browser.mjs",
     "test:collections": "node tests/collections.mjs && node tests/collections-browser.mjs",
-    "test:mini-games:rules": "node tests/mini-games.mjs && node tests/secret-gate.mjs && node tests/secret-wave.mjs",
-    "test:mini-games": "npm run test:mini-games:rules && node tests/mini-games-browser.mjs"
+    "test:mini-games:rules": "node tests/mini-games.mjs && node tests/secret-gate.mjs && node tests/secret-wave.mjs && node tests/mini-sling.mjs",
+    "test:mini-games": "npm run test:mini-games:rules && node tests/mini-games-browser.mjs && node tests/mini-sling-browser.mjs"
   },
   "dependencies": {
     "matter-js": "^0.20.0",

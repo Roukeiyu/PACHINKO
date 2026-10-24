@@ -132,7 +132,7 @@ try {
       await page.locator(`[data-cell="${groups[1][0].index}"]`).evaluate(el => el.click());
     } else if (board.kind === 'stars') {
       await idleStars(page);
-    } else if (board.kind === 'aim') {
+    } else if (board.kind === 'aim' || board.kind === 'sling') {
       await page.clock.fastForward(miniWait);
     } else {
       const index = board.board.findIndex((_, cell) => connectedBlocks(board.board, cell).length < 3);
@@ -155,6 +155,11 @@ try {
         const star = live.items.find(item => item.kind === 'star' && !item.resolved);
         if (star) await parkBasket(page, star.x);
         await page.clock.fastForward(200);
+      }
+    } else if (board.kind === 'sling') {
+      for (let shot = 0; shot < 4 && !(await page.evaluate(() => window.__ponpon.miniGame.played)); shot++) {
+        await dragAim(page, 42, -18);
+        await page.clock.fastForward(800);
       }
     } else if (board.kind === 'aim') {
       const elapsed = board.lastSim - board.startedAt;
@@ -187,8 +192,10 @@ try {
       const field = document.querySelector('#mini-field');
       const rect = field.getBoundingClientRect();
       const client = (x, y) => ({ x: rect.left + (x / 320) * rect.width, y: rect.top + (y / 420) * rect.height });
-      const rest = client(160, 372);
-      const pulled = client(160 - dx, 372 - dy);
+      const sling = document.querySelector('#mini-game').dataset.kind === 'sling';
+      const x = sling ? 58 : 160, y = sling ? 298 : 372;
+      const rest = client(x, y);
+      const pulled = client(x - dx, y - dy);
       const opts = (x, y) => ({ bubbles: true, clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse', isPrimary: true });
       field.dispatchEvent(new PointerEvent('pointerdown', opts(rest.x, rest.y)));
       field.dispatchEvent(new PointerEvent('pointermove', opts(pulled.x, pulled.y)));
@@ -259,6 +266,9 @@ try {
   await confirmMini();
   const thirdKind = await page.evaluate(() => window.__ponpon.miniGame.kind);
   assert.notEqual(thirdKind, playedKind, 'two secret visits in one page never repeat');
+  // A stationary basket can catch stars by itself. Keep it clear while this
+  // visit specifically tests the absence of any scoring action.
+  if (thirdKind === 'stars') await idleStars(page);
   await page.clock.fastForward(miniWait);
   await page.clock.runFor(40);
   assert.equal(await page.locator('#mini-result-balls').textContent(), AFK_BALL_TEXT);

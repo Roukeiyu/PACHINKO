@@ -2,8 +2,10 @@ import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_IC
 import { PAIR_SVG } from './pair-icons.js';
 import { secretPayout } from './secret-wave.js';
 import { SECRET_BALLS } from './round.js';
+import { SLING_TARGET, SLING_WIN_BONUS } from './mini-sling.js';
+import { renderSling } from './mini-sling-view.js';
 
-export const miniGameMarkup = `<dialog id="mini-game" class="mini-dialog" aria-labelledby="mini-title" aria-describedby="mini-rule" data-phase="intro"><div class="mini-inner"><div class="mini-heading"><span class="mini-eyebrow">秘密小游戏</span><span id="mini-round" hidden></span></div><h2 id="mini-title"></h2><div id="mini-intro"><p id="mini-rule"></p><dl class="mini-facts"><div><dt>时间</dt><dd id="mini-intro-time"></dd></div><div><dt>目标</dt><dd id="mini-intro-goal"></dd></div><div><dt>奖励</dt><dd id="mini-intro-reward"></dd></div></dl><button type="button" id="mini-start">开始</button></div><div id="mini-play" hidden><div class="mini-hud"><span>剩余 <strong id="mini-time">30</strong> 秒</span><span id="mini-combo" class="mini-combo" aria-live="polite"></span><span>本局 <strong id="mini-score">0</strong> 分<span id="mini-bonus" class="mini-bonus">×2</span></span></div><progress id="mini-progress" max="${MINI_DURATION}" value="${MINI_DURATION}" aria-label="小游戏剩余时间"></progress><div id="mini-stage"><div id="mini-fx" class="mini-fx" aria-hidden="true"></div><div id="mini-grid" class="mini-grid"></div><div id="mini-field" class="mini-field" hidden tabindex="-1"></div></div><p id="mini-message" role="status"></p><div id="mini-result" hidden><div class="mini-result-mark">✦</div><h3 id="mini-result-title"></h3><p id="mini-result-math" class="mini-result-math" hidden></p><p id="mini-result-score"></p><p id="mini-result-balls" class="mini-result-balls" hidden></p><button class="done-button" id="mini-return">返回球台</button></div></div></div></dialog>`;
+export const miniGameMarkup = `<dialog id="mini-game" class="mini-dialog" aria-labelledby="mini-title" aria-describedby="mini-rule" data-phase="intro"><div class="mini-inner"><div class="mini-heading"><span class="mini-eyebrow">秘密小游戏</span><span id="mini-round" hidden></span></div><h2 id="mini-title"></h2><div id="mini-intro"><p id="mini-rule"></p><dl class="mini-facts"><div><dt>时间</dt><dd id="mini-intro-time"></dd></div><div><dt>目标</dt><dd id="mini-intro-goal"></dd></div><div><dt>奖励</dt><dd id="mini-intro-reward"></dd></div></dl><button type="button" id="mini-start">开始</button></div><div id="mini-play" hidden><div class="mini-hud"><span>剩余 <strong id="mini-time">30</strong> 秒</span><span id="mini-combo" class="mini-combo" aria-live="polite"></span><span>本局 <strong id="mini-score">0</strong> 分<span id="mini-bonus" class="mini-bonus">×2</span></span></div><progress id="mini-progress" max="${MINI_DURATION}" value="${MINI_DURATION}" aria-label="小游戏剩余时间"></progress><div id="mini-stage"><div id="mini-fx" class="mini-fx" aria-hidden="true"></div><div id="mini-grid" class="mini-grid"></div><div id="mini-field" class="mini-field" hidden tabindex="-1"></div></div><p id="mini-message" role="status"></p><button type="button" id="mini-stop" hidden>结束本局</button><div id="mini-result" hidden><div class="mini-result-mark">✦</div><h3 id="mini-result-title"></h3><p id="mini-result-math" class="mini-result-math" hidden></p><p id="mini-result-score"></p><p id="mini-result-balls" class="mini-result-balls" hidden></p><button class="done-button" id="mini-return">返回球台</button></div></div></div></dialog>`;
 export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {}, vibrate = () => {} }) {
   const $ = selector => root.querySelector(selector);
   let game=null, source=null, scoreMultiplier=1, revision=-1, fxId=0, settled=false, buttons=[], ballGrant=SECRET_BALLS, busy=false, motionSeen=0, motionToken=0, pending=null, confirmKey=false, flipping=false, flipToken=0;
@@ -296,8 +298,8 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     } else aim.hidden = true;
   }
   function showResult(s) {
-    settled=true;$('#mini-grid').hidden=true;$('#mini-field').hidden=true;$('#mini-message').hidden=true;$('#mini-result').hidden=false;
-    $('#mini-result-title').textContent=s.status==='complete'?'挑战完成！':'时间到啦';
+    settled=true;$('#mini-stop').hidden=true;$('#mini-grid').hidden=true;$('#mini-field').hidden=true;$('#mini-message').hidden=true;$('#mini-result').hidden=false;
+    $('#mini-result-title').textContent=s.kind==='sling' ? (s.won?'拆塔成功！':s.status==='aborted'?'本局已结束':'时间到，再接再厉') : s.status==='complete'?'挑战完成！':'时间到啦';
     const math=$('#mini-result-math');
     if (s.kind==='blocks') {
       math.hidden=false;
@@ -309,6 +311,9 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
       math.hidden=false;
       math.textContent=`全部配对 +${PAIR_CLEAR_BONUS}`;
       math.classList.remove('is-on'); void math.offsetWidth; math.classList.add('is-on');
+    } else if (s.kind==='sling') {
+      math.hidden=false;
+      math.textContent=`击落 ${s.removed}/${SLING_TARGET} 块${s.won ? ` · 过关 +${SLING_WIN_BONUS}` : ''}`;
     } else { math.hidden=true; math.textContent=''; math.classList.remove('is-on'); }
     const paid=secretPayout(s.score, scoreMultiplier);
     const moleNote=s.kind==='moles'?` · 打中 ${s.hit}/40 只`:'';
@@ -330,7 +335,7 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     $('#mini-score').textContent=s.score.toLocaleString();
     $('#mini-score').classList.toggle('is-hot', s.combo>=4);
     const combo=$('#mini-combo');
-    combo.textContent=s.kind==='blocks'||s.combo?`${s.combo} 连击 ${formatComboMultiplier(s.combo)}`:'连击 —';
+    combo.textContent=s.kind==='sling' ? `目标 ${SLING_TARGET} 块` : s.kind==='blocks'||s.combo?`${s.combo} 连击 ${formatComboMultiplier(s.combo)}`:'连击 —';
     combo.dataset.tier=String(Math.min(4,s.combo));
     combo.classList.toggle('is-on', s.combo>0);
     $('#mini-bonus').classList.toggle('is-on', scoreMultiplier > 1);
@@ -352,6 +357,12 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
       progress.setAttribute('aria-label','小游戏剩余时间');
       $('#mini-round').textContent=`接住 ${s.hit}`;
       renderStars(s);
+    } else if (s.kind==='sling') {
+      progress.max=SLING_TARGET;
+      progress.value=Math.min(s.removed, SLING_TARGET);
+      progress.setAttribute('aria-label','已击落方块');
+      $('#mini-round').textContent=`击落 ${s.removed}/${SLING_TARGET}`;
+      renderSling($('#mini-field'),s);
     } else if (s.kind==='aim') {
       progress.max=AIM_DURATION;
       progress.value=game.remaining(visibleAt);
@@ -371,7 +382,7 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
       const clearing = s.kind === 'moles' && s.flipUntil > 0;
       if (falling) { motionSeen = s.motionSeq; playMotion(s.motion); }
       else if (clearing) { if (!flipping) renderBoard(s); playFlip(s); }
-      else if (!busy && s.kind !== 'stars' && s.kind !== 'aim') renderBoard(s);
+      else if (!busy && MINI_GAMES[s.kind].columns > 0) renderBoard(s);
       if (s.fx && s.fx.id !== fxId) {
         fxId = s.fx.id;
         const cells = falling && s.motion[0]?.pops?.length ? s.motion[0].pops.map(pop => pop.index) : s.fx.cells;
@@ -396,6 +407,8 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     $('#mini-intro').hidden=true; $('#mini-play').hidden=false; $('#mini-round').hidden=false;
     $('#mini-grid').classList.remove('is-falling','is-flipping'); $('#mini-message').hidden=false; $('#mini-result').hidden=true;
     const action = !(definition.columns > 0);
+    dragging = false;
+    $('#mini-stop').hidden = kind !== 'sling';
     $('#mini-grid').hidden = action;
     $('#mini-field').hidden = !action;
     $('#mini-field').replaceChildren();
@@ -426,6 +439,11 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     root.showModal(); $('#mini-start').focus(); return true;
   }
   $('#mini-start').addEventListener('click',()=>beginRound());
+  $('#mini-stop').addEventListener('click',()=>{
+    if (game?.state.kind !== 'sling' || settled) return;
+    dragging=false;
+    game.tick(visibleNow(performance.now())); game.stop(); paint();
+  });
   root.addEventListener('keydown',event=>{
     if (event.key!=='Enter' && event.key!==' ') return;
     if (root.dataset.phase!=='intro' && !confirmKey) return;
@@ -457,30 +475,44 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
   }
   const field = $('#mini-field');
   let dragging = false;
+  let dragPointer = null;
+  const slingNow = () => { if (game?.state.kind === 'sling') game.tick(visibleNow(performance.now())); };
   field.addEventListener('pointerdown', event => {
     if (!game || settled || game.state.status !== 'playing') return;
+    if (game.state.kind === 'sling' && (dragging || event.button > 0)) return;
+    slingNow();
+    if (game.state.status !== 'playing') { paint(); return; }
     dragging = true;
+    dragPointer = event.pointerId;
     try { field.setPointerCapture(event.pointerId); } catch { /* a synthetic test event has no pointer */ }
     const point = fieldPoint(event);
     if (game.state.kind === 'stars') game.setBasket(point.x);
-    else if (game.state.kind === 'aim') game.setAim(point);
+    else if (game.state.kind === 'aim' || game.state.kind === 'sling') game.setAim(point);
     paint();
   });
   field.addEventListener('pointermove', event => {
     if (!dragging || !game || settled || game.state.status !== 'playing') return;
+    if (game.state.kind === 'sling' && event.pointerId !== dragPointer) return;
+    slingNow();
     const point = fieldPoint(event);
     if (game.state.kind === 'stars') game.setBasket(point.x);
-    else if (game.state.kind === 'aim') game.setAim(point);
+    else if (game.state.kind === 'aim' || game.state.kind === 'sling') game.setAim(point);
     paint();
   });
   field.addEventListener('pointerup', event => {
     if (!dragging || !game || settled) return;
+    if (game.state.kind === 'sling' && event.pointerId !== dragPointer) return;
     dragging = false;
-    if (game.state.kind === 'aim' && game.state.status === 'playing') game.release();
+    slingNow();
+    if ((game.state.kind === 'aim' || game.state.kind === 'sling') && game.state.status === 'playing') game.release();
     try { if (field.hasPointerCapture(event.pointerId)) field.releasePointerCapture(event.pointerId); } catch { /* already released */ }
     paint();
   });
-  field.addEventListener('pointercancel', () => { dragging = false; if (game?.state.kind === 'aim') game.clearAim(); paint(); });
+  function cancelDrag() { dragging = false; if (game?.clearAim) game.clearAim(); paint(); }
+  field.addEventListener('pointercancel', cancelDrag);
+  field.addEventListener('lostpointercapture', () => { if (dragging) cancelDrag(); });
+  window.addEventListener('blur', cancelDrag);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) cancelDrag(); });
   root.addEventListener('keydown', event => {
     if (root.dataset.phase !== 'play' || !game || game.state.kind !== 'stars') return;
     if (!['ArrowLeft', 'ArrowRight', 'a', 'A', 'd', 'D'].includes(event.key)) return;
@@ -494,7 +526,7 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     starHold();
   });
   window.addEventListener('blur', () => { held.clear(); if (game?.state.kind === 'stars') game.setHold(0); });
-  $('#mini-return').addEventListener('click',()=>{if(!settled)return;motionToken++;busy=false;confirmKey=false;pending=null;const origin=source;root.close();game=null;source=null;onExit(origin);});
+  $('#mini-return').addEventListener('click',()=>{if(!settled)return;motionToken++;busy=false;confirmKey=false;pending=null;const origin=source;game?.dispose?.();dragging=false;root.close();game=null;source=null;onExit(origin);});
   root.addEventListener('cancel',event=>event.preventDefault());
   return { start, update(now){if(!(root.open&&game&&!settled)||document.hidden){if(document.hidden)lastWall=0;return;}game.tick(visibleNow(now));paint();}, get open(){return root.open;}, get source(){return source;}, snapshot:()=>game?.snapshot()??null };
 }

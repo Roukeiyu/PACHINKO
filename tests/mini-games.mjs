@@ -17,7 +17,7 @@ assert.equal(PAIR_POINT,40);assert.equal(PAIR_TARGET,32);assert.equal(PAIR_DURAT
 assert.equal(PAIR_ICON_LIST.length,32);assert.equal(new Set(PAIR_ICON_LIST.map(icon=>icon.id)).size,32);
 assert.equal(PAIR_SUIT_COUNT,16);assert.equal(PAIR_COPIES,4);assert.equal(PAIR_SUITS.length,16);
 assert.equal(new Set(PAIR_SUITS.map(icon=>icon.id)).size,16);assert.ok(PAIR_SUITS.every(icon=>PAIR_ICON_LIST.includes(icon)));
-assert.deepEqual(Object.values(MINI_GAMES).map(d=>[d.columns,d.rows]),[[8,8],[10,10],[4,4],[0,0],[0,0]]);
+assert.deepEqual(Object.values(MINI_GAMES).map(d=>[d.columns,d.rows]),[[8,8],[10,10],[4,4],[0,0],[0,0],[0,0]]);
 assert.equal(AFK_BALL_TEXT,'挂机未操作 · 无小球奖励');
 const pairsCard=miniIntro('pairs',{source:'secret',ballGrant:20,doubled:false});
 assert.equal(pairsCard.title,'对对碰');assert.equal(pairsCard.rule,MINI_GAMES.pairs.rule);assert.equal(pairsCard.time,'30 秒');assert.equal(pairsCard.goal,'配完 32 对，或时间到');
@@ -30,19 +30,19 @@ assert.ok(miniIntro('stars').rule.includes(String(STAR_BOMB_PENALTY)));
 assert.equal(miniIntro('aim').time,'30 秒，或 5 颗弹珠');assert.equal(miniIntro('aim').goal,'打中滑动靶，或时间到');
 assert.equal(miniIntro('moles',{source:'gm',doubled:true}).reward,'试玩只记快乐积分。挂机未操作不发小球');
 assert.throws(()=>miniIntro('other'),RangeError);
-assert.deepEqual([0,.2,.4,.6,.9].map(r=>randomMiniGame(()=>r)),['pairs','blocks','moles','stars','aim']);
+assert.deepEqual([0,.17,.34,.51,.68,.85].map(r=>randomMiniGame(()=>r)),['pairs','blocks','moles','stars','aim','sling']);
 assert.equal(randomMiniGame(()=>0,'nope'),'pairs','an unknown previous still uses the full pool');
 assert.equal(randomMiniGame(()=>0,'pairs'),'blocks');
-assert.equal(randomMiniGame(()=>.99,'pairs'),'aim');
+assert.equal(randomMiniGame(()=>.99,'pairs'),'sling');
 assert.equal(randomMiniGame(()=>0,'blocks'),'pairs');
-assert.equal(randomMiniGame(()=>.99,'blocks'),'aim');
+assert.equal(randomMiniGame(()=>.99,'blocks'),'sling');
 assert.equal(randomMiniGame(()=>0,'moles'),'pairs');
-assert.equal(randomMiniGame(()=>.99,'moles'),'aim');
+assert.equal(randomMiniGame(()=>.99,'moles'),'sling');
 assert.equal(randomMiniGame(()=>0,'stars'),'pairs');
-assert.equal(randomMiniGame(()=>.99,'stars'),'aim');
+assert.equal(randomMiniGame(()=>.99,'stars'),'sling');
 assert.equal(randomMiniGame(()=>0,'aim'),'pairs');
-assert.equal(randomMiniGame(()=>.99,'aim'),'stars');
-for (const previous of ['pairs','blocks','moles','stars','aim']) {
+assert.equal(randomMiniGame(()=>.99,'aim'),'sling');
+for (const previous of Object.keys(MINI_GAMES)) {
   for (let i=0;i<30;i++) assert.notEqual(randomMiniGame(Math.random,previous),previous,'the next mini-game is never the previous one');
 }
 assert.throws(()=>createMiniGame('other'),RangeError);

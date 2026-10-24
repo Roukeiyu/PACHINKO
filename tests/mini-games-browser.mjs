@@ -83,7 +83,7 @@ try {
  assert.match(await page.locator('#mini-intro-reward').textContent(),/挂机未操作，无小球奖励/);
  assert.equal(await page.locator('#mini-game').evaluate(el=>el.scrollHeight<=el.clientHeight+1),true,'the phone intro fits without scrolling');
  const before=await score(),clock=s.gameClock,stockBeforeMini=s.available,firstKind=s.lastMiniGame;
- assert.ok(['pairs','blocks','moles','stars','aim'].includes(firstKind),'starting a secret mini-game remembers it before confirm');
+ assert.ok(['pairs','blocks','moles','stars','aim','sling'].includes(firstKind),'starting a secret mini-game remembers it before confirm');
  await page.keyboard.press('Escape');assert.equal(await page.locator('#mini-game').evaluate(el=>el.open),true);
  await page.clock.fastForward(5000);s=await state();
  assert.equal(s.miniGame,null,'waiting on the intro does not create the game');
@@ -288,6 +288,9 @@ try {
    const star=live.items.find(item=>!item.resolved&&item.kind==='star');
    if(star) await parkBasket(star.x);
    await page.clock.fastForward(500);
+  }else if(kind==='sling'){
+   await page.evaluate(()=>{ const f=document.querySelector('#mini-field'),r=f.getBoundingClientRect(); const fire=(type,x,y)=>f.dispatchEvent(new PointerEvent(type,{bubbles:true,pointerId:1,clientX:r.left+x/320*r.width,clientY:r.top+y/420*r.height})); fire('pointerdown',58,298);fire('pointermove',16,316);fire('pointerup',16,316); });
+   await page.clock.fastForward(800);
   }else if(kind==='aim'){
    const shots=[{releaseAt:1440,dx:24,dy:-86},{releaseAt:5544,dx:24,dy:-86},{releaseAt:8568,dx:24,dy:-86},{releaseAt:11112,dx:-12,dy:-86},{releaseAt:13480,dx:0,dy:-86}];
    const elapsed=live.lastSim-live.startedAt;

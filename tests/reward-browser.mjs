@@ -36,7 +36,8 @@ async function setup(fallback = false, viewport = { width: 1440, height: 1180 })
         // the new secret workflow waits for the remaining field to drain.
         const waiting=launch();waiting.entered=true;Body.setPosition(waiting.body,{x:350,y:200});Body.setVelocity(waiting.body,{x:0,y:0});
         const hole = holes[0], ball = launch(); ball.entered = true;
-        Body.setPosition(ball.body, {x:hole.x-47,y:hole.y-2}); Body.setVelocity(ball.body,{x:5,y:-1});
+        Body.setPosition(ball.body, {x:hole.x+Math.cos(hole.facing)*47,y:hole.y+Math.sin(hole.facing)*47});
+        Body.setVelocity(ball.body,{x:-Math.cos(hole.facing)*5,y:-Math.sin(hole.facing)*5});
         for(let i=0;i<45 && balls.includes(ball);i++) step();
       }, drain() {
         for(const ball of [...balls]) {ball.entered=true;Body.setPosition(ball.body,{x:90,y:TABLE.scoreLine-1});Body.setVelocity(ball.body,{x:0,y:6});}step();
