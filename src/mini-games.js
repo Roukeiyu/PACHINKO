@@ -52,8 +52,8 @@ export const MINI_GAMES = Object.freeze({
   pairs: { title: '对对碰', rule: `64 张牌排成 8×8，16 种图案，每种 4 张，同花色任意两张都能配对。配完全部 ${PAIR_TARGET} 对，或玩满 ${PAIR_DURATION / 1000} 秒，先到先结算。每对 ${PAIR_POINT} 分。连续配对会累加连击，点错则连击重置。${PAIR_DURATION / 1000} 秒内配完，额外 +${PAIR_CLEAR_BONUS}。只翻开一张，或翻错，都不算有效操作。整局没有配成一对，秘密洞不发小球。`, columns: 8, rows: 8 },
   blocks: { title: '消消乐', rule: `上下左右相连的同色图案，至少 3 个才能消除。五种水果。每块 ${BLOCK_POINT} 分，点掉和连锁都计入 ${BLOCK_CLEAR_TARGET} 个。开局同色不超过 ${BLOCK_GROUP_LIMIT} 个。满 ${BLOCK_CLEAR_TARGET} 个或 ${BLOCK_DURATION / 1000} 秒就结算；多出的只算到 ${BLOCK_CLEAR_TARGET}。连击是这一次点击的波数：点掉为 1，每波连锁 +1，下次点击从 1 重计。结束时按最高连击乘算。没有可消的会洗牌。点不满 3 个不算有效操作。整局没有消除，秘密洞不发小球。`, columns: 10, rows: 10 },
   moles: { title: '打地鼠', rule: '点击地鼠，白菜留着！每只 25 分，共 10 轮、40 只；每轮最多 3 秒，打完或到点后洞口一起翻面，翻完才换轮。不是地鼠的格子都是白菜。连续打中会累加连击；打到白菜，或这一轮有地鼠漏掉，连击重置。只点白菜、重复点已经打过的地鼠，或翻面时点击，都不算有效操作。整局没有打中，秘密洞不发小球。', columns: 4, rows: 4 },
-  stars: { title: '接星星', rule: `左右拖动篮子，或用方向键和 A D。接住星星得分，连续接住会连击。漏掉星星或接到炸弹，连击清零；炸弹再扣 ${STAR_BOMB_PENALTY} 分。星星更密集，30 秒内下落会变快。只接炸弹、或一个都没接住，不算有效操作。整局没有接住星星，秘密洞不发小球。`, columns: 0, rows: 0 },
-  sling: { title: '弹弓拆拆乐', rule: `这是俯视平台。左右拖动选择底部发射点，松手向上击打；也可点按发射。把方块整块推出固定边框才计分，区内滑动或晃动不算，离台后会在原处缩小掉落。30 秒内推出 ${SLING_TARGET} 块过关；每块 ${SLING_POINT} 分，过关再加 ${SLING_WIN_BONUS} 分。弹珠不限量，每 0.4 秒补一颗。换列击打，可借碰撞连锁推块。达标立即结算，时间到保留得分。只发射没推出方块不算有效操作，秘密洞不发小球。`, columns: 0, rows: 0 },
+  stars: { title: '接星星', rule: `在底部操作区或小游戏界面空白处点按、拖动，或用方向键和 A D 移动挡板；画框外会停在左右边缘。接住星星得分，连续接住会连击。漏掉星星或接到炸弹，连击清零；炸弹再扣 ${STAR_BOMB_PENALTY} 分。星星更密集，30 秒内下落会变快。只接炸弹、或一个都没接住，不算有效操作。整局没有接住星星，秘密洞不发小球。`, columns: 0, rows: 0 },
+  sling: { title: '弹弓拆拆乐', rule: `这是俯视平台。底部炮台固定在中心，拖动调整向上的射击方向，松手发射；也可点按瞄准发射。把方块整块推出固定边框才计分，区内滑动或晃动不算，离台后会在原处缩小掉落。5×5 共 ${SLING_TARGET} 块，30 秒内全部推出平台过关；每块 ${SLING_POINT} 分，过关再加 ${SLING_WIN_BONUS} 分。弹珠不限量，每 0.4 秒补一颗。换角度击打，可借碰撞连锁推块。达标立即结算，时间到保留得分。只发射没推出方块不算有效操作，秘密洞不发小球。`, columns: 0, rows: 0 },
 });
 export const BLOCK_COLORS = Object.freeze(BLOCK_ICONS.map(icon => icon.name));
 export const comboMultiplier = combo => combo > 0 ? 1 + (combo - 1) * COMBO_MULTIPLIER_STEP : 1;
@@ -90,7 +90,7 @@ export function randomMiniGame(random = Math.random, previous = null) {
 export function miniIntro(kind, { source = 'secret', ballGrant = 20, doubled = false } = {}) {
   if (!MINI_GAMES[kind]) throw new RangeError('Unknown mini-game');
   const time = kind === 'blocks' ? `${BLOCK_DURATION / 1000} 秒` : kind === 'moles' ? `${MINI_DURATION / 1000} 秒，每轮最多 3 秒` : `${PAIR_DURATION / 1000} 秒`;
-  const goal = kind === 'sling' ? `打出边框 ${SLING_TARGET} 块过关，最多 30 秒` : kind === 'pairs' ? `配完 ${PAIR_TARGET} 对，或时间到` : kind === 'blocks' ? `点掉 ${BLOCK_CLEAR_TARGET} 块，或时间到` : kind === 'stars' ? '接住星星，躲开炸弹' : '10 轮打完 40 只，或时间到';
+  const goal = kind === 'sling' ? `全部推出 ${SLING_TARGET} 块，最多 30 秒` : kind === 'pairs' ? `配完 ${PAIR_TARGET} 对，或时间到` : kind === 'blocks' ? `点掉 ${BLOCK_CLEAR_TARGET} 块，或时间到` : kind === 'stars' ? '接住星星，躲开炸弹' : '10 轮打完 40 只，或时间到';
   const grant = Math.max(0, Math.floor(Number(ballGrant)) || 0);
   const reward = source === 'gm'
     ? '试玩只记快乐积分。挂机未操作不发小球'
@@ -373,5 +373,5 @@ export function createMiniGame(kind, { random = Math.random, now = 0 } = {}) {
     if (kind === 'moles' && !state.flipUntil && state.board.every(c=>c.type !== 'mole'||c.hit)) armFlip(at);
     return points;
   }
-  return { state, tick, select, setInputLock, remaining: at => Math.max(0, Math.min(roundMs, state.deadline - at)), snapshot: () => structuredClone(state) };
+  return { state, tick, select, setInputLock, stop() { finish('aborted'); }, dispose() { finish('aborted'); }, remaining: at => Math.max(0, Math.min(roundMs, state.deadline - at)), snapshot: () => structuredClone(state) };
 }

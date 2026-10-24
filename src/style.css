@@ -324,3 +324,21 @@ html:not(.calm) .ball-count.is-low{animation:ball-low 900ms ease-in-out infinite
 .mini-sling-canvas{display:block;width:100%;height:100%;pointer-events:none}
 #mini-stop{margin:12px auto 0;padding:7px 18px;font-size:12px;background:transparent;border:1px solid var(--flow-line-dfe2d6,#dfe2d6);color:var(--ink)}
 #mini-stop:not([hidden]){display:block}
+.mini-star-control{flex:0 0 auto;min-height:52px;margin:8px 0 0;padding:10px;border:1px dashed var(--flow-line-a5be9d,#a5be9d);border-radius:12px;background:var(--flow-surface-edf1e5,#edf1e5);color:var(--ink);font-size:12px;text-align:center;touch-action:none;user-select:none}
+.mini-star-control:not([hidden]){display:flex;align-items:center;justify-content:center}
+.mini-dialog[data-kind=stars][data-phase=play]{width:min(610px,100vw);max-width:100vw;height:min(820px,100dvh);max-height:100dvh;overflow:hidden;touch-action:none}
+.mini-dialog[data-kind=stars][data-phase=play] .mini-inner{height:100%;box-sizing:border-box;display:flex;flex-direction:column;padding:12px 12px max(12px,env(safe-area-inset-bottom,0px))}
+.mini-dialog[data-kind=stars][data-phase=play] #mini-play{display:flex;flex-direction:column;flex:1;min-height:0}
+.mini-dialog[data-kind=stars][data-phase=play] #mini-stage{display:flex;align-items:center;justify-content:center;flex:1;min-height:100px;container-type:size}
+.mini-dialog[data-kind=stars][data-phase=play] .mini-field{width:min(100cqw,calc(100cqh * 320 / 420));max-height:100cqh;aspect-ratio:320/420;height:auto;margin:auto}
+.mini-dialog[data-kind=stars][data-phase=play] #mini-progress{margin-bottom:8px;flex:0 0 5px}
+.mini-dialog[data-kind=stars][data-phase=play] #mini-message{margin:4px 0 0;font-size:11px;min-height:16px}
+.mini-dialog[data-kind=stars][data-phase=play] #mini-stop{margin-top:6px}
+.mini-dialog[data-kind=stars] .mini-fall{width:8.75%;height:auto;aspect-ratio:1;margin:0;transform:translate(-50%,-50%)}
+.mini-dialog[data-kind=stars] .mini-fall svg{width:100%;height:100%}
+.mini-catch-pop{position:absolute;width:0;height:0;pointer-events:none;z-index:3}
+.mini-catch-spark{position:absolute;color:#d69b3a;font-style:normal;font-size:12px;text-shadow:0 1px #fff9df;animation:mini-catch-spark .44s ease-out forwards}
+@keyframes mini-catch-spark{0%{opacity:0;transform:translate(-50%,0) scale(.5)}25%{opacity:1}100%{opacity:0;transform:translate(calc(-50% + var(--catch-x)),var(--catch-y)) scale(1.1)}}
+.mini-catch-pop.is-soft .mini-catch-spark{animation:mini-catch-fade .18s linear forwards}
+@keyframes mini-catch-fade{to{opacity:0}}
+.mini-basket.is-hurt{background:#d87f8a;box-shadow:inset 0 0 0 3px #ba4b60}

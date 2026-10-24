@@ -186,7 +186,7 @@ let frame = 0, last = 0, accumulator = 0, lastDrop = -1000, lastAuto = 0;
 let chargeStart = 0, chargeSource = null, suppressAssistClickUntil = 0;
 const secretWave = createSecretWave();
 let secretBallFlash = 0;
-const miniGames = createMiniGamesUI({ root: $('#mini-game'), onFinish: result => {
+const miniGames = createMiniGamesUI({ root: $('#mini-game'), isGM:()=>state.gm, onFinish: result => {
   addScore(result.score);
   if (result.bestCombo) state.bestCombo = Math.max(state.bestCombo, result.bestCombo);
   if (result.source === 'secret' && !result.idle) {

@@ -4,18 +4,19 @@ const { Engine, Bodies, Body, Composite, Events } = Matter;
 export const SLING_DURATION = 30000;
 export const SLING_BOARD_W = 320;
 export const SLING_BOARD_H = 420;
-export const SLING_TARGET = 14;
-export const SLING_TOTAL = 24;
+export const SLING_TARGET = 25;
+export const SLING_TOTAL = 25;
 export const SLING_POINT = 180;
 export const SLING_WIN_BONUS = 1200;
 export const SLING_X = 160;
 export const SLING_Y = 365;
 export const SLING_SPEED = 15;
 export const SLING_RELOAD = 400;
-export const SLING_AREA = Object.freeze({ left: 22, right: 298, top: 70, bottom: 290 });
-export const SLING_COLUMNS = Object.freeze([50, 94, 138, 182, 226, 270]);
+export const SLING_AREA = Object.freeze({ left: 50, right: 270, top: 70, bottom: 290 });
+export const SLING_COLUMNS = Object.freeze([72, 116, 160, 204, 248]);
+export const SLING_MAX_ANGLE = 65 * Math.PI / 180;
 export const SLING_BLOCK_W = 32;
-export const SLING_BLOCK_H = 30;
+export const SLING_BLOCK_H = 32;
 export const SLING_FALL_MS = 600;
 const STEP = 1000 / 120;
 const LIFE = 2200;
@@ -40,14 +41,14 @@ export function createSlingGame({ now = 0 } = {}) {
     kind: 'sling', status: 'playing', score: 0, played: false, hit: 0, removed: 0,
     combo: 0, bestCombo: 0, multiplier: 1, bestMultiplier: 1, fired: 0,
     startedAt: now, deadline: now + SLING_DURATION, lastSim: now, nextShotAt: now,
-    originX: SLING_X, originY: SLING_Y, pull: null, blocks: [], shots: [], impacts: [], escapes: [], launchAt: -1000,
+    originX: SLING_X, originY: SLING_Y, aimAngle: 0, pull: null, blocks: [], shots: [], impacts: [], escapes: [], launchAt: -1000,
     selected: null, board: [], revision: 0, fx: null, won: false,
-    message: `横向选点，松手向上打 · 打出边框 ${SLING_TARGET} 块过关`,
+    message: `固定炮台，拖动瞄准 · ${SLING_TARGET} 块全部推出平台`,
   };
   // A top-down platform: tiles rest on its plane with no screen-down gravity.
   // Linear damping slows glancing impacts, but all momentum transfers are real.
-  for (let row = 0; row < 4; row++) for (let col = 0; col < SLING_COLUMNS.length; col++) {
-    const x = SLING_COLUMNS[col], y = 105 + row * 40;
+  for (let row = 0; row < 5; row++) for (let col = 0; col < SLING_COLUMNS.length; col++) {
+    const x = SLING_COLUMNS[col], y = 92 + row * 44;
     const body = Bodies.rectangle(x, y, SLING_BLOCK_W, SLING_BLOCK_H, { density: 0.001, friction: 0.2, restitution: 0.3, frictionAir: 0.04 });
     const block = { id: blocks.length, body, down: false, color: (row + col) % 4 };
     blocks.push(block); byBody.set(body.id, block); Composite.add(engine.world, body);
@@ -64,7 +65,7 @@ export function createSlingGame({ now = 0 } = {}) {
   function sync() {
     state.blocks = blocks.map(b => ({ id: b.id, x: b.body.position.x, y: b.body.position.y, angle: b.body.angle, down: b.down, color: b.color,
       scale: b.down ? Math.max(0,1-(state.lastSim-b.exitAt)/SLING_FALL_MS) : 1 }));
-    state.shots = shots.map(s => ({ x: s.body.position.x, y: s.body.position.y, vy: s.body.velocity.y }));
+    state.shots = shots.map(s => ({ x: s.body.position.x, y: s.body.position.y, vx: s.body.velocity.x, vy: s.body.velocity.y }));
   }
   function dispose() {
     if (disposed) return;
@@ -81,17 +82,18 @@ export function createSlingGame({ now = 0 } = {}) {
   }
   function clearAim() { state.pull = null; }
   function setAim(point) {
-    if (disposed || state.status !== 'playing' || state.lastSim + 1e-6 < state.nextShotAt || !point || !Number.isFinite(point.x)) return;
-    state.originX = Math.max(16, Math.min(SLING_BOARD_W - 16, point.x));
-    state.pull = { x: state.originX };
+    if (disposed || state.status !== 'playing' || state.lastSim + 1e-6 < state.nextShotAt || !point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+    const angle = Math.atan2(point.x - SLING_X, Math.max(1, SLING_Y - point.y));
+    state.aimAngle = Math.max(-SLING_MAX_ANGLE, Math.min(SLING_MAX_ANGLE, angle));
+    state.pull = { dx: Math.sin(state.aimAngle), dy: -Math.cos(state.aimAngle) };
   }
   function release() {
     if (disposed || state.status !== 'playing' || !state.pull || state.lastSim + 1e-6 < state.nextShotAt) return false;
     const body = Bodies.circle(state.originX, SLING_Y, 10, { label: 'sling-shot', density: 0.004, friction: 0.1, restitution: 0.45, frictionAir: 0.001 });
-    Body.setVelocity(body, { x: 0, y: -SLING_SPEED });
+    Body.setVelocity(body, { x: state.pull.dx * SLING_SPEED, y: state.pull.dy * SLING_SPEED });
     Composite.add(engine.world, body); shots.push({ body, born: state.lastSim });
     state.fired++; state.nextShotAt = state.lastSim + SLING_RELOAD; state.launchAt = state.lastSim;
-    clearAim(); state.message = '向上击打！换一列继续拆 · 整块打出边框才计分';
+    clearAim(); state.message = '换个角度继续打 · 25 块全部推出平台才过关';
     state.revision++; sync(); return true;
   }
   function step() {
@@ -100,7 +102,7 @@ export function createSlingGame({ now = 0 } = {}) {
       for (const b of pending) {
         state.impacts.push({ id: ++impactId, x: b.body.position.x, y: b.body.position.y, at: state.lastSim });
       }
-      state.message = `碰撞连锁！换个落点 · 整块推出边框才得分`;
+      state.message = '碰撞连锁！换个角度 · 整块推出边框才得分';
       state.revision++; pending.clear();
     }
     state.impacts = state.impacts.filter(i => state.lastSim - i.at < 320).slice(-24);

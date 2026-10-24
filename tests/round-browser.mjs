@@ -158,7 +158,7 @@ try {
       }
     } else if (board.kind === 'sling') {
       for (let shot = 0; shot < 4 && !(await page.evaluate(() => window.__ponpon.miniGame.played)); shot++) {
-        await fireSling(page, [50,94,138,182][shot]);
+        await fireSling(page);
         await page.clock.fastForward(800);
       }
     } else {
@@ -182,12 +182,12 @@ try {
       field.dispatchEvent(new PointerEvent('pointerup', opts));
     }, x);
   }
-  async function fireSling(target, x) {
-    await target.evaluate(x => {
-      const field=document.querySelector('#mini-field'),r=field.getBoundingClientRect();
-      const opts={bubbles:true,pointerId:1,clientX:r.left+x/320*r.width,clientY:r.top+365/420*r.height};
-      field.dispatchEvent(new PointerEvent('pointerdown',opts));field.dispatchEvent(new PointerEvent('pointerup',opts));
-    },x);
+  async function fireSling(target) {
+    await target.evaluate(()=>{
+      const f=document.querySelector('#mini-field'),r=f.getBoundingClientRect(),p=window.__ponpon.miniGame.blocks.filter(b=>!b.down).sort((a,b)=>b.y-a.y)[0];
+      const emit=(type,x,y)=>f.dispatchEvent(new PointerEvent(type,{bubbles:true,pointerId:1,clientX:r.left+x/320*r.width,clientY:r.top+y/420*r.height}));
+      emit('pointerdown',160,365);emit('pointermove',p.x,p.y);emit('pointerup',p.x,p.y);
+    });
   }
   async function idleStars(target) {
     for (let i = 0; i < 320; i++) {

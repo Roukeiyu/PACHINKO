@@ -104,7 +104,7 @@ export function createStarGame({ random = Math.random, now = 0 } = {}) {
       state.bombs += 1;
       state.score = Math.max(0, state.score - STAR_BOMB_PENALTY);
       state.message = `接到炸弹，连击清零，-${STAR_BOMB_PENALTY}`;
-      state.fx = { id: ++fxId, kind: 'stars', broken: true, points: 0, combo: 0, multiplier: 1, cells: [], chains: 0 };
+      state.fx = { id: ++fxId, kind: 'stars', broken: true, damage: true, points: 0, combo: 0, multiplier: 1, cells: [], chains: 0 };
       state.revision++;
     }
   }
@@ -136,7 +136,7 @@ export function createStarGame({ random = Math.random, now = 0 } = {}) {
     if (state.status === 'playing' && at >= state.deadline) finish('timeout');
   }
   return {
-    state, tick, setBasket, setHold,
+    state, tick, setBasket, setHold, stop() { finish('aborted'); }, dispose() { finish('aborted'); },
     select() { return 0; },
     setInputLock() {},
     remaining: at => Math.max(0, Math.min(STAR_DURATION, state.deadline - at)),

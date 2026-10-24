@@ -24,17 +24,18 @@ async function gm(page) {
 async function start(page) {
   await page.locator('[data-mini=sling]').click();
   assert.equal((await snapshot(page)).miniGame,null,'intro never starts the timer');
-  assert.match(await page.locator('#mini-intro-goal').textContent(),/14.*30/);
+  assert.match(await page.locator('#mini-intro-goal').textContent(),/25.*30/);
   await page.locator('#mini-start').click();await page.clock.runFor(20);
 }
-const aimedSequence=[50,94,138,182,226,270];
-async function points(page, x=50) {
+
+async function points(page, target={x:72,y:268}) {
   const r=await page.locator('#mini-field').boundingBox();
   const point=(x,y)=>({x:r.x+x/320*r.width,y:r.y+y/420*r.height});
-  return {rest:point(160,365),pull:point(x,365),r};
+  return {rest:point(160,365),pull:point(target.x,target.y),r};
 }
 async function shoot(page, touch=false, screenshot=null, shot=0) {
-  const p=await points(page,aimedSequence[shot%aimedSequence.length]);
+  const target=(await mini(page)).blocks.filter(b=>!b.down).sort((a,b)=>b.y-a.y)[0];
+  const p=await points(page,target);
   if(touch) {
     const cdp=await page.context().newCDPSession(page);
     await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[p.rest]});
@@ -61,7 +62,7 @@ try {
     await shoot(page,mobile,`test-results/sling-${name}-aim.png`);
     assert.equal((await mini(page)).fired,1,'release fires exactly one ball');
     assert.ok((await mini(page)).shots[0].vy<0,'the shot travels from the bottom upward');
-    assert.ok(Math.abs((await mini(page)).originX-50)<1,'horizontal drag selects the firing point');
+    assert.equal((await mini(page)).originX,160,'the turret stays fixed at the center');assert.equal((await mini(page)).originY,365);
     for(let t=0;t<40 && !(await mini(page)).blocks.some(b=>b.down);t++)await page.clock.runFor(40);
     const falling=(await mini(page)).blocks.find(b=>b.down);assert.ok(falling && falling.scale>0);
     await page.screenshot({path:`test-results/sling-${name}-fall.png`});await page.clock.runFor(250);

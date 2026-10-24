@@ -5,13 +5,43 @@ import { SECRET_BALLS } from './round.js';
 import { SLING_TARGET, SLING_WIN_BONUS } from './mini-sling.js';
 import { renderSling } from './mini-sling-view.js';
 
-export const miniGameMarkup = `<dialog id="mini-game" class="mini-dialog" aria-labelledby="mini-title" aria-describedby="mini-rule" data-phase="intro"><div class="mini-inner"><div class="mini-heading"><span class="mini-eyebrow">秘密小游戏</span><span id="mini-round" hidden></span></div><h2 id="mini-title"></h2><div id="mini-intro"><p id="mini-rule"></p><dl class="mini-facts"><div><dt>时间</dt><dd id="mini-intro-time"></dd></div><div><dt>目标</dt><dd id="mini-intro-goal"></dd></div><div><dt>奖励</dt><dd id="mini-intro-reward"></dd></div></dl><button type="button" id="mini-start">开始</button></div><div id="mini-play" hidden><div class="mini-hud"><span>剩余 <strong id="mini-time">30</strong> 秒</span><span id="mini-combo" class="mini-combo" aria-live="polite"></span><span>本局 <strong id="mini-score">0</strong> 分<span id="mini-bonus" class="mini-bonus">×2</span></span></div><progress id="mini-progress" max="${MINI_DURATION}" value="${MINI_DURATION}" aria-label="小游戏剩余时间"></progress><div id="mini-stage"><div id="mini-fx" class="mini-fx" aria-hidden="true"></div><div id="mini-grid" class="mini-grid"></div><div id="mini-field" class="mini-field" hidden tabindex="-1"></div></div><p id="mini-message" role="status"></p><button type="button" id="mini-stop" hidden>结束本局</button><div id="mini-result" hidden><div class="mini-result-mark">✦</div><h3 id="mini-result-title"></h3><p id="mini-result-math" class="mini-result-math" hidden></p><p id="mini-result-score"></p><p id="mini-result-balls" class="mini-result-balls" hidden></p><button class="done-button" id="mini-return">返回球台</button></div></div></div></dialog>`;
-export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {}, vibrate = () => {} }) {
+export const miniGameMarkup = `<dialog id="mini-game" class="mini-dialog" aria-labelledby="mini-title" aria-describedby="mini-rule" data-phase="intro"><div class="mini-inner"><div class="mini-heading"><span class="mini-eyebrow">秘密小游戏</span><span id="mini-round" hidden></span></div><h2 id="mini-title"></h2><div id="mini-intro"><p id="mini-rule"></p><dl class="mini-facts"><div><dt>时间</dt><dd id="mini-intro-time"></dd></div><div><dt>目标</dt><dd id="mini-intro-goal"></dd></div><div><dt>奖励</dt><dd id="mini-intro-reward"></dd></div></dl><button type="button" id="mini-start">开始</button></div><div id="mini-play" hidden><div class="mini-hud"><span>剩余 <strong id="mini-time">30</strong> 秒</span><span id="mini-combo" class="mini-combo" aria-live="polite"></span><span>本局 <strong id="mini-score">0</strong> 分<span id="mini-bonus" class="mini-bonus">×2</span></span></div><progress id="mini-progress" max="${MINI_DURATION}" value="${MINI_DURATION}" aria-label="小游戏剩余时间"></progress><div id="mini-stage"><div id="mini-fx" class="mini-fx" aria-hidden="true"></div><div id="mini-grid" class="mini-grid"></div><div id="mini-field" class="mini-field" hidden tabindex="-1"></div></div><div id="mini-star-control" class="mini-star-control" hidden role="slider" tabindex="0" aria-label="左右移动接星星挡板" aria-valuemin="39" aria-valuemax="281" aria-valuenow="160">↔ 在这里滑动或点按，移动挡板</div><p id="mini-message" role="status"></p><button type="button" id="mini-stop" hidden>结束本局</button><div id="mini-result" hidden><div class="mini-result-mark">✦</div><h3 id="mini-result-title"></h3><p id="mini-result-math" class="mini-result-math" hidden></p><p id="mini-result-score"></p><p id="mini-result-balls" class="mini-result-balls" hidden></p><button class="done-button" id="mini-return">返回球台</button></div></div></div></dialog>`;
+export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {}, vibrate = () => {}, isGM = () => false }) {
   const $ = selector => root.querySelector(selector);
   let game=null, source=null, scoreMultiplier=1, revision=-1, fxId=0, settled=false, buttons=[], ballGrant=SECRET_BALLS, busy=false, motionSeen=0, motionToken=0, pending=null, confirmKey=false, flipping=false, flipToken=0;
   const calm = () => document.documentElement.classList.contains('calm');
   const gentle = () => calm() || matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const waits = new Map(), effectTimers = new Map();
+  const wait = ms => new Promise(resolve => { const id=setTimeout(()=>{waits.delete(id);resolve();},ms);waits.set(id,resolve); });
+  function timedEffect(node, ms, done=()=>node.remove()) {
+    clearTimeout(effectTimers.get(node));
+    const id=setTimeout(()=>{effectTimers.delete(node);done();},ms);effectTimers.set(node,id);
+  }
+  function clearTransient() {
+    motionToken++;
+    for(const [id,resolve] of waits){clearTimeout(id);resolve();}waits.clear();
+    for(const id of effectTimers.values())clearTimeout(id);effectTimers.clear();
+    $('#mini-fx').replaceChildren();
+    $('#mini-field').querySelectorAll('.mini-catch-pop').forEach(node=>node.remove());
+    $('#mini-field').querySelector('.mini-basket')?.classList.remove('is-hurt');
+    root.getAnimations().forEach(animation=>animation.cancel());
+    endFlip();held.clear();cancelDrag();
+  }
+  function starFeedback(fx) {
+    const field=$('#mini-field'),basket=field.querySelector('.mini-basket');
+    if(!basket)return;
+    if(fx.damage){basket.classList.add('is-hurt');timedEffect(basket,240,()=>basket.classList.remove('is-hurt'));try{vibrate(18);}catch{}return;}
+    if(fx.broken)return;
+    const groups=[...field.querySelectorAll('.mini-catch-pop')];
+    while(groups.length>=3){const old=groups.shift();clearTimeout(effectTimers.get(old));effectTimers.delete(old);old.remove();}
+    const pop=document.createElement('span');pop.className=`mini-catch-pop${gentle()?' is-soft':''}`;pop.setAttribute('aria-hidden','true');
+    pop.style.left=`${game.state.basketX/STAR_BOARD_W*100}%`;pop.style.top='90%';
+    for(let i=0;i<(gentle()?1:5);i++){
+      const spark=document.createElement('i');spark.className='mini-catch-spark';spark.textContent=i%2?'✧':'★';
+      spark.style.setProperty('--catch-x',`${(i-2)*10}px`);spark.style.setProperty('--catch-y',`${-17-(i%3)*8}px`);pop.append(spark);
+    }
+    field.append(pop);timedEffect(pop,gentle()?180:440);try{vibrate(8);}catch{}
+  }
   // Play time follows foreground frames only. A hidden tab must not spend the 30s.
   let visibleAt=0, lastWall=0;
   document.addEventListener('visibilitychange', () => { if (document.hidden) lastWall = 0; });
@@ -23,6 +53,7 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     return visibleAt;
   }
   function burst(fx) {
+    if(fx.kind==='stars'){starFeedback(fx);return;}
     const score=$('#mini-score');
     if (!fx.broken) { score.classList.remove('mini-score-pop'); void score.offsetWidth; score.classList.add('mini-score-pop'); }
     if (fx.broken || calm()) return;
@@ -64,7 +95,7 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     const distance=Math.min(2.5, MINI_HIT_SHAKE+(tier-1)*.25);
     root.animate([{transform:'translate(0,0)'},{transform:`translate(${distance}px,${distance*-.4}px)`},{transform:`translate(${-distance}px,0)`},{transform:'translate(0,0)'}],{duration:MINI_HIT_MS,easing:'ease-out'});
     try { vibrate(Math.min(18, 10+tier)); } catch { /* the page can refuse vibration */ }
-    setTimeout(()=>{ layer.replaceChildren(); buttons.forEach(button=>button.classList.remove('mini-squash','mini-fly','mini-burst')); }, 280);
+    timedEffect(layer,280,()=>{ layer.replaceChildren(); buttons.forEach(button=>button.classList.remove('mini-squash','mini-fly','mini-burst')); });
   }
   function endFlip() {
     flipping = false;
@@ -99,6 +130,14 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
       const delay = soft ? 0 : index * 4;
       const elapsed = Math.min(MOLE_FLIP_MS, Math.max(0, now - s.flipFrom)) - delay;
       const local = Math.min(1, Math.max(0, elapsed / duration));
+      // Swap the face while this disc is edge-on (or faintest in reduced
+      // motion), before painting the second half. Game hit/score stays intact.
+      if (local >= 0.5 && !button.classList.contains('mini-back')) {
+        button.classList.remove('mini-hit', 'mini-mole', 'mini-squash', 'mini-burst');
+        button.classList.add('mini-back');
+        button.textContent = '';
+        button.setAttribute('aria-label', '翻面中');
+      }
       if (soft) {
         button.style.transform = '';
         button.style.opacity = String(1 - Math.sin(local * Math.PI) * 0.85);
@@ -237,6 +276,7 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
       field.append(basket);
     }
     basket.style.left = `${(s.basketX / STAR_BOARD_W) * 100}%`;
+    $('#mini-star-control').setAttribute('aria-valuenow',String(Math.round(s.basketX)));
     const live = new Set();
     for (const item of s.items) {
       if (item.resolved) continue;
@@ -255,8 +295,8 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     for (const node of field.querySelectorAll('[data-item]')) if (!live.has(Number(node.dataset.item))) node.remove();
   }
   function showResult(s) {
-    settled=true;$('#mini-stop').hidden=true;$('#mini-grid').hidden=true;$('#mini-field').hidden=true;$('#mini-message').hidden=true;$('#mini-result').hidden=false;
-    $('#mini-result-title').textContent=s.kind==='sling' ? (s.won?'推出成功！':s.status==='aborted'?'本局已结束':'时间到，再接再厉') : s.status==='complete'?'挑战完成！':'时间到啦';
+    settled=true;clearTransient();$('#mini-star-control').hidden=true;if(s.kind==='stars')root.dataset.phase='result';$('#mini-stop').hidden=true;$('#mini-grid').hidden=true;$('#mini-field').hidden=true;$('#mini-message').hidden=true;$('#mini-result').hidden=false;
+    $('#mini-result-title').textContent=s.status==='aborted'?'本局已结束':s.kind==='sling'?(s.won?'推出成功！':'时间到，再接再厉'):s.status==='complete'?'挑战完成！':'时间到啦';
     const math=$('#mini-result-math');
     if (s.kind==='blocks') {
       math.hidden=false;
@@ -288,6 +328,7 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
   function paint() {
     if (!game) return;
     const s=game.state;
+    $('#mini-stop').hidden=!isGM()||settled||s.status!=='playing';
     $('#mini-time').textContent=String(Math.ceil(game.remaining(visibleAt)/1000));
     $('#mini-score').textContent=s.score.toLocaleString();
     $('#mini-score').classList.toggle('is-hot', s.combo>=4);
@@ -329,8 +370,8 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     if (revision !== s.revision) {
       revision = s.revision;
       $('#mini-message').textContent = s.message;
-      const falling = s.kind === 'blocks' && s.motionSeq !== motionSeen && s.motion?.length;
-      const clearing = s.kind === 'moles' && s.flipUntil > 0;
+      const falling = s.status === 'playing' && s.kind === 'blocks' && s.motionSeq !== motionSeen && s.motion?.length;
+      const clearing = s.status === 'playing' && s.kind === 'moles' && s.flipUntil > 0;
       if (falling) { motionSeen = s.motionSeq; playMotion(s.motion); }
       else if (clearing) { if (!flipping) renderBoard(s); playFlip(s); }
       else if (!busy && MINI_GAMES[s.kind].columns > 0) renderBoard(s);
@@ -359,7 +400,8 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     $('#mini-grid').classList.remove('is-falling','is-flipping'); $('#mini-message').hidden=false; $('#mini-result').hidden=true;
     const action = !(definition.columns > 0);
     dragging = false;
-    $('#mini-stop').hidden = kind !== 'sling';
+    $('#mini-stop').hidden = !isGM();
+    $('#mini-star-control').hidden = kind !== 'stars';
     $('#mini-grid').hidden = action;
     $('#mini-field').hidden = !action;
     $('#mini-field').replaceChildren();
@@ -377,6 +419,7 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
   }
   function start(kind, origin='secret', multiplier=1, holeBalls=SECRET_BALLS) {
     if (root.open) return false;
+    clearTransient();$('#mini-star-control').hidden=true;$('#mini-stop').hidden=true;
     source=origin; scoreMultiplier=origin==='secret'&&multiplier>=2?2:1; ballGrant=Math.max(0, Math.floor(Number(holeBalls)) || 0) || SECRET_BALLS;
     pending={kind}; game=null; settled=false; revision=-1; fxId=0; busy=false; motionSeen=0; motionToken++; confirmKey=false;
     root.removeAttribute('data-busy'); visibleAt=0; lastWall=0;
@@ -391,9 +434,8 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
   }
   $('#mini-start').addEventListener('click',()=>beginRound());
   $('#mini-stop').addEventListener('click',()=>{
-    if (game?.state.kind !== 'sling' || settled) return;
-    dragging=false;
-    game.tick(visibleNow(performance.now())); game.stop(); paint();
+    if (!isGM() || !game || settled || game.state.status!=='playing') return;
+    game.tick(visibleNow(performance.now()));clearTransient();game.stop();paint();
   });
   root.addEventListener('keydown',event=>{
     if (event.key!=='Enter' && event.key!==' ') return;
@@ -424,48 +466,47 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
       y: (event.clientY - rect.top) / height * STAR_BOARD_H,
     };
   }
-  const field = $('#mini-field');
-  let dragging = false;
-  let dragPointer = null;
-  const slingNow = () => { if (game?.state.kind === 'sling') game.tick(visibleNow(performance.now())); };
-  field.addEventListener('pointerdown', event => {
-    if (!game || settled || game.state.status !== 'playing') return;
-    if (game.state.kind === 'sling' && (dragging || event.button > 0)) return;
-    slingNow();
-    if (game.state.status !== 'playing') { paint(); return; }
-    dragging = true;
-    dragPointer = event.pointerId;
-    try { field.setPointerCapture(event.pointerId); } catch { /* a synthetic test event has no pointer */ }
-    const point = fieldPoint(event);
-    if (game.state.kind === 'stars') game.setBasket(point.x);
-    else if (game.state.kind === 'sling') game.setAim(point);
-    paint();
+  const field = $('#mini-field'), control = $('#mini-star-control');
+  let dragging = false, dragPointer = null, captureNode = null;
+  function actionNow() { if(game && ['stars','sling'].includes(game.state.kind))game.tick(visibleNow(performance.now())); }
+  function movePointer(event) {
+    const point=fieldPoint(event);
+    if(game.state.kind==='stars')game.setBasket(point.x);else game.setAim(point);
+  }
+  function releaseCapture() {
+    const node=captureNode,id=dragPointer;dragging=false;dragPointer=null;captureNode=null;
+    try{if(node?.hasPointerCapture(id))node.releasePointerCapture(id);}catch{}
+  }
+  root.addEventListener('pointerdown',event=>{
+    if(!game||settled||game.state.status!=='playing'||dragging||event.button>0)return;
+    const stars=game.state.kind==='stars';
+    if(!stars && (game.state.kind!=='sling'||!field.contains(event.target)))return;
+    if(stars && event.target.closest('button,a,input,select,textarea,[contenteditable],[role="button"]'))return;
+    actionNow();if(game.state.status!=='playing'){paint();return;}
+    event.preventDefault();dragging=true;dragPointer=event.pointerId;captureNode=stars?root:field;
+    try{captureNode.setPointerCapture(event.pointerId);}catch{}
+    movePointer(event);paint();
   });
-  field.addEventListener('pointermove', event => {
-    if (!dragging || !game || settled || game.state.status !== 'playing') return;
-    if (game.state.kind === 'sling' && event.pointerId !== dragPointer) return;
-    slingNow();
-    const point = fieldPoint(event);
-    if (game.state.kind === 'stars') game.setBasket(point.x);
-    else if (game.state.kind === 'sling') game.setAim(point);
-    paint();
+  root.addEventListener('pointermove',event=>{
+    if(!dragging||event.pointerId!==dragPointer||!game||settled||game.state.status!=='playing')return;
+    event.preventDefault();actionNow();if(game.state.status==='playing')movePointer(event);paint();
   });
-  field.addEventListener('pointerup', event => {
-    if (!dragging || !game || settled) return;
-    if (game.state.kind === 'sling' && event.pointerId !== dragPointer) return;
-    dragging = false;
-    slingNow();
-    if (game.state.kind === 'sling' && game.state.status === 'playing') game.release();
-    try { if (field.hasPointerCapture(event.pointerId)) field.releasePointerCapture(event.pointerId); } catch { /* already released */ }
-    paint();
+  root.addEventListener('pointerup',event=>{
+    if(!dragging||event.pointerId!==dragPointer||!game||settled)return;
+    actionNow();
+    if(game.state.status==='playing'){
+      movePointer(event);if(game.state.kind==='sling')game.release();
+    }
+    releaseCapture();paint();
   });
-  function cancelDrag() { dragging = false; if (game?.clearAim) game.clearAim(); paint(); }
-  field.addEventListener('pointercancel', cancelDrag);
-  field.addEventListener('lostpointercapture', () => { if (dragging) cancelDrag(); });
-  window.addEventListener('blur', cancelDrag);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) cancelDrag(); });
+  function cancelDrag() { releaseCapture();game?.clearAim?.(); }
+  root.addEventListener('pointercancel',event=>{if(event.pointerId===dragPointer){cancelDrag();paint();}});
+  root.addEventListener('lostpointercapture',event=>{if(dragging&&event.pointerId===dragPointer){cancelDrag();paint();}});
+  window.addEventListener('blur',()=>{cancelDrag();paint();});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelDrag();});
   root.addEventListener('keydown', event => {
     if (root.dataset.phase !== 'play' || !game || game.state.kind !== 'stars') return;
+    if(event.target.closest('button,a,input,select,textarea,[contenteditable]'))return;
     if (!['ArrowLeft', 'ArrowRight', 'a', 'A', 'd', 'D'].includes(event.key)) return;
     event.preventDefault();
     held.add(event.key);
@@ -477,7 +518,7 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     starHold();
   });
   window.addEventListener('blur', () => { held.clear(); if (game?.state.kind === 'stars') game.setHold(0); });
-  $('#mini-return').addEventListener('click',()=>{if(!settled)return;motionToken++;busy=false;confirmKey=false;pending=null;const origin=source;game?.dispose?.();dragging=false;root.close();game=null;source=null;onExit(origin);});
+  $('#mini-return').addEventListener('click',()=>{if(!settled)return;clearTransient();busy=false;confirmKey=false;pending=null;const origin=source;game?.dispose?.();dragging=false;root.close();game=null;source=null;onExit(origin);});
   root.addEventListener('cancel',event=>event.preventDefault());
   return { start, update(now){if(!(root.open&&game&&!settled)||document.hidden){if(document.hidden)lastWall=0;return;}game.tick(visibleNow(now));paint();}, get open(){return root.open;}, get source(){return source;}, snapshot:()=>game?.snapshot()??null };
 }

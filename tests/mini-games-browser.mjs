@@ -260,7 +260,8 @@ try {
    if(star) await parkBasket(star.x);
    await page.clock.fastForward(500);
   }else if(kind==='sling'){
-   await page.evaluate(x=>{ const f=document.querySelector('#mini-field'),r=f.getBoundingClientRect(); const fire=type=>f.dispatchEvent(new PointerEvent(type,{bubbles:true,pointerId:1,clientX:r.left+x/320*r.width,clientY:r.top+365/420*r.height})); fire('pointerdown');fire('pointerup'); },[50,94,138,182,226,270][step%6]);
+   const target=live.blocks.filter(b=>!b.down).sort((a,b)=>b.y-a.y)[0];
+   await page.evaluate(p=>{const f=document.querySelector('#mini-field'),r=f.getBoundingClientRect();const fire=(type,x,y)=>f.dispatchEvent(new PointerEvent(type,{bubbles:true,pointerId:1,clientX:r.left+x/320*r.width,clientY:r.top+y/420*r.height}));fire('pointerdown',160,365);fire('pointermove',p.x,p.y);fire('pointerup',p.x,p.y);},target);
    await page.clock.fastForward(800);
   }else{
    const mole=board.findIndex(cell=>cell.type==='mole'&&!cell.hit);
