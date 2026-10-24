@@ -56,7 +56,7 @@ export const MINI_GAMES = Object.freeze({
   moles: { title: '打地鼠', rule: '点击地鼠，白菜留着！每只 25 分，共 10 轮、40 只；每轮最多 3 秒，打完或到点后洞口一起翻面，翻完才换轮。不是地鼠的格子都是白菜。连续打中会累加连击；打到白菜，或这一轮有地鼠漏掉，连击重置。只点白菜、重复点已经打过的地鼠，或翻面时点击，都不算有效操作。整局没有打中，秘密洞不发小球。', columns: 4, rows: 4 },
   stars: { title: '接星星', rule: `左右拖动篮子，或用方向键和 A D。接住星星得分，连续接住会连击。漏掉星星或接到炸弹，连击清零；炸弹再扣 ${STAR_BOMB_PENALTY} 分。30 秒，下落会变快。只接炸弹、或一个都没接住，不算有效操作。整局没有接住星星，秘密洞不发小球。`, columns: 0, rows: 0 },
   aim: { title: '弹珠瞄准', rule: `按住弹珠向后拉，松手射出。共 ${AIM_BALLS} 颗。打中滑动靶得分，小靶分更高，连续命中会连击。空球打断连击。打完 ${AIM_BALLS} 颗或 30 秒结束。只射出没打中，不算有效操作。整局没有打中，秘密洞不发小球。`, columns: 0, rows: 0 },
-  sling: { title: '弹弓拆拆乐', rule: `按住左边弹珠向左下拉，松手击倒右边的方块塔。30 秒内击落 ${SLING_TARGET} 块就过关；每块 ${SLING_POINT} 分，过关再加 ${SLING_WIN_BONUS} 分。弹珠不限量，每 0.65 秒补一颗。方块真正跌落或飞离原位才算，轻轻晃动不算。达标立即结算；时间到也保留已得分。只发射没击落，不算有效操作，秘密洞不发小球。`, columns: 0, rows: 0 },
+  sling: { title: '弹弓拆拆乐', rule: `按住左边弹珠向左下拉，沿虚线瞄准，松手拆塔。30 秒内击落 ${SLING_TARGET} 块就过关；每块 ${SLING_POINT} 分，过关再加 ${SLING_WIN_BONUS} 分。弹珠不限量，每 0.65 秒补一颗。整块落到台座下方才计分；塔内下移、滑动或晃动都不算。先拆支撑，再换角度补刀。达标立即结算；时间到也保留已得分。只发射没击落，不算有效操作，秘密洞不发小球。`, columns: 0, rows: 0 },
 });
 export const BLOCK_COLORS = Object.freeze(BLOCK_ICONS.map(icon => icon.name));
 export const comboMultiplier = combo => combo > 0 ? 1 + (combo - 1) * COMBO_MULTIPLIER_STEP : 1;

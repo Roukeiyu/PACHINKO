@@ -45,7 +45,9 @@ for (const slots of [5, 7, 9]) for (const multiplier of new Set(slotMultipliers(
 }
 {
   const stock = restoreCollections({ 2: 100 }), events = [];
-  const game = createTable({ collections: stock, onScore: e => events.push(e) });
+  // Keep the random star away from the cup approach: this fixture tests the
+  // collection bonus, not an additional physical star pickup on the way in.
+  const game = createTable({ collections: stock, starRandom: () => .5, onScore: e => events.push(e) });
   game.slotMachine.tripleUntil = 60000;
   const ball = game.launch(); ball.entered = true; ball.scoreFactor = 2;
   const cup = game.holes[0];

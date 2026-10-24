@@ -27,13 +27,14 @@ async function start(page) {
   assert.match(await page.locator('#mini-intro-goal').textContent(),/14.*30/);
   await page.locator('#mini-start').click();await page.clock.runFor(20);
 }
-async function points(page) {
+const aimedSequence=[[40,-24],[32,-28],[36,-24]];
+async function points(page, dx=40, dy=-24) {
   const r=await page.locator('#mini-field').boundingBox();
   const point=(x,y)=>({x:r.x+x/320*r.width,y:r.y+y/420*r.height});
-  return {rest:point(58,298),pull:point(16,316),r};
+  return {rest:point(58,298),pull:point(58-dx,298-dy),r};
 }
-async function shoot(page, touch=false, screenshot=null) {
-  const p=await points(page);
+async function shoot(page, touch=false, screenshot=null, shot=0) {
+  const p=await points(page,...aimedSequence[shot%aimedSequence.length]);
   if(touch) {
     const cdp=await page.context().newCDPSession(page);
     await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[p.rest]});
@@ -59,9 +60,9 @@ try {
     assert.ok(await page.locator('#mini-stop').isVisible());
     await shoot(page,mobile,`test-results/sling-${name}-aim.png`);
     assert.equal((await mini(page)).fired,1,'release fires exactly one ball');
-    for(let shot=1;shot<=6 && (await mini(page)).status==='playing';shot++) {
+    for(let shot=1;shot<37 && (await mini(page)).status==='playing';shot++) {
       await page.clock.runFor(800);
-      if((await mini(page)).status==='playing') await shoot(page,mobile);
+      if((await mini(page)).status==='playing') await shoot(page,mobile,null,shot);
     }
     await page.clock.runFor(1200);
     const won=await mini(page),after=await snapshot(page);
@@ -104,7 +105,7 @@ try {
   assert.equal(await page.evaluate(()=>window.__ponpon.dropHole()),true);
   await page.clock.runFor(100);assert.equal(await page.locator('#mini-game').getAttribute('data-kind'),'sling');
   await page.locator('#mini-start').click();const before=await snapshot(page);
-  for(let i=0;i<6 && (await mini(page)).status==='playing';i++){await shoot(page,true);await page.clock.runFor(800);}
+  for(let i=0;i<37 && (await mini(page)).status==='playing';i++){await shoot(page,true,null,i);await page.clock.runFor(800);}
   const result=await mini(page),after=await snapshot(page);
   assert.equal(result.status,'complete');assert.equal(after.score,before.score+result.score);
   assert.equal(after.available,before.available+20,'a scoring secret visit grants the existing 20 balls');

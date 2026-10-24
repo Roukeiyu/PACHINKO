@@ -1,4 +1,4 @@
-import { SLING_BOARD_W as W, SLING_BOARD_H as H, SLING_X, SLING_Y, SLING_MAX_PULL } from './mini-sling.js';
+import { SLING_BOARD_W as W, SLING_BOARD_H as H, SLING_X, SLING_Y, SLING_MAX_PULL, SLING_GRAVITY, SLING_POWER } from './mini-sling.js';
 
 export function renderSling(field, state) {
   let canvas = field.querySelector('canvas');
@@ -24,7 +24,7 @@ export function renderSling(field, state) {
   for (const [x,y,r] of [[48,90,24],[260,75,32],[135,160,18]]) { ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); }
   ctx.globalAlpha = 1;
   ctx.fillStyle = ink; ctx.font = '600 12px sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText('拉开一点，快乐倒一片', W / 2, 34);
+  ctx.fillText('整块落台才算 · 换角度拆支撑', W / 2, 34);
   rect(0, 400, W, 25, 0, '#97b87b');
   for (const x of [188, 240, 292]) rect(x - 25, 328, 50, 14, 4, '#bcb195');
   for (const block of state.blocks) {
@@ -46,8 +46,8 @@ export function renderSling(field, state) {
     ctx.fillStyle = ink;
     for (let i = 1; i <= 12; i++) {
       const frames = i * 2;
-      const x = state.originX + dx * .29 * frames;
-      const y = state.originY + dy * .29 * frames + .8 * (1000 / 60) ** 2 * .001 * frames * frames / 2;
+      const x = state.originX + dx * SLING_POWER * frames;
+      const y = state.originY + dy * SLING_POWER * frames + SLING_GRAVITY * (1000 / 60) ** 2 * .001 * frames * frames / 2;
       if (x > W || y > H || y < 45) break;
       ctx.globalAlpha = 0.6 - i * .035;
       ctx.beginPath(); ctx.arc(x,y,2.4,0,Math.PI*2); ctx.fill();
