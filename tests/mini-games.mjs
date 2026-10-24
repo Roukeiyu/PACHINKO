@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_DURATION, BLOCK_POINT, BLOCK_GROUP_LIMIT, BLOCK_TYPE_COUNT, BLOCK_ICON_IDS, BLOCK_ICONS, COMBO_MULTIPLIER_STEP, comboMultiplier, comboPoints, connectedBlocks, randomMiniGame, miniGameIdle, miniIntro, AFK_BALL_TEXT, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS, PAIR_ICON_LIST, PAIR_SUITS, PAIR_SUIT_COUNT, PAIR_COPIES, MOLE_WAVE_MS, MOLE_FLIP_MS, STAR_DURATION, STAR_POINT, STAR_BOMB_PENALTY, STAR_BASKET_Y, AIM_DURATION, AIM_BALLS, AIM_REST_X, AIM_REST_Y, AIM_NORMAL_POINT, AIM_BONUS_POINT } from '../src/mini-games.js';
+import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_DURATION, BLOCK_POINT, BLOCK_GROUP_LIMIT, BLOCK_TYPE_COUNT, BLOCK_ICON_IDS, BLOCK_ICONS, COMBO_MULTIPLIER_STEP, comboMultiplier, comboPoints, connectedBlocks, randomMiniGame, miniGameIdle, miniIntro, AFK_BALL_TEXT, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS, PAIR_ICON_LIST, PAIR_SUITS, PAIR_SUIT_COUNT, PAIR_COPIES, MOLE_WAVE_MS, MOLE_FLIP_MS, STAR_DURATION, STAR_POINT, STAR_BOMB_PENALTY, STAR_BASKET_Y } from '../src/mini-games.js';
 import { secretPayout } from '../src/secret-wave.js';
 assert.equal(COMBO_MULTIPLIER_STEP,.5);
 assert.deepEqual([0,1,2,3,4].map(comboMultiplier),[1,1,1.5,2,2.5]);
@@ -17,7 +17,7 @@ assert.equal(PAIR_POINT,40);assert.equal(PAIR_TARGET,32);assert.equal(PAIR_DURAT
 assert.equal(PAIR_ICON_LIST.length,32);assert.equal(new Set(PAIR_ICON_LIST.map(icon=>icon.id)).size,32);
 assert.equal(PAIR_SUIT_COUNT,16);assert.equal(PAIR_COPIES,4);assert.equal(PAIR_SUITS.length,16);
 assert.equal(new Set(PAIR_SUITS.map(icon=>icon.id)).size,16);assert.ok(PAIR_SUITS.every(icon=>PAIR_ICON_LIST.includes(icon)));
-assert.deepEqual(Object.values(MINI_GAMES).map(d=>[d.columns,d.rows]),[[8,8],[10,10],[4,4],[0,0],[0,0],[0,0]]);
+assert.deepEqual(Object.values(MINI_GAMES).map(d=>[d.columns,d.rows]),[[8,8],[10,10],[4,4],[0,0],[0,0]]);
 assert.equal(AFK_BALL_TEXT,'挂机未操作 · 无小球奖励');
 const pairsCard=miniIntro('pairs',{source:'secret',ballGrant:20,doubled:false});
 assert.equal(pairsCard.title,'对对碰');assert.equal(pairsCard.rule,MINI_GAMES.pairs.rule);assert.equal(pairsCard.time,'30 秒');assert.equal(pairsCard.goal,'配完 32 对，或时间到');
@@ -27,10 +27,10 @@ assert.equal(miniIntro('blocks').time,'45 秒');assert.equal(miniIntro('blocks')
 assert.equal(miniIntro('moles').time,'30 秒，每轮最多 3 秒');assert.equal(miniIntro('moles').goal,'10 轮打完 40 只，或时间到');
 assert.equal(miniIntro('stars').time,'30 秒');assert.equal(miniIntro('stars').goal,'接住星星，躲开炸弹');
 assert.ok(miniIntro('stars').rule.includes(String(STAR_BOMB_PENALTY)));
-assert.equal(miniIntro('aim').time,'30 秒，或 5 颗弹珠');assert.equal(miniIntro('aim').goal,'打中滑动靶，或时间到');
+assert.throws(()=>miniIntro('aim'),RangeError);assert.throws(()=>createMiniGame('aim'),RangeError);
 assert.equal(miniIntro('moles',{source:'gm',doubled:true}).reward,'试玩只记快乐积分。挂机未操作不发小球');
 assert.throws(()=>miniIntro('other'),RangeError);
-assert.deepEqual([0,.17,.34,.51,.68,.85].map(r=>randomMiniGame(()=>r)),['pairs','blocks','moles','stars','aim','sling']);
+assert.deepEqual([0,.21,.41,.61,.81].map(r=>randomMiniGame(()=>r)),['pairs','blocks','moles','stars','sling']);
 assert.equal(randomMiniGame(()=>0,'nope'),'pairs','an unknown previous still uses the full pool');
 assert.equal(randomMiniGame(()=>0,'pairs'),'blocks');
 assert.equal(randomMiniGame(()=>.99,'pairs'),'sling');
@@ -427,9 +427,12 @@ function playStars(seed, place) {
       if (yNext >= STAR_BASKET_Y) place(game, item);
     }
     game.tick(next);
+    assert.ok(game.state.items.length<=8,'resolved stars/bombs are recycled; live objects stay bounded');
+    assert.ok(game.state.items.every(item=>!item.resolved));
     t = next;
   }
   game.tick(STAR_DURATION);
+  const frozen=game.snapshot();game.tick(STAR_DURATION+10000);game.setBasket(40);assert.deepEqual(game.snapshot(),frozen,'star score and input freeze at 30 seconds');
   return game.state;
 }
 for (let seed = 1; seed <= 24; seed++) {
@@ -437,17 +440,17 @@ for (let seed = 1; seed <= 24; seed++) {
     if (item.kind === 'star') game.setBasket(item.x);
     else game.setBasket(item.x < 160 ? 280 : 40);
   });
-  assert.equal(perfect.score, 10841, `seed ${seed} perfect star catch`);
-  assert.equal(perfect.hit, 49);
+  assert.equal(perfect.score, 22968, `seed ${seed} perfect star catch`);
+  assert.equal(perfect.hit, 72);
   assert.equal(perfect.bombs, 0);
   assert.equal(perfect.missed, 0);
   assert.equal(perfect.status, 'timeout');
   assert.equal(miniGameIdle(perfect), false);
 }
 const catchAll = playStars(1, (game, item) => game.setBasket(item.x));
-assert.equal(catchAll.score, 939);
-assert.equal(catchAll.hit, 49);
-assert.equal(catchAll.bombs, 9);
+assert.equal(catchAll.score, 2744);
+assert.equal(catchAll.hit, 72);
+assert.equal(catchAll.bombs, 8);
 const dodgedGame = createMiniGame('stars', { random: () => 0.99, now: 0 });
 dodgedGame.setBasket(48);
 dodgedGame.tick(STAR_DURATION);
@@ -479,42 +482,4 @@ assert.equal(miniGameIdle(bombOnly.state), true, 'catching only bombs is not pla
 assert.ok(bombOnly.state.score >= 0);
 assert.equal(STAR_POINT, 17);
 
-const aimShots = [
-  { releaseAt: 1440, dx: 24, dy: -86 },
-  { releaseAt: 5544, dx: 24, dy: -86 },
-  { releaseAt: 8568, dx: 24, dy: -86 },
-  { releaseAt: 11112, dx: -12, dy: -86 },
-  { releaseAt: 13480, dx: 0, dy: -86 },
-];
-const aim = createMiniGame('aim', { now: 0 });
-for (const shot of aimShots) {
-  aim.tick(shot.releaseAt);
-  aim.setAim({ x: AIM_REST_X - shot.dx, y: AIM_REST_Y - shot.dy });
-  assert.equal(aim.release(), true);
-}
-aim.tick(AIM_DURATION);
-assert.equal(aim.state.score, 10805);
-assert.equal(aim.state.hit, 15);
-assert.equal(aim.state.fired, AIM_BALLS);
-assert.equal(aim.state.status, 'complete');
-assert.equal(miniGameIdle(aim.state), false);
-const aimIdle = createMiniGame('aim', { now: 0 });
-aimIdle.tick(AIM_DURATION);
-assert.equal(aimIdle.state.hit, 0);
-assert.equal(aimIdle.state.fired, 0);
-assert.equal(aimIdle.state.status, 'timeout');
-assert.equal(miniGameIdle(aimIdle.state), true, 'never shooting is idle');
-const aimMiss = createMiniGame('aim', { now: 0 });
-aimMiss.setAim({ x: AIM_REST_X, y: AIM_REST_Y + 10 });
-assert.equal(aimMiss.release(), false, 'a tiny pull spends no ball');
-aimMiss.setAim({ x: AIM_REST_X - 80, y: AIM_REST_Y });
-assert.equal(aimMiss.release(), false, 'a flat pull is rejected');
-aimMiss.setAim({ x: AIM_REST_X, y: AIM_REST_Y + 20 });
-assert.equal(aimMiss.release(), true);
-aimMiss.tick(AIM_DURATION);
-assert.equal(aimMiss.state.hit, 0, 'one empty shot is not a target hit');
-assert.equal(aimMiss.state.played, false);
-assert.equal(miniGameIdle(aimMiss.state), true);
-assert.equal(AIM_NORMAL_POINT, 133);
-assert.equal(AIM_BONUS_POINT, 206);
-console.log('PASS: combo multipliers, broken streaks, a 200-block cap, timer finish, counted cascades, gravity order, secret ×2 on the full total, idle rounds, star and aim ceilings, and no repeated mini-game.');
+console.log('PASS: combo multipliers, broken streaks, a 200-block cap, timer finish, counted cascades, gravity order, secret ×2 on the full total, idle rounds, denser stars with bounded live items, and no repeated mini-game.');

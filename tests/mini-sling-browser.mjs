@@ -27,14 +27,14 @@ async function start(page) {
   assert.match(await page.locator('#mini-intro-goal').textContent(),/14.*30/);
   await page.locator('#mini-start').click();await page.clock.runFor(20);
 }
-const aimedSequence=[[40,-24],[32,-28],[36,-24]];
-async function points(page, dx=40, dy=-24) {
+const aimedSequence=[50,94,138,182,226,270];
+async function points(page, x=50) {
   const r=await page.locator('#mini-field').boundingBox();
   const point=(x,y)=>({x:r.x+x/320*r.width,y:r.y+y/420*r.height});
-  return {rest:point(58,298),pull:point(58-dx,298-dy),r};
+  return {rest:point(160,365),pull:point(x,365),r};
 }
 async function shoot(page, touch=false, screenshot=null, shot=0) {
-  const p=await points(page,...aimedSequence[shot%aimedSequence.length]);
+  const p=await points(page,aimedSequence[shot%aimedSequence.length]);
   if(touch) {
     const cdp=await page.context().newCDPSession(page);
     await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[p.rest]});
@@ -60,6 +60,14 @@ try {
     assert.ok(await page.locator('#mini-stop').isVisible());
     await shoot(page,mobile,`test-results/sling-${name}-aim.png`);
     assert.equal((await mini(page)).fired,1,'release fires exactly one ball');
+    assert.ok((await mini(page)).shots[0].vy<0,'the shot travels from the bottom upward');
+    assert.ok(Math.abs((await mini(page)).originX-50)<1,'horizontal drag selects the firing point');
+    for(let t=0;t<40 && !(await mini(page)).blocks.some(b=>b.down);t++)await page.clock.runFor(40);
+    const falling=(await mini(page)).blocks.find(b=>b.down);assert.ok(falling && falling.scale>0);
+    await page.screenshot({path:`test-results/sling-${name}-fall.png`});await page.clock.runFor(250);
+    const smaller=(await mini(page)).blocks.find(b=>b.id===falling.id);
+    assert.ok(smaller.scale<falling.scale);assert.equal(smaller.x,falling.x);assert.equal(smaller.y,falling.y);
+
     for(let shot=1;shot<37 && (await mini(page)).status==='playing';shot++) {
       await page.clock.runFor(800);
       if((await mini(page)).status==='playing') await shoot(page,mobile,null,shot);
@@ -69,7 +77,7 @@ try {
     assert.equal(won.status,'complete');assert.ok(won.removed>=SLING_TARGET);
     assert.equal(after.score,before.score+won.score);
     assert.equal(after.gameClock,before.gameClock,'main table remains paused');
-    assert.equal(await page.locator('#mini-result-title').textContent(),'拆塔成功！');
+    assert.equal(await page.locator('#mini-result-title').textContent(),'推出成功！');
     assert.equal(await page.locator('#mini-stop').isVisible(),false);
     await page.screenshot({path:`test-results/sling-${name}-result.png`});
     await page.clock.fastForward(35000);assert.equal((await snapshot(page)).score,after.score,'award occurs once');
@@ -80,7 +88,7 @@ try {
     // Cancel a drag, then simulate a second finger. Neither may create a shot.
     await page.locator('#mini-field').evaluate(field=>{
       const r=field.getBoundingClientRect();const emit=(type,id,x,y)=>field.dispatchEvent(new PointerEvent(type,{bubbles:true,pointerId:id,clientX:r.left+x/320*r.width,clientY:r.top+y/420*r.height}));
-      emit('pointerdown',7,58,298);emit('pointermove',7,16,316);emit('pointerup',8,16,316);emit('pointercancel',7,16,316);emit('pointerup',7,16,316);
+      emit('pointerdown',7,160,365);emit('pointermove',7,50,365);emit('pointerup',8,50,365);emit('pointercancel',7,50,365);emit('pointerup',7,50,365);
     });
     assert.equal((await mini(page)).fired,0);
     await page.clock.fastForward(SLING_DURATION-100);

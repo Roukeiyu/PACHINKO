@@ -9,18 +9,18 @@ export const STAR_BASKET_W = 78;
 export const STAR_BASKET_Y = 392;
 export const STAR_ITEM_R = 14;
 export const STAR_CATCH_PAD = 0.65;
-// A perfect catch of the 49 stars that reach the basket, with no miss and no
-// bomb, is one combo worth 10841.
+// More frequent stars keep catches flowing. The less frequent bomb ratio
+// keeps the number of bombs from increasing with the denser stream.
 export const STAR_POINT = 17;
 export const STAR_BOMB_PENALTY = 80;
-export const STAR_SPAWN_START = 700;
-export const STAR_SPAWN_END = 320;
+export const STAR_SPAWN_START = 500;
+export const STAR_SPAWN_END = 240;
 export const STAR_FALL_START = 210;
 export const STAR_FALL_END = 360;
 export const STAR_LEAD = 280;
 export const STAR_KEY_SPEED = 280;
-// Spawn index 5, 11, 17… is a bomb. The rest are stars.
-export const STAR_BOMB_EVERY = 6;
+// Spawn index 8, 17, 26… is a bomb. The rest are stars.
+export const STAR_BOMB_EVERY = 9;
 const STEP = 16;
 
 export const starCatchHalf = () => STAR_BASKET_W / 2 + STAR_ITEM_R * STAR_CATCH_PAD;
@@ -115,6 +115,7 @@ export function createStarGame({ random = Math.random, now = 0 } = {}) {
       item.y += item.vy * dt / 1000;
       if (item.y >= STAR_BASKET_Y) resolveItem(item);
     }
+    state.items = state.items.filter(item => !item.resolved);
   }
   function advance(until) {
     while (state.lastSim < until - 1e-6) {

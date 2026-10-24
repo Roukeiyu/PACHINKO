@@ -1,4 +1,4 @@
-import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_ICONS, MINI_HIT_SHAKE, MINI_HIT_MS, comboMultiplier, formatComboMultiplier, PAIR_DURATION, PAIR_TARGET, PAIR_CLEAR_BONUS, AFK_BALL_TEXT, miniGameIdle, miniIntro, MOLE_FLIP_MS, STAR_DURATION, STAR_BOARD_W, STAR_BOARD_H, AIM_DURATION, AIM_BALLS, AIM_BOARD_W, AIM_BOARD_H } from './mini-games.js';
+import { createMiniGame, MINI_GAMES, MINI_DURATION, BLOCK_CLEAR_TARGET, BLOCK_ICONS, MINI_HIT_SHAKE, MINI_HIT_MS, comboMultiplier, formatComboMultiplier, PAIR_DURATION, PAIR_TARGET, PAIR_CLEAR_BONUS, AFK_BALL_TEXT, miniGameIdle, miniIntro, MOLE_FLIP_MS, STAR_DURATION, STAR_BOARD_W, STAR_BOARD_H } from './mini-games.js';
 import { PAIR_SVG } from './pair-icons.js';
 import { secretPayout } from './secret-wave.js';
 import { SECRET_BALLS } from './round.js';
@@ -254,52 +254,9 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     }
     for (const node of field.querySelectorAll('[data-item]')) if (!live.has(Number(node.dataset.item))) node.remove();
   }
-  function renderAim(s) {
-    const field = $('#mini-field');
-    for (const lane of s.targets) {
-      let node = field.querySelector(`[data-lane="${lane.id}"]`);
-      if (!node) {
-        node = document.createElement('div');
-        node.className = `mini-target${lane.bonus ? ' is-bonus' : ''}`;
-        node.dataset.lane = String(lane.id);
-        field.append(node);
-      }
-      node.style.left = `${(lane.x / AIM_BOARD_W) * 100}%`;
-      node.style.top = `${(lane.y / AIM_BOARD_H) * 100}%`;
-      node.style.width = `${(lane.w / AIM_BOARD_W) * 100}%`;
-      node.style.height = `${(lane.h / AIM_BOARD_H) * 100}%`;
-    }
-    let ball = field.querySelector('.mini-marble');
-    if (!ball) {
-      ball = document.createElement('div');
-      ball.className = 'mini-marble';
-      field.append(ball);
-    }
-    const bx = s.ball ? s.ball.x : s.originX;
-    const by = s.ball ? s.ball.y : s.originY;
-    ball.style.left = `${(bx / AIM_BOARD_W) * 100}%`;
-    ball.style.top = `${(by / AIM_BOARD_H) * 100}%`;
-    let aim = field.querySelector('.mini-aim-line');
-    if (!aim) {
-      aim = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      aim.classList.add('mini-aim-line');
-      aim.setAttribute('viewBox', `0 0 ${AIM_BOARD_W} ${AIM_BOARD_H}`);
-      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-      aim.append(line);
-      field.append(aim);
-    }
-    const line = aim.querySelector('line');
-    if (s.pull && !s.ball) {
-      aim.hidden = false;
-      line.setAttribute('x1', String(s.originX));
-      line.setAttribute('y1', String(s.originY));
-      line.setAttribute('x2', String(s.originX + s.pull.dx));
-      line.setAttribute('y2', String(s.originY + s.pull.dy));
-    } else aim.hidden = true;
-  }
   function showResult(s) {
     settled=true;$('#mini-stop').hidden=true;$('#mini-grid').hidden=true;$('#mini-field').hidden=true;$('#mini-message').hidden=true;$('#mini-result').hidden=false;
-    $('#mini-result-title').textContent=s.kind==='sling' ? (s.won?'拆塔成功！':s.status==='aborted'?'本局已结束':'时间到，再接再厉') : s.status==='complete'?'挑战完成！':'时间到啦';
+    $('#mini-result-title').textContent=s.kind==='sling' ? (s.won?'推出成功！':s.status==='aborted'?'本局已结束':'时间到，再接再厉') : s.status==='complete'?'挑战完成！':'时间到啦';
     const math=$('#mini-result-math');
     if (s.kind==='blocks') {
       math.hidden=false;
@@ -313,7 +270,7 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
       math.classList.remove('is-on'); void math.offsetWidth; math.classList.add('is-on');
     } else if (s.kind==='sling') {
       math.hidden=false;
-      math.textContent=`击落 ${s.removed}/${SLING_TARGET} 块${s.won ? ` · 过关 +${SLING_WIN_BONUS}` : ''}`;
+      math.textContent=`出界 ${s.removed}/${SLING_TARGET} 块${s.won ? ` · 过关 +${SLING_WIN_BONUS}` : ''}`;
     } else { math.hidden=true; math.textContent=''; math.classList.remove('is-on'); }
     const paid=secretPayout(s.score, scoreMultiplier);
     const moleNote=s.kind==='moles'?` · 打中 ${s.hit}/40 只`:'';
@@ -360,15 +317,9 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     } else if (s.kind==='sling') {
       progress.max=SLING_TARGET;
       progress.value=Math.min(s.removed, SLING_TARGET);
-      progress.setAttribute('aria-label','已击落方块');
-      $('#mini-round').textContent=`击落 ${s.removed}/${SLING_TARGET}`;
+      progress.setAttribute('aria-label','已推出平台的方块');
+      $('#mini-round').textContent=`出界 ${s.removed}/${SLING_TARGET}`;
       renderSling($('#mini-field'),s);
-    } else if (s.kind==='aim') {
-      progress.max=AIM_DURATION;
-      progress.value=game.remaining(visibleAt);
-      progress.setAttribute('aria-label','小游戏剩余时间');
-      $('#mini-round').textContent=`打中 ${s.hit} · 剩余 ${AIM_BALLS - s.fired}`;
-      renderAim(s);
     } else {
       progress.max=MINI_DURATION;
       progress.value=game.remaining(visibleAt);
@@ -487,7 +438,7 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     try { field.setPointerCapture(event.pointerId); } catch { /* a synthetic test event has no pointer */ }
     const point = fieldPoint(event);
     if (game.state.kind === 'stars') game.setBasket(point.x);
-    else if (game.state.kind === 'aim' || game.state.kind === 'sling') game.setAim(point);
+    else if (game.state.kind === 'sling') game.setAim(point);
     paint();
   });
   field.addEventListener('pointermove', event => {
@@ -496,7 +447,7 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     slingNow();
     const point = fieldPoint(event);
     if (game.state.kind === 'stars') game.setBasket(point.x);
-    else if (game.state.kind === 'aim' || game.state.kind === 'sling') game.setAim(point);
+    else if (game.state.kind === 'sling') game.setAim(point);
     paint();
   });
   field.addEventListener('pointerup', event => {
@@ -504,7 +455,7 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
     if (game.state.kind === 'sling' && event.pointerId !== dragPointer) return;
     dragging = false;
     slingNow();
-    if ((game.state.kind === 'aim' || game.state.kind === 'sling') && game.state.status === 'playing') game.release();
+    if (game.state.kind === 'sling' && game.state.status === 'playing') game.release();
     try { if (field.hasPointerCapture(event.pointerId)) field.releasePointerCapture(event.pointerId); } catch { /* already released */ }
     paint();
   });

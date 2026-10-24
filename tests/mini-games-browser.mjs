@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { connectedBlocks, BLOCK_CLEAR_TARGET, BLOCK_DURATION, BLOCK_POINT, MINI_DURATION, comboPoints, formatComboMultiplier, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS, AFK_BALL_TEXT, MOLE_WAVE_MS, MOLE_FLIP_MS, STAR_DURATION, AIM_DURATION } from '../src/mini-games.js';
+import { connectedBlocks, BLOCK_CLEAR_TARGET, BLOCK_DURATION, BLOCK_POINT, MINI_DURATION, comboPoints, formatComboMultiplier, PAIR_POINT, PAIR_TARGET, PAIR_DURATION, PAIR_CLEAR_BONUS, AFK_BALL_TEXT, MOLE_WAVE_MS, MOLE_FLIP_MS, STAR_DURATION } from '../src/mini-games.js';
 import { SECRET_BALLS } from '../src/round.js';
 const executablePath=process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined);
 const browser=await chromium.launch({executablePath,args:process.platform==='linux'?['--no-sandbox']:[]});
@@ -49,18 +49,6 @@ try {
    if(after.hit>0) throw new Error(`caught a star basket=${after.basketX} items=${JSON.stringify(after.items.filter(item=>item.kind==='star').map(item=>({x:item.x,y:item.y,resolved:item.resolved})))}`);
   }
  }
- async function dragAim(dx,dy){
-  await page.evaluate(({dx,dy})=>{
-   const field=document.querySelector('#mini-field');
-   const rect=field.getBoundingClientRect();
-   const client=(x,y)=>({x:rect.left+(x/320)*rect.width,y:rect.top+(y/420)*rect.height});
-   const rest=client(160,372), pulled=client(160-dx,372-dy);
-   const opts=(x,y)=>({bubbles:true,clientX:x,clientY:y,pointerId:1,pointerType:'mouse',isPrimary:true});
-   field.dispatchEvent(new PointerEvent('pointerdown',opts(rest.x,rest.y)));
-   field.dispatchEvent(new PointerEvent('pointermove',opts(pulled.x,pulled.y)));
-   field.dispatchEvent(new PointerEvent('pointerup',opts(pulled.x,pulled.y)));
-  },{dx,dy});
- }
  const state=()=>page.evaluate(()=>window.__ponpon);
  const mini=async()=> (await state()).miniGame;
  const score=async()=> (await state()).score;
@@ -83,7 +71,7 @@ try {
  assert.match(await page.locator('#mini-intro-reward').textContent(),/挂机未操作，无小球奖励/);
  assert.equal(await page.locator('#mini-game').evaluate(el=>el.scrollHeight<=el.clientHeight+1),true,'the phone intro fits without scrolling');
  const before=await score(),clock=s.gameClock,stockBeforeMini=s.available,firstKind=s.lastMiniGame;
- assert.ok(['pairs','blocks','moles','stars','aim','sling'].includes(firstKind),'starting a secret mini-game remembers it before confirm');
+ assert.ok(['pairs','blocks','moles','stars','sling'].includes(firstKind),'starting a secret mini-game remembers it before confirm');
  await page.keyboard.press('Escape');assert.equal(await page.locator('#mini-game').evaluate(el=>el.open),true);
  await page.clock.fastForward(5000);s=await state();
  assert.equal(s.miniGame,null,'waiting on the intro does not create the game');
@@ -109,7 +97,7 @@ try {
  await page.locator('#settings-button').click();await page.locator('#auto').uncheck();
  assert.equal(await page.locator('#gm-tools').isVisible(),false);
  for(let clicks=1;clicks<=3;clicks++){await page.locator('#gm-dot').click();await page.clock.runFor(200);assert.equal((await state()).gm,clicks===3);}
- assert.equal(await page.locator('#gm-tools').isVisible(),true);assert.equal(await page.locator('#gm-dot').getAttribute('aria-pressed'),'true');
+ assert.equal(await page.locator('#gm-tools').isVisible(),true);assert.equal(await page.locator('[data-mini=aim]').count(),0);assert.equal(await page.locator('[data-mini]').count(),5);assert.equal(await page.locator('#gm-dot').getAttribute('aria-pressed'),'true');
  await page.locator('#time-flow').check();await page.clock.fastForward(330000);assert.equal(await page.locator('#time-phase').textContent(),'夜间');
  async function start(kind){
   await page.locator(`[data-mini="${kind}"]`).click();await page.clock.runFor(50);
@@ -120,7 +108,6 @@ try {
   assert.match(await page.locator('#mini-intro-reward').textContent(),/试玩只记快乐积分/);
   assert.equal(await page.locator('#mini-game').evaluate(el=>el.scrollHeight<=el.clientHeight+1),true,`${kind} intro fits without scrolling`);
   if(kind==='stars'){assert.equal(await page.locator('#mini-intro-time').textContent(),'30 秒');assert.equal(await page.locator('#mini-intro-goal').textContent(),'接住星星，躲开炸弹');}
-  if(kind==='aim'){assert.equal(await page.locator('#mini-intro-time').textContent(),'30 秒，或 5 颗弹珠');assert.equal(await page.locator('#mini-intro-goal').textContent(),'打中滑动靶，或时间到');}
   await page.locator('#mini-start').click();await page.clock.runFor(50);
   assert.equal((await mini()).kind,kind);
   assert.equal(await page.locator('#mini-rule').isVisible(),false,'the long rule leaves the in-game header');
@@ -206,22 +193,6 @@ try {
  assert.equal((await mini()).played,false);
  assert.equal(await page.locator('#mini-result-balls').textContent(),AFK_BALL_TEXT);
  await back();
- await start('aim');
- assert.equal(await page.locator('#mini-round').textContent(),'打中 0 · 剩余 5');
- await page.clock.fastForward(Math.max(0,1440-((await mini()).lastSim-(await mini()).startedAt)));
- await dragAim(24,-86);
- await page.clock.fastForward(1600);
- assert.ok((await mini()).hit>=1,'the aimed shot hits a target');
- assert.equal((await mini()).played,true);
- await page.clock.fastForward(AIM_DURATION);
- await back();
- await start('aim');
- await page.clock.fastForward(AIM_DURATION+50);
- assert.equal((await mini()).fired,0);
- assert.equal((await mini()).hit,0);
- assert.equal((await mini()).played,false);
- assert.equal(await page.locator('#mini-result-balls').textContent(),AFK_BALL_TEXT);
- await back();
  // A timed wave advances even if the player does not hit any mole.
  await start('moles');
  for(let wave=2;wave<=10;wave++){await page.clock.fastForward(MOLE_WAVE_MS+MOLE_FLIP_MS);assert.equal((await mini()).wave,wave,'each visible slice advances one wave');}
@@ -289,17 +260,8 @@ try {
    if(star) await parkBasket(star.x);
    await page.clock.fastForward(500);
   }else if(kind==='sling'){
-   await page.evaluate(()=>{ const f=document.querySelector('#mini-field'),r=f.getBoundingClientRect(); const fire=(type,x,y)=>f.dispatchEvent(new PointerEvent(type,{bubbles:true,pointerId:1,clientX:r.left+x/320*r.width,clientY:r.top+y/420*r.height})); fire('pointerdown',58,298);fire('pointermove',16,316);fire('pointerup',16,316); });
+   await page.evaluate(x=>{ const f=document.querySelector('#mini-field'),r=f.getBoundingClientRect(); const fire=type=>f.dispatchEvent(new PointerEvent(type,{bubbles:true,pointerId:1,clientX:r.left+x/320*r.width,clientY:r.top+365/420*r.height})); fire('pointerdown');fire('pointerup'); },[50,94,138,182,226,270][step%6]);
    await page.clock.fastForward(800);
-  }else if(kind==='aim'){
-   const shots=[{releaseAt:1440,dx:24,dy:-86},{releaseAt:5544,dx:24,dy:-86},{releaseAt:8568,dx:24,dy:-86},{releaseAt:11112,dx:-12,dy:-86},{releaseAt:13480,dx:0,dy:-86}];
-   const elapsed=live.lastSim-live.startedAt;
-   const shot=shots.find(item=>item.releaseAt>=elapsed-20);
-   if(!shot) break;
-   const wait=shot.releaseAt-elapsed;
-   if(wait>0) await page.clock.fastForward(wait);
-   await dragAim(shot.dx,shot.dy);
-   await page.clock.fastForward(40);
   }else{
    const mole=board.findIndex(cell=>cell.type==='mole'&&!cell.hit);
    if(mole>=0) await cell(mole);

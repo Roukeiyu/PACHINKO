@@ -132,7 +132,7 @@ try {
       await page.locator(`[data-cell="${groups[1][0].index}"]`).evaluate(el => el.click());
     } else if (board.kind === 'stars') {
       await idleStars(page);
-    } else if (board.kind === 'aim' || board.kind === 'sling') {
+    } else if (board.kind === 'sling') {
       await page.clock.fastForward(miniWait);
     } else {
       const index = board.board.findIndex((_, cell) => connectedBlocks(board.board, cell).length < 3);
@@ -158,14 +158,9 @@ try {
       }
     } else if (board.kind === 'sling') {
       for (let shot = 0; shot < 4 && !(await page.evaluate(() => window.__ponpon.miniGame.played)); shot++) {
-        await dragAim(page, 42, -18);
+        await fireSling(page, [50,94,138,182][shot]);
         await page.clock.fastForward(800);
       }
-    } else if (board.kind === 'aim') {
-      const elapsed = board.lastSim - board.startedAt;
-      await page.clock.fastForward(Math.max(0, 1440 - elapsed));
-      await dragAim(page, 24, -86);
-      await page.clock.fastForward(1600);
     } else {
       const index = board.board.findIndex((_, cell) => connectedBlocks(board.board, cell).length >= 3);
       await page.locator(`[data-cell="${index}"]`).evaluate(el => el.click());
@@ -187,20 +182,12 @@ try {
       field.dispatchEvent(new PointerEvent('pointerup', opts));
     }, x);
   }
-  async function dragAim(target, dx, dy) {
-    await target.evaluate(({ dx, dy }) => {
-      const field = document.querySelector('#mini-field');
-      const rect = field.getBoundingClientRect();
-      const client = (x, y) => ({ x: rect.left + (x / 320) * rect.width, y: rect.top + (y / 420) * rect.height });
-      const sling = document.querySelector('#mini-game').dataset.kind === 'sling';
-      const x = sling ? 58 : 160, y = sling ? 298 : 372;
-      const rest = client(x, y);
-      const pulled = client(x - dx, y - dy);
-      const opts = (x, y) => ({ bubbles: true, clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse', isPrimary: true });
-      field.dispatchEvent(new PointerEvent('pointerdown', opts(rest.x, rest.y)));
-      field.dispatchEvent(new PointerEvent('pointermove', opts(pulled.x, pulled.y)));
-      field.dispatchEvent(new PointerEvent('pointerup', opts(pulled.x, pulled.y)));
-    }, { dx, dy });
+  async function fireSling(target, x) {
+    await target.evaluate(x => {
+      const field=document.querySelector('#mini-field'),r=field.getBoundingClientRect();
+      const opts={bubbles:true,pointerId:1,clientX:r.left+x/320*r.width,clientY:r.top+365/420*r.height};
+      field.dispatchEvent(new PointerEvent('pointerdown',opts));field.dispatchEvent(new PointerEvent('pointerup',opts));
+    },x);
   }
   async function idleStars(target) {
     for (let i = 0; i < 320; i++) {
