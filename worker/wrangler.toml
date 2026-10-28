@@ -13,3 +13,9 @@ GITHUB_REPO = "PACHINKO"
 GITHUB_BRANCH = "leaderboard-data"
 GITHUB_PATH = "leaderboard.json"
 CACHE_SECONDS = "45"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ponpon-profiles"
+database_id = "1ffbecd4-483b-449b-b510-18cdf337db6b"
+migrations_dir = "migrations"

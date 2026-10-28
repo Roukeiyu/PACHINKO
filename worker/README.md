@@ -107,4 +107,37 @@ npm test
 - `runId` 必须是 UUID，或游戏在没有 `randomUUID` 时生成的 `run-...-...`。
 - 同一个 `runId` 已有更高或相同分数时，不写 GitHub，名字也保持第一次提交的那个。
 
-直接写 GitHub Contents API 适合现在的提交量。文件通过这个 API 写入时大约有 1MB 上限；如果以后成绩很多，更稳的做法是用 Workers KV 或 D1 当主存储，再定时把快照同步到 `leaderboard-data`。当前没有这么做。
+直接写 GitHub Contents API 适合现在的提交量。文件通过这个 API 写入时大约有 1MB 上限；如果以后成绩很多，更稳的做法是用 Workers KV 或 D1 当主存储，再定时把快照同步到 `leaderboard-data`。排行榜本身仍写在 GitHub 上。
+
+## 玩家档案
+
+水果收集和弹珠皮肤记在 D1 数据库 `ponpon-profiles`（`1ffbecd4-483b-449b-b510-18cdf337db6b`）里，绑定名是 `DB`。表结构在 `migrations/0001_profiles.sql`。
+
+接口都在同一个 Worker 上：
+
+| 方法 | 路径 | 作用 |
+| --- | --- | --- |
+| POST | `/register` | 名字 + 4 位数字密码，建档并返回 session token |
+| POST | `/login` | 核对密码，返回 token |
+| POST | `/logout` | 作废 token |
+| GET | `/me` | 名字、水果数量、已解锁和正在用的皮肤 |
+| POST | `/round-result` | 把这一局的水果增量加上去。同一个 `runId` 再交一次不会重复加 |
+| POST | `/equip` | 装备已解锁的皮肤，空字符串换回默认金球 |
+
+密码用盐和 PBKDF2-SHA256 保存，不明文。同一个档案连续 5 次密码错误会锁 15 分钟。每个 IP 每分钟最多尝试注册或登录 8 次。Token 只存哈希，180 天过期。请求头是 `Authorization: Bearer <token>`。
+
+一局里每种水果最多记 500 个，五种加起来最多 1500 个。超过的请求会被拒绝。
+
+部署档案表和 Worker 只需要这两个环境变量，不必重新设置已经在线上的 `GITHUB_TOKEN`：
+
+```bash
+cd worker
+export CLOUDFLARE_API_TOKEN=你的令牌
+export CLOUDFLARE_ACCOUNT_ID=dd22a49707ad958b6aff092fc9805900
+npx wrangler d1 migrations apply ponpon-profiles --remote
+npx wrangler deploy
+```
+
+API Token 需要原来的 Workers 部署权限，再加 Account 的 D1 Edit。没有 D1 权限时，迁移这一步会失败，排行榜的 GitHub token 不用重设。
+
+GitHub Actions 的 `Deploy leaderboard worker` 会在 `wrangler deploy` 之前执行同一条迁移命令。

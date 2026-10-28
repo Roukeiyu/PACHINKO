@@ -3,6 +3,7 @@ import { sceneMotionAt, project2DMotion } from './scene-motion.js';
 import { TABLE, LAUNCH_SQUASH } from './physics.js';
 import { BOARD_CROWD_LOCK, DRAIN_WALL } from './round.js';
 import { ballOwnFactor, ballRimStyle } from './ball-rim.js';
+import { skinById } from './skins.js';
 import { blendSlotLayout } from './slot-transition.js';
 import { SLOT_DISPLAY, BALL_SYMBOL, REEL_WEIGHTS, reelBox, PROGRESS_TOP, PROGRESS_HEIGHT, slotBonusLabel } from './slot-machine.js';
 import { drawReelSymbol } from './reel-icons.js';
@@ -30,17 +31,18 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     ctx.save(); if (shadow) { ctx.shadowColor = paintColor('#45523d35', 'glow'); ctx.shadowBlur = 0; ctx.shadowOffsetY = 5; }
     ctx.beginPath(); body.vertices.forEach((v, i) => { if (!i) ctx.moveTo(v.x, v.y); else ctx.lineTo(v.x, v.y); }); ctx.closePath(); ctx.fillStyle = paintColor(color, 'object'); ctx.fill(); ctx.shadowOffsetY = 0; ctx.lineWidth = 2; ctx.strokeStyle = paintColor(stroke, 'line'); ctx.stroke(); ctx.restore();
   }
-  function ball(x, y, opacity = 1, cheap = false, gift = false) {
+  function ball(x, y, opacity = 1, cheap = false, gift = false, skinId = '') {
     if (textureMode) return;
     paintingBall = true;
     ctx.save(); ctx.globalAlpha = opacity;
-    // Gift balls (clock, drum, jar, restore) stay pearly lavender so they
-    // read apart from the gold launched balls, including the cheap crowd path.
-    const flat = gift ? '#e4dcff' : '#ffdb76';
-    const glow = gift ? '#d7ccf6' : '#ffd862';
-    const rim = gift ? '#c9b6ea' : '#a4425d';
-    const mid = gift ? '#f7f4ff' : '#fffde8';
-    const edge = gift ? '#c5b4f0' : '#ffdb76';
+    // Gift balls stay pearly lavender so the purple multiplier rim still reads.
+    // A fruit skin only recolors a launched ball; the rim is drawn afterwards.
+    const skin = gift ? null : skinById(skinId);
+    const flat = gift ? '#e4dcff' : skin?.flat || '#ffdb76';
+    const glow = gift ? '#d7ccf6' : skin?.glow || '#ffd862';
+    const rim = gift ? '#c9b6ea' : skin?.edge || '#a4425d';
+    const mid = gift ? '#f7f4ff' : skin?.mid || '#fffde8';
+    const edge = gift ? '#c5b4f0' : skin?.edge || '#ffdb76';
     if (cheap) {
       circle(x, y, 11.5, paintColor(flat));
       ctx.restore();
@@ -50,7 +52,10 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     ctx.shadowColor = paintColor(glow, 'glow'); ctx.shadowBlur = 25;
     circle(x, y, 14, rim); ctx.shadowBlur = 0;
     const g = ctx.createRadialGradient(x - 3, y - 4, 0, x, y, 12); g.addColorStop(0, paintColor('#ffffff')); g.addColorStop(.6, paintColor(mid)); g.addColorStop(1, paintColor(edge));
-    circle(x, y, 11.5, g);     circle(x - 3, y - 4, 3.5, '#fff'); ctx.restore(); paintingBall = false;
+    circle(x, y, 11.5, g);
+    circle(x - 3, y - 4, 3.5, '#fff');
+    if (skin?.tier === 2) text(skin.mark, x + 3, y + 3, 8, '#fff');
+    ctx.restore(); paintingBall = false;
   }
   function ownRim(x, y, factor, quiet, gift = false) {
     const style = ballRimStyle(factor, gift);
@@ -343,7 +348,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
         }
         ctx.restore();
       }
-      ball(TABLE.launchX, TABLE.launchY + compression, .88);
+      ball(TABLE.launchX, TABLE.launchY + compression, .88, false, false, state.equippedSkin);
     }
     text('PULL', 713, 850 + compression * .3, 9, '#65785c', 'bold');
     if (game.star) starMemory = { id: game.star.id, x: game.star.x, y: game.star.y, multiplier: game.star.multiplier };
@@ -547,7 +552,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     const crowded = game.balls.length >= BOARD_CROWD_LOCK;
     for (const b of game.balls) {
       if (!state.calm && !(crowded && b.bonus)) b.trail.forEach((pos, i) => { ctx.save(); ctx.globalAlpha = i / b.trail.length * .5; circle(pos.x, pos.y, 3 + i / b.trail.length * 7, b.bonus ? '#d9cff6' : '#f7b863'); ctx.restore(); });
-      ball(b.body.position.x, b.body.position.y, 1, crowded && b.bonus, b.bonus);
+      ball(b.body.position.x, b.body.position.y, 1, crowded && b.bonus, b.bonus, state.equippedSkin);
       if (!textureMode) ownRim(b.body.position.x, b.body.position.y, ballOwnFactor(b), state.calm || crowded, b.bonus);
     }
     ctx.restore();

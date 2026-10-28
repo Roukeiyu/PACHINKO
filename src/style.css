@@ -342,3 +342,11 @@ html:not(.calm) .ball-count.is-low{animation:ball-low 900ms ease-in-out infinite
 .mini-catch-pop.is-soft .mini-catch-spark{animation:mini-catch-fade .18s linear forwards}
 @keyframes mini-catch-fade{to{opacity:0}}
 .mini-basket.is-hurt{background:#d87f8a;box-shadow:inset 0 0 0 3px #ba4b60}
+.profile-chip{border:1px solid var(--flow-line-ccd8bd,#ccd8bd);background:var(--flow-surface-fffdf5,#fffdf5);color:var(--ink);border-radius:999px;padding:4px 10px;min-height:32px;font-size:12px;cursor:pointer}
+.profile-hint{font-size:13px;line-height:1.6;color:var(--flow-ink-647659,#647659)}
+.profile-field{display:flex;flex-direction:column;gap:4px;margin:10px 0;font-size:13px}
+.profile-field input{min-height:40px;border-radius:10px;border:1px solid var(--flow-line-d8cbbc,#d8cbbc);padding:0 12px;font-size:16px}
+.skin-list{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+.skin-row{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:11px;color:var(--flow-ink-647659,#647659)}
+.skin-equip{border:1px solid var(--flow-line-ccd8bd,#ccd8bd);background:#fff;border-radius:8px;padding:2px 8px;min-height:24px;font-size:11px;cursor:pointer}
+.skin-equip:disabled{opacity:.7;cursor:default}

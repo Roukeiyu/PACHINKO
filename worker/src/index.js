@@ -1,6 +1,7 @@
 // Leaderboard API. Preset rows come from the game so the two lists cannot drift.
 // Real rows live in leaderboard.json on the leaderboard-data branch, never on main.
 import { SUBMIT_LIMIT_PER_MINUTE, RATE_WINDOW_MS, allowedOrigin, decodeBase64, encodeBase64, mergeTop, validateSubmission } from './rules.js';
+import { handleProfile } from './profiles.js';
 
 const buckets = new Map();
 
@@ -46,7 +47,7 @@ function json(body, status, origin, extra) {
   if (origin) {
     headers.set('Access-Control-Allow-Origin', origin);
     headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    headers.set('Access-Control-Allow-Headers', 'Content-Type, Accept');
+    headers.set('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization');
     headers.set('Vary', 'Origin');
   }
   return new Response(JSON.stringify(body), { status, headers });
@@ -57,7 +58,7 @@ function empty(status, origin, extra) {
   if (origin) {
     headers.set('Access-Control-Allow-Origin', origin);
     headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    headers.set('Access-Control-Allow-Headers', 'Content-Type, Accept');
+    headers.set('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization');
     headers.set('Access-Control-Max-Age', '86400');
     headers.set('Vary', 'Origin');
   }
@@ -65,8 +66,15 @@ function empty(status, origin, extra) {
 }
 
 function routeOf(pathname) {
-  if (pathname === '/top' || pathname === '/top/') return 'top';
-  if (pathname === '/submit' || pathname === '/submit/') return 'submit';
+  const path = pathname.replace(/\/+$/, '') || '/';
+  if (path === '/top') return 'top';
+  if (path === '/submit') return 'submit';
+  if (path === '/register') return 'register';
+  if (path === '/login') return 'login';
+  if (path === '/logout') return 'logout';
+  if (path === '/me') return 'me';
+  if (path === '/round-result') return 'round';
+  if (path === '/equip') return 'equip';
   return '';
 }
 
@@ -187,6 +195,10 @@ export default {
     const route = routeOf(new URL(request.url).pathname);
     if (!route) return json({ ok: false, error: 'not_found' }, 404, origin);
     if (request.method === 'OPTIONS') return empty(204, origin);
+    if (route !== 'top' && route !== 'submit') {
+      if (!env.DB) return json({ ok: false, error: 'not_configured' }, 503, origin);
+      return handleProfile(request, env, route, origin, json);
+    }
     if (!env.GITHUB_TOKEN || !env.GITHUB_OWNER || !env.GITHUB_REPO || !env.GITHUB_BRANCH || !env.GITHUB_PATH) {
       return json({ ok: false, error: 'not_configured' }, 503, origin);
     }

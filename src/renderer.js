@@ -8,6 +8,7 @@ import { reelBox } from './slot-machine.js';
 import { chargeEffectsAt } from './charge.js';
 import { sceneMotionAt } from './scene-motion.js';
 import { ballOwnFactor, ballRimStyle } from './ball-rim.js';
+import { skinById } from './skins.js';
 
 const W = TABLE.width, H = TABLE.height;
 const world = (x, y, z = 0) => new THREE.Vector3(x - W / 2, H / 2 - y, z);
@@ -265,7 +266,7 @@ function create3DRenderer(canvas) {
   const BALL_CAPACITY = 512;
   const sphere = new THREE.SphereGeometry(11, 24, 16);
   const burstSphere = new THREE.SphereGeometry(11, 16, 12);
-  const ballMaterial = new THREE.MeshStandardMaterial({ color: '#ffedb0', metalness: .6, roughness: .2, envMapIntensity: 1.4 });
+  const ballMaterial = new THREE.MeshStandardMaterial({ color: '#ffffff', metalness: .6, roughness: .2, envMapIntensity: 1.4 });
   const burstMaterial = new THREE.MeshLambertMaterial({ color: '#f4f1ff', emissive: '#b7a4e6', emissiveIntensity: 0.55 });
   const ballDummy = new THREE.Object3D();
   function makeBalls(geometry, material, shadows) {
@@ -306,7 +307,9 @@ function create3DRenderer(canvas) {
   const rimDummy = new THREE.Object3D();
   const rimColor = new THREE.Color();
   const glowColor = new THREE.Color();
-  const readyBall = new THREE.Mesh(sphere, ballMaterial); readyBall.castShadow = true; table.add(readyBall);
+  const readyMaterial = ballMaterial.clone();
+  const readyBall = new THREE.Mesh(sphere, readyMaterial); readyBall.castShadow = true; table.add(readyBall);
+  const ballColor = new THREE.Color('#ffedb0');
   const springPoints = Array.from({ length: 193 }, (_, i) => { const t = i / 192, a = t * Math.PI * 12; return new THREE.Vector3(Math.cos(a) * 9, t * 52, 9 + Math.sin(a) * 5); });
   const spring = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(springPoints), 192, 1.7, 6, false), material('#a4ac93', 'object', { metalness: .7, roughness: .3 }));
   spring.position.copy(world(TABLE.launchX, 865)); spring.castShadow = true; table.add(spring);
@@ -538,6 +541,10 @@ function create3DRenderer(canvas) {
         ballDummy.scale.set(1, 1, 1);
         ballDummy.updateMatrix();
         mesh.setMatrixAt(index, ballDummy.matrix);
+        if (!ball.bonus) {
+          ballColor.set(skinById(state.equippedSkin)?.flat || '#ffedb0');
+          playerBalls.setColorAt(index, ballColor);
+        }
       }
       ballPositions.set(ball.id, { x: ball.body.position.x, y: ball.body.position.y, z: 12 });
       if (rimCount < BALL_CAPACITY) {
@@ -566,7 +573,9 @@ function create3DRenderer(canvas) {
     bonusBalls.count = Math.min(bonusCount, BALL_CAPACITY);
     rimMesh.count = rimCount;
     glowMesh.count = glowCount;
+    readyMaterial.color.set(skinById(state.equippedSkin)?.flat || '#ffedb0');
     playerBalls.instanceMatrix.needsUpdate = true;
+    if (playerBalls.instanceColor) playerBalls.instanceColor.needsUpdate = true;
     bonusBalls.instanceMatrix.needsUpdate = true;
     rimMesh.instanceMatrix.needsUpdate = true;
     glowMesh.instanceMatrix.needsUpdate = true;
