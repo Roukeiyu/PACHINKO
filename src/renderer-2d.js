@@ -102,7 +102,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     if (!theme.motif) return;
     ctx.save();
     ctx.globalAlpha = 0.55;
-    const spots = [[28, 210], [732, 260], [28, 620], [732, 680]];
+    const spots = [[64, 175], [640, 175], [64, 520], [640, 600]];
     for (const [x, y] of spots) {
       if (theme.motif === 'cherry') { circle(x, y, 7, '#d0122d'); circle(x + 8, y - 2, 6, '#e23b4a'); }
       else if (theme.motif === 'orange') { circle(x, y, 8, '#f06a00', '#c2410c', 1); }
@@ -156,13 +156,15 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     box(38, 43, 620, 741, 30, theme.field || '#ffffff29', theme.fieldEdge || '#c3c4a93b');
     box(689, 128, 47, 739, 21, theme.lane || '#d9e6d299');
     drawMotif(theme, t);
-    ctx.save(); ctx.strokeStyle = paintColor('#afc09a75', 'line'); ctx.lineWidth = 2; ctx.setLineDash([3, 10]); ctx.beginPath(); ctx.moveTo(713, 750); ctx.lineTo(713, 154); ctx.stroke(); ctx.restore();
-    for (let i = 0; i < 3; i++) { const y = 650 + i * 60 - (t * 45 % 60); ctx.beginPath(); ctx.moveTo(704, y + 8); ctx.lineTo(713, y); ctx.lineTo(722, y + 8); ctx.strokeStyle = paintColor('#86a869a0', 'line'); ctx.lineWidth = 3; ctx.stroke(); }
+    const laneMark = theme.hueLock ? theme.accent : '#afc09a75';
+    ctx.save(); ctx.strokeStyle = paintColor(laneMark, 'line'); ctx.lineWidth = 2; ctx.setLineDash([3, 10]); ctx.beginPath(); ctx.moveTo(713, 750); ctx.lineTo(713, 154); ctx.stroke(); ctx.restore();
+    for (let i = 0; i < 3; i++) { const y = 650 + i * 60 - (t * 45 % 60); ctx.beginPath(); ctx.moveTo(704, y + 8); ctx.lineTo(713, y); ctx.lineTo(722, y + 8); ctx.strokeStyle = paintColor(theme.hueLock ? theme.accent : '#86a869a0', 'line'); ctx.lineWidth = 3; ctx.stroke(); }
+    const caption = theme.hueLock ? theme.ink : null;
     text('P O N  P O N', 351, 112, 24, theme.ink || '#69815d', 'bold');
     const bonus = game.slotMachine, bonusLabel = slotBonusLabel(bonus, game.clock);
-    text(bonusLabel || 'LITTLE PINBALL CLUB', 351, 133, 11, bonus.multiplier === 5 ? '#8b59b5' : bonus.multiplier === 2 ? '#99712d' : '#9ca184', bonusLabel ? 'bold' : '');
+    text(bonusLabel || 'LITTLE PINBALL CLUB', 351, 133, 11, bonus.multiplier === 5 ? '#8b59b5' : bonus.multiplier === 2 ? '#99712d' : (caption || '#9ca184'), bonusLabel ? 'bold' : '');
     if (bonusLabel) { ctx.save(); ctx.lineWidth = 2; ctx.strokeStyle = paintColor(bonus.multiplier === 5 ? '#b494d0' : '#d5b069', 'line'); ctx.strokeRect(43, 46, 609, 737); ctx.restore(); }
-    text('↖', 651, 103, 27, '#a0b28d');
+    text('↖', 651, 103, 27, caption || '#a0b28d');
     star(209, 112, 7, '#d7b57a', t * .3); star(495, 112, 7, '#d7b57a', -t * .3);
     [[104, 209], [597, 647], [402, 196], [86, 639]].forEach(([x, y], i) => star(x, y + Math.sin(t + i) * 3, 4, '#d4b78475', t * .1));
     // Painted guide rings provide motion cues without competing with the ball.
@@ -172,7 +174,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     // line shows the separate upward path, which is never blocked by the flap.
     ctx.save();ctx.globalAlpha=.8;bodyShape(game.gates[1], game.rewards.gateGlow ? '#f8cc77' : '#d7bf97', '#fff3d6', false);ctx.restore();
     ctx.save();ctx.setLineDash([5,6]);ctx.strokeStyle = paintColor('#a7ba8e', 'line');ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(676,539);ctx.lineTo(676,615);ctx.stroke();ctx.restore();
-    text('↙ 回流口', 624, 640, 12, '#9b8965');
+    text('↙ 回流口', 624, 640, 12, caption || '#9b8965');
     const layout = slotLayout(state);
     const iconSize = 20;
     const scoreSize = 15;
@@ -238,7 +240,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       circle(hole.x, hole.y, 18, gradient, '#ede0a2', 3);
       star(hole.x, hole.y, 7, '#ecda90', t * .25);
       text(`+${500 * bonus.multiplier}`, hole.x, hole.y - 51, 15, '#b39153', 'bold');
-      text('秘密洞', hole.x, hole.y + 52, 12, '#9e9375');
+      text('秘密洞', hole.x, hole.y + 52, 12, caption || '#9e9375');
     }
     for (const guard of game.guards) bodyShape(guard, guard.plugin.storage ? '#b9a6ce' : '#d8c69c', guard.plugin.storage ? '#f4eafb' : '#efe5c8', false);
     const storage = game.collector;
@@ -246,10 +248,10 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     circle(storage.x, storage.y + 2, 22, '#827590');
     const cup = ctx.createRadialGradient(storage.x, storage.y, 0, storage.x, storage.y, 22);
     cup.addColorStop(0, paintColor('#405c59')); cup.addColorStop(1, paintColor('#8eaaa1'));
-    circle(storage.x, storage.y, 21, cup, storage.glow ? '#f3cf7b' : '#eae0f3', 2);
+    circle(storage.x, storage.y, 21, cup, storage.glow ? '#f3cf7b' : (theme.hueLock ? theme.jar : '#eae0f3'), 2);
     text(`${storage.stored.length}/20`, storage.x, storage.y + 3, 11, '#fff9e9', 'bold');
-    text('蓄球罐', storage.x, storage.y - 49, 12, '#8b769f', 'bold');
-    text(storage.remaining ? `落球中 · 余 ${storage.remaining}` : '存 20 · 落 20', storage.x, storage.y + 48, 11, '#8b769f');
+    text('蓄球罐', storage.x, storage.y - 49, 12, caption || '#8b769f', 'bold');
+    text(storage.remaining ? `落球中 · 余 ${storage.remaining}` : '存 20 · 落 20', storage.x, storage.y + 48, 11, caption || '#8b769f');
     // Every bottom slot has a corresponding mouth at the top of the board.
     for (const outlet of storage.outlets) {
       box(outlet.x - 26, outlet.y - 9, 52, 17, 8, outlet.glow ? '#f6daa0' : '#d8d0e3', '#fff8ef');
@@ -266,7 +268,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       ctx.strokeStyle = paintColor('#fffaf0', 'line'); ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
       if (glow && !state.calm) { ctx.globalAlpha = glow; text('› ›', 47 + (1 - glow) * 15, 0, 18, '#c69951', 'bold'); }
       ctx.restore();
-      text('撞击换向', x, y + 54, 12, '#9e9375');
+      text('撞击换向', x, y + 54, 12, caption || '#9e9375');
     }
     for (const rail of game.rails) {
       if (rail.plugin.motion) {
@@ -281,7 +283,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     for (const diamond of game.diamonds) { bodyShape(diamond, diamond.plugin.glow > .3 ? '#fff1c0' : '#bdafcc', '#f6eaf9'); star(diamond.position.x, diamond.position.y, 9, '#fff9e9', diamond.angle); }
     for (const spinner of game.spinners) {
       ctx.save(); ctx.setLineDash([4, 9]); circle(spinner.position.x, spinner.position.y, 72, null, '#b2c79c5c'); ctx.restore();
-      bodyShape(spinner, spinner.plugin.glow > .25 ? '#f4cf83' : '#9fbba0', '#e9f3d9');
+      bodyShape(spinner, spinner.plugin.glow > .25 ? '#f4cf83' : (theme.spinner || '#9fbba0'), theme.hueLock ? theme.wallEdge : '#e9f3d9');
       circle(spinner.position.x, spinner.position.y + 3, 16, '#607b61'); circle(spinner.position.x, spinner.position.y, 14, '#f7ebc3', '#d1be8c', 2);
       text('✿', spinner.position.x, spinner.position.y, 19, '#bb9470');
     }

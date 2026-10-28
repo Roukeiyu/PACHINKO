@@ -93,7 +93,7 @@ document.querySelector('#app').innerHTML = `
 
 const $ = (s) => document.querySelector(s);
 document.querySelector('.header-actions').insertAdjacentHTML('afterbegin', '<button type="button" id="profile-chip" class="profile-chip">游客</button>');
-document.querySelector('#app').insertAdjacentHTML('beforeend', `<dialog id="shine-reveal" class="arcade-dialog shine-reveal"><div class="dialog-inner shine-reveal-inner"><p class="arcade-kicker">LEGENDARY</p><h2>闪耀皮肤解锁！</h2><p class="shine-reveal-copy">单局达到 100 万分。这是台面上最亮的一颗球，也会换上星空台面。</p><div class="name-actions"><button type="button" class="done-button" id="shine-equip">装备闪耀</button><button type="button" id="shine-later">先看着</button></div></div></dialog><dialog id="profile" class="arcade-dialog"><div class="dialog-inner"><div class="dialog-head"><h2>玩家档案</h2><button type="button" id="close-profile" class="icon-button" aria-label="关闭">${icon('close')}</button></div><p id="profile-status" class="dialog-sub"></p><p id="profile-hint" class="profile-hint"></p><form id="profile-form"><label class="profile-field">名字<input id="profile-name" maxlength="12" autocomplete="nickname" /></label><label class="profile-field">4 位数字密码<input id="profile-pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" /></label><p id="profile-error" class="name-error" hidden></p><div class="name-actions"><button type="submit" class="done-button" id="profile-submit">登录</button><button type="button" id="profile-mode">新建档案</button></div></form><button type="button" id="profile-logout" class="done-button" hidden>退出，下一位从游客开始</button></div></dialog>`);
+document.querySelector('#app').insertAdjacentHTML('beforeend', `<dialog id="shine-reveal" class="arcade-dialog shine-reveal"><div class="dialog-inner shine-reveal-inner"><p class="arcade-kicker">LEGENDARY</p><h2>闪耀皮肤解锁！</h2><p class="shine-reveal-copy">单局达到 100 万分。这是台面上最亮的一颗球，也会换上星空台面。</p><div class="name-actions"><button type="button" id="shine-equip" hidden>装备闪耀</button><button type="button" id="shine-later">先看着</button></div></div></dialog><dialog id="profile" class="arcade-dialog"><div class="dialog-inner"><div class="dialog-head"><h2>玩家档案</h2><button type="button" id="close-profile" class="icon-button" aria-label="关闭">${icon('close')}</button></div><p id="profile-status" class="dialog-sub"></p><p id="profile-hint" class="profile-hint"></p><form id="profile-form"><label class="profile-field">名字<input id="profile-name" maxlength="12" autocomplete="nickname" /></label><label class="profile-field">4 位数字密码<input id="profile-pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" /></label><p id="profile-error" class="name-error" hidden></p><div class="name-actions"><button type="submit" class="done-button" id="profile-submit">登录</button><button type="button" id="profile-mode">新建档案</button></div></form><button type="button" id="profile-logout" class="done-button" hidden>退出，下一位从游客开始</button></div></dialog>`);
 const panels = () => [$('#settings'), $('#collection-book'), $('#leaderboard'), $('#name-entry'), $('#settlement'), $('#profile')];
 const panelOpen = () => panels().some(panel => panel?.open);
 const timeTokens = collectTimeTokens(document);
@@ -1111,6 +1111,12 @@ function readOutbox() {
 }
 function showShineReveal() {
   const dialog = $('#shine-reveal');
+  const equip = $('#shine-equip');
+  const guest = !profileClient.token();
+  if (equip) {
+    equip.hidden = guest;
+    equip.disabled = guest;
+  }
   if (dialog && !dialog.open) dialog.showModal();
 }
 function queueRoundFruit() {
@@ -1189,8 +1195,16 @@ function updateCollections() {
       preview.width = preview.height = 64;
       paintBallFace(preview.getContext('2d'), 32, 32, 30, skinById(skin.id));
       const label = document.createElement('span');
+      label.className = 'skin-copy';
       const ready = skin.have >= skin.need;
-      label.textContent = `${ready ? `${skin.name} 已解锁` : `${skin.name} ${skin.have.toLocaleString()}/${skin.need.toLocaleString()}`}${skin.tier === 2 ? ' · 台面主题' : ''}`;
+      const title = document.createElement('span');
+      title.textContent = ready ? `${skin.name} 已解锁` : `${skin.name} ${skin.have.toLocaleString()}/${skin.need.toLocaleString()}`;
+      label.append(title);
+      if (skin.tier === 2) {
+        const note = document.createElement('small');
+        note.textContent = '台面主题';
+        label.append(note);
+      }
       row.append(preview, label);
       if (skin.tier === 2) {
         const swatch = document.createElement('span');
@@ -1289,7 +1303,7 @@ $('#close-profile').addEventListener('click', () => $('#profile').close());
 $('#profile-form').addEventListener('submit', submitProfile);
 $('#profile-mode').addEventListener('click', () => { profileMode = profileMode === 'register' ? 'login' : 'register'; paintProfileMode(); $('#profile-error').hidden = true; });
 $('#profile-logout').addEventListener('click', async () => { await profileClient.logout(); forgetProfile(); $('#profile').close(); toast('已退出，现在是游客'); });
-$('#shine-equip').addEventListener('click', () => { equipSkin('shine'); $('#shine-reveal').close(); });
+$('#shine-equip').addEventListener('click', () => { if (!profileClient.token()) return; equipSkin('shine'); $('#shine-reveal').close(); });
 $('#shine-later').addEventListener('click', () => $('#shine-reveal').close());
 if (devRevealOverride()) showShineReveal();
 restoreProfile();

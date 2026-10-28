@@ -207,10 +207,127 @@ export function paintBallFace(ctx, x, y, r, skin, now = 0) {
   return true;
 }
 
+function fillOpaque(ctx, size, color) {
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, size, size);
+}
+
+// Sphere UVs use the whole square. A round picture leaves the poles transparent,
+// and those texels draw as a black cap. Every pixel here is opaque.
+export function paintBallTexture(ctx, size, skin, now = 0) {
+  ctx.save();
+  if (skin.id === 'shine') {
+    for (let y = 0; y < size; y++) {
+      ctx.fillStyle = `hsl(${(y * 360 / size + now / 8) % 360} 90% 58%)`;
+      ctx.fillRect(0, y, size, 1);
+    }
+    ctx.fillStyle = '#fff';
+    for (let i = 0; i < 16; i++) {
+      ctx.globalAlpha = 0.4 + 0.55 * Math.abs(Math.sin(now / 140 + i));
+      ctx.beginPath();
+      ctx.arc(size * ((i * 0.17) % 1), size * ((i * 0.13 + 0.08) % 1), size * 0.03, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    return;
+  }
+  if (skin.fruit === 20) {
+    fillOpaque(ctx, size, '#e1062c');
+    ctx.fillStyle = '#1f8a3e';
+    const band = size / 5;
+    for (let i = 0; i < 5; i++) ctx.fillRect(0, i * band, size, band * 0.22);
+    ctx.fillStyle = '#f4fff6';
+    for (let i = 0; i < 5; i++) ctx.fillRect(0, i * band + band * 0.22, size, Math.max(2, band * 0.08));
+    ctx.fillStyle = '#2a120f';
+    for (let i = 0; i < 12; i++) {
+      ctx.beginPath();
+      ctx.ellipse(size * (0.12 + (i * 0.17) % 0.76), size * (0.18 + (i * 0.19) % 0.64), size * 0.028, size * 0.045, i, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (skin.fruit === 10) {
+    fillOpaque(ctx, size, '#f0b400');
+    ctx.strokeStyle = '#8a5a12';
+    ctx.lineWidth = Math.max(2, size * 0.035);
+    const step = size / 5;
+    for (let i = -6; i <= 6; i++) {
+      ctx.beginPath();
+      ctx.moveTo(i * step, 0);
+      ctx.lineTo(i * step + size, size);
+      ctx.moveTo(i * step, size);
+      ctx.lineTo(i * step + size, 0);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#2f8a32';
+    ctx.fillRect(0, 0, size, size * 0.16);
+  } else if (skin.fruit === 5) {
+    fillOpaque(ctx, size, '#4a1578');
+    const colors = ['#7a2ea8', '#8e44c4', '#6a2498', '#922ed0', '#55167f'];
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 4; col++) {
+        ctx.fillStyle = colors[(row + col) % colors.length];
+        ctx.beginPath();
+        ctx.arc(size * (0.16 + col * 0.22), size * (0.16 + row * 0.22), size * 0.09, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.strokeStyle = '#2f8a32';
+    ctx.lineWidth = Math.max(2, size * 0.04);
+    ctx.beginPath();
+    ctx.moveTo(size * 0.5, size * 0.08);
+    ctx.lineTo(size * 0.62, 0);
+    ctx.stroke();
+  } else if (skin.fruit === 3) {
+    fillOpaque(ctx, size, '#f06a00');
+    ctx.strokeStyle = '#c2410c';
+    ctx.lineWidth = Math.max(2, size * 0.03);
+    for (let i = 0; i < 8; i++) {
+      ctx.beginPath();
+      ctx.moveTo(size * i / 8, 0);
+      ctx.lineTo(size * i / 8, size);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#ffd7a8';
+    for (let i = 0; i < 12; i++) {
+      ctx.beginPath();
+      ctx.arc(size * (0.12 + (i * 0.17) % 0.76), size * (0.15 + (i * 0.19) % 0.7), size * 0.035, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else {
+    fillOpaque(ctx, size, '#d0122d');
+    ctx.fillStyle = '#ff4d6a';
+    for (let i = 0; i < 5; i++) {
+      ctx.beginPath();
+      ctx.arc(size * (0.2 + i * 0.15), size * (0.35 + (i % 2) * 0.2), size * 0.16, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#3aaa40';
+    ctx.fillRect(0, 0, size, size * 0.1);
+  }
+  if (skin.tier === 2) {
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, size, size);
+    ctx.globalAlpha = 0.85;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = Math.max(1, size * 0.02);
+    for (let i = 0; i < 8; i++) {
+      const px = size * (0.1 + (i * 0.11) % 0.8);
+      const py = size * (0.12 + (i * 0.17) % 0.76);
+      ctx.beginPath();
+      ctx.moveTo(px - size * 0.03, py);
+      ctx.lineTo(px + size * 0.03, py);
+      ctx.moveTo(px, py - size * 0.03);
+      ctx.lineTo(px, py + size * 0.03);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
 export function ballTexture(skin, size = 128, now = 0) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  paintBallFace(ctx, size / 2, size / 2, size * 0.48, skin, now);
+  paintBallTexture(canvas.getContext('2d'), size, skin, now);
   return canvas;
 }

@@ -9,7 +9,7 @@ import { chargeEffectsAt } from './charge.js';
 import { sceneMotionAt } from './scene-motion.js';
 import { ballOwnFactor, ballRimStyle } from './ball-rim.js';
 import { activeSkinId, skinById } from './skins.js';
-import { ballTexture, paintBallFace } from './ball-face.js';
+import { ballTexture, paintBallTexture } from './ball-face.js';
 
 const W = TABLE.width, H = TABLE.height;
 const world = (x, y, z = 0) => new THREE.Vector3(x - W / 2, H / 2 - y, z);
@@ -323,8 +323,7 @@ function create3DRenderer(canvas) {
         shineMap.colorSpace = THREE.SRGBColorSpace;
       } else if (slowFrames < 8 || now - shineFrame > 90) {
         shineFrame = now;
-        shineContext.clearRect(0, 0, 128, 128);
-        paintBallFace(shineContext, 64, 64, 60, skin, now);
+        paintBallTexture(shineContext, shineCanvas.width, skin, now);
         shineMap.needsUpdate = true;
       }
       if (appliedSkin !== 'shine') {
@@ -573,6 +572,8 @@ function create3DRenderer(canvas) {
       if (theme.hueLock) {
         wallSide.color.set(theme.wallSide);
         floorSide.color.set(theme.floor);
+        if (theme.spinner) spinnerSide.color.set(theme.spinner);
+        if (theme.jar) purpleSide.color.set(theme.jar);
       }
       scene.background = new THREE.Color(theme.hueLock ? theme.bg : palette?.color(theme.bg, 'surface') ?? theme.bg);
     }

@@ -76,18 +76,20 @@ const DEFAULT_BOARD = Object.freeze({
   field: '#ffffff29',
   fieldEdge: '#c3c4a93b',
   lane: '#d9e6d299',
+  spinner: '#9fbba0',
+  jar: '#8b769f',
   ink: '#69815d',
   slotInk: '#4c6648',
   motif: '',
 });
 
 const GLOSS_BOARDS = Object.freeze({
-  'cherry-gloss': { bg: '#fff0f3', pin: '#e7a3ad', accent: '#d4536c', wall: '#f0c3cb', wallEdge: '#ffe4ea', wallSide: '#c47b8a', floor: '#e7c9cf', field: '#fff5f729', fieldEdge: '#e7b4c03b', ink: '#7a3144', slotInk: '#5c2433', colors: ['#ffd0d8', '#ffe1c4', '#f3c4e0', '#ffd9a8', '#ffb7c5', '#f3c4e0', '#ffd0d8'], motif: 'cherry' },
-  'orange-gloss': { bg: '#fff6e8', pin: '#f0b56a', accent: '#e07a2f', wall: '#f3d0a0', wallEdge: '#fff1dc', wallSide: '#c48a4e', floor: '#ead4b0', field: '#fff8ec29', fieldEdge: '#e7c49a3b', ink: '#7a4516', slotInk: '#5c3210', colors: ['#ffe0bf', '#ffd09a', '#f7c8a0', '#ffe7a3', '#ffc48a', '#f7c8a0', '#ffe0bf'], motif: 'orange' },
-  'grape-gloss': { bg: '#f7f1fb', pin: '#c9aee0', accent: '#8d5cc4', wall: '#dcc8ee', wallEdge: '#f6eeff', wallSide: '#8d74aa', floor: '#d4c6e4', field: '#f8f2ff29', fieldEdge: '#cbb6e03b', ink: '#4d2d6e', slotInk: '#3a2154', colors: ['#ead8f8', '#f0d4c4', '#d7c2f2', '#e7d4a8', '#c9b0ea', '#d7c2f2', '#ead8f8'], motif: 'grape' },
-  'pineapple-gloss': { bg: '#f8f6d4', pin: '#c9c45a', accent: '#b8891a', wall: '#e4e09a', wallEdge: '#fbf8d8', wallSide: '#8f8a3e', floor: '#ddd8a4', field: '#fbfae429', fieldEdge: '#d5cf8a3b', ink: '#5c5420', slotInk: '#3f3a14', colors: ['#f4efb0', '#f6e0a8', '#e7e49a', '#f3d98a', '#e4d56a', '#e7e49a', '#f4efb0'], motif: 'pineapple' },
-  'watermelon-gloss': { bg: '#f3fff5', pin: '#7dba86', accent: '#e25b6a', wall: '#b7e0bc', wallEdge: '#e7ffea', wallSide: '#4f8a5c', floor: '#c5e2c8', field: '#f4fff629', fieldEdge: '#9dcea63b', ink: '#245c34', slotInk: '#1c4026', colors: ['#d8f5de', '#ffd0c8', '#c8efd0', '#ffe0b0', '#f7b7c0', '#c8efd0', '#d8f5de'], motif: 'watermelon' },
-  shine: { bg: '#12142e', pin: '#f6e7a8', accent: '#9ad7ff', wall: '#3a3474', wallEdge: '#efe7ff', wallSide: '#2a245c', floor: '#1c1848', field: '#ffffff14', fieldEdge: '#ffe7a866', lane: '#3a347488', ink: '#f7f1ff', slotInk: '#24143a', colors: ['#ffe4f2', '#fff3c4', '#dff4ff', '#efe4ff', '#ffe1c2', '#e7fff1', '#ffe4f2'], motif: 'shine' },
+  'cherry-gloss': { bg: '#fff0f3', pin: '#e7a3ad', accent: '#d4536c', wall: '#f0c3cb', wallEdge: '#ffe4ea', wallSide: '#c47b8a', floor: '#e7c9cf', field: '#fff5f729', fieldEdge: '#e7b4c03b', lane: '#e7a8b4', spinner: '#e07a90', jar: '#c45b74', ink: '#7a3144', slotInk: '#5c2433', colors: ['#ffd0d8', '#ffe1c4', '#f3c4e0', '#ffd9a8', '#ffb7c5', '#f3c4e0', '#ffd0d8'], motif: 'cherry' },
+  'orange-gloss': { bg: '#fff6e8', pin: '#f0b56a', accent: '#e07a2f', wall: '#f3d0a0', wallEdge: '#fff1dc', wallSide: '#c48a4e', floor: '#ead4b0', field: '#fff8ec29', fieldEdge: '#e7c49a3b', lane: '#f0c48a', spinner: '#e09a4a', jar: '#c47a32', ink: '#7a4516', slotInk: '#5c3210', colors: ['#ffe0bf', '#ffd09a', '#f7c8a0', '#ffe7a3', '#ffc48a', '#f7c8a0', '#ffe0bf'], motif: 'orange' },
+  'grape-gloss': { bg: '#f7f1fb', pin: '#c9aee0', accent: '#8d5cc4', wall: '#dcc8ee', wallEdge: '#f6eeff', wallSide: '#8d74aa', floor: '#d4c6e4', field: '#f8f2ff29', fieldEdge: '#cbb6e03b', lane: '#cbb6e0', spinner: '#a67ed0', jar: '#7d5ca8', ink: '#4d2d6e', slotInk: '#3a2154', colors: ['#ead8f8', '#f0d4c4', '#d7c2f2', '#e7d4a8', '#c9b0ea', '#d7c2f2', '#ead8f8'], motif: 'grape' },
+  'pineapple-gloss': { bg: '#f8f6d4', pin: '#c9c45a', accent: '#b8891a', wall: '#e4e09a', wallEdge: '#fbf8d8', wallSide: '#8f8a3e', floor: '#ddd8a4', field: '#fbfae429', fieldEdge: '#d5cf8a3b', lane: '#d5cf7a', spinner: '#c9b43a', jar: '#8a7a28', ink: '#5c5420', slotInk: '#3f3a14', colors: ['#f4efb0', '#f6e0a8', '#6db86a', '#f3d98a', '#e4d56a', '#e7e49a', '#f4efb0'], motif: 'pineapple' },
+  'watermelon-gloss': { bg: '#f3fff5', pin: '#7dba86', accent: '#e25b6a', wall: '#b7e0bc', wallEdge: '#e7ffea', wallSide: '#4f8a5c', floor: '#c5e2c8', field: '#f4fff629', fieldEdge: '#9dcea63b', lane: '#9dcea6', spinner: '#5fa86a', jar: '#3d8a56', ink: '#245c34', slotInk: '#1c4026', colors: ['#d8f5de', '#ffd0c8', '#c8efd0', '#ffe0b0', '#f7b7c0', '#c8efd0', '#d8f5de'], motif: 'watermelon' },
+  shine: { bg: '#12142e', pin: '#f6e7a8', accent: '#9ad7ff', wall: '#3a3474', wallEdge: '#efe7ff', wallSide: '#2a245c', floor: '#1c1848', field: '#ffffff14', fieldEdge: '#ffe7a866', lane: '#4a4488', spinner: '#9ad7ff', jar: '#c9b6ff', ink: '#f7f1ff', slotInk: '#24143a', colors: ['#ffe4f2', '#fff3c4', '#dff4ff', '#efe4ff', '#ffe1c2', '#e7fff1', '#ffe4f2'], motif: 'shine' },
 });
 
 function rgb(hex) {
@@ -100,27 +102,41 @@ function mix(hex, target, t) {
   return `#${a.map((value, index) => Math.round(value + (b[index] - value) * t).toString(16).padStart(2, '0')).join('')}`;
 }
 
-const NIGHT_AMOUNT = Object.freeze({ day: 0, dawn: 0.22, dusk: 0.4, night: 0.62 });
+function hexOf(channels) {
+  return `#${channels.map(value => Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, '0')).join('')}`;
+}
+
+// Keep the source hue and drop the lightness, so a pale board becomes a dark
+// version of itself instead of a grey mix of white and black.
+function darkenHue(hex, floor) {
+  const [r, g, b] = rgb(hex);
+  const max = Math.max(r, g, b, 1);
+  return hexOf([r, g, b].map(value => floor * (0.25 + 0.75 * value / max)));
+}
+
+const NIGHT_DEPTH = Object.freeze({ day: 0, dawn: 0.45, dusk: 0.72, night: 1 });
 
 function nightBoard(day, phase) {
-  const amount = NIGHT_AMOUNT[phase] ?? 0;
-  if (!amount) return day;
-  const shadow = day.motif === 'shine' ? '#070814' : day.motif === 'grape' ? '#120818' : day.motif === 'watermelon' ? '#06140c' : day.motif === 'pineapple' ? '#161404' : '#1a0c10';
-  const slotAmount = amount * 0.42;
+  const depth = NIGHT_DEPTH[phase] ?? 0;
+  if (!depth) return day;
+  const nightBg = darkenHue(day.wallSide, 22);
   return {
     ...day,
-    bg: mix(day.bg, shadow, amount),
-    pin: mix(day.pin, shadow, amount * 0.85),
-    accent: mix(day.accent, shadow, amount * 0.55),
-    wall: mix(day.wall, shadow, amount * 0.8),
-    wallEdge: mix(day.wallEdge, shadow, amount * 0.7),
-    wallSide: mix(day.wallSide, shadow, amount * 0.75),
-    floor: mix(day.floor, shadow, amount * 0.8),
+    bg: mix(day.bg, nightBg, depth),
+    pin: mix(day.pin, darkenHue(day.pin, 96), depth * 0.28),
+    accent: mix(day.accent, '#fffaf3', depth * 0.35),
+    wall: mix(day.wall, darkenHue(day.wall, 78), depth * 0.88),
+    wallEdge: mix(day.wallEdge, '#fffaf3', depth * 0.45),
+    wallSide: mix(day.wallSide, darkenHue(day.wallSide, 48), depth * 0.9),
+    floor: mix(day.floor, darkenHue(day.floor, 30), depth),
+    lane: mix(day.lane, darkenHue(day.lane, 42), depth * 0.8),
+    spinner: mix(day.spinner, darkenHue(day.spinner, 110), depth * 0.15),
+    jar: mix(day.jar, '#fffaf3', depth * 0.2),
     field: day.field,
     fieldEdge: day.fieldEdge,
-    ink: mix(day.ink, '#fff6ea', amount * 0.72),
-    slotInk: mix(day.slotInk, '#1a120c', amount * 0.15),
-    colors: day.colors.map(color => mix(color, shadow, slotAmount)),
+    ink: mix(day.ink, '#fffaf3', depth),
+    slotInk: day.slotInk,
+    colors: day.colors.map(color => mix(color, darkenHue(color, 150), depth * 0.12)),
   };
 }
 
