@@ -166,9 +166,12 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       spark.y += spark.vy * dt;
       spark.vy += spark.gravity * dt;
       const fade = Math.max(0, spark.life / spark.max);
-      ctx.globalAlpha = fade;
+      ctx.globalAlpha = spark.bright ? Math.min(1, 0.55 + fade) : fade;
       if (spark.rect) { ctx.fillStyle = spark.color; ctx.fillRect(spark.x, spark.y, spark.size, spark.size * 0.55); }
-      else star(spark.x, spark.y, spark.size * (0.6 + fade), spark.color, spark.life * 4);
+      else {
+        if (spark.bright) { ctx.globalAlpha = Math.min(1, fade + 0.35); star(spark.x, spark.y, spark.size * 0.45, '#fff', spark.life * 4); ctx.globalAlpha = Math.min(1, 0.5 + fade); }
+        star(spark.x, spark.y, spark.size * (spark.bright ? 1.2 : 0.6 + fade), spark.color, spark.life * 4);
+      }
     }
     ctx.globalAlpha = 1;
   }
@@ -424,9 +427,9 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     if (!textureMode) {
     ctx.beginPath(); ctx.moveTo(713, springTop);
     for (let i = 0; i <= 12; i++) ctx.lineTo(713 + (i % 2 ? 11 : -11), springTop + (springBottom - springTop) * i / 12);
-    ctx.strokeStyle = paintColor('#8e9f7b', 'line'); ctx.lineWidth = 4; ctx.stroke();
+    ctx.strokeStyle = paintColor(theme.hueLock ? theme.accent : '#8e9f7b', 'line'); ctx.lineWidth = 4; ctx.stroke();
     }
-    box(695, springTop - 6, 36, 8, 4, '#71896a', '#ecf1d6');
+    box(695, springTop - 6, 36, 8, 4, theme.hueLock ? theme.wall : '#71896a', theme.hueLock ? theme.wallEdge : '#ecf1d6');
     if (!game.balls.some(b => b.body.position.x > 683 && b.body.position.y > 730)) {
       if (state.charging && !textureMode) {
         const glow = chargeEffectsAt(state.chargeElapsed), x = TABLE.launchX, y = TABLE.launchY + compression;
@@ -459,7 +462,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       }
       ball(TABLE.launchX, TABLE.launchY + compression, .88, false, false, activeSkinId(state.equippedSkin));
     }
-    text('PULL', 713, 850 + compression * .3, 9, '#65785c', 'bold');
+    text('PULL', 713, 850 + compression * .3, 9, theme.hueLock ? theme.ink : '#65785c', 'bold');
     if (game.star) starMemory = { id: game.star.id, x: game.star.x, y: game.star.y, multiplier: game.star.multiplier };
     else if (starMemory) { starFlash = { ...starMemory, at: game.clock }; starMemory = null; }
     if (game.star && !textureMode) {
@@ -703,10 +706,10 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
         const prev = slotSeen[region.column] || 0;
         if (glow > prev + 0.35) {
           const mid = (region.x0 + region.x1) / 2;
-          const count = sparkBudget > 80 ? 18 : 8;
+          const count = sparkBudget > 80 ? 24 : 12;
           for (let i = 0; i < count; i++) {
-            pushSpark(mid + (i - count / 2) * 3, TABLE.slotTop + 16, `hsl(${(i * 20 + mid) % 360} 95% 66%)`, {
-              vx: (i - count / 2) * 14, vy: -180 - (i % 4) * 30, life: 0.7, size: 3.1, gravity: 220,
+            pushSpark(mid + (i - count / 2) * 7, TABLE.slotTop - 28, `hsl(${(i * 18 + mid) % 360} 100% 62%)`, {
+              vx: (i - count / 2) * 18, vy: -420 - (i % 5) * 36, life: 0.95, size: 7.2, gravity: 280, bright: true,
             });
           }
         }
@@ -749,14 +752,19 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
         });
       }
       ctx.save();
-      ctx.globalAlpha = liveBoard ? 0.14 : 0.07;
-      const band = 200 + Math.sin(t * 0.7) * 180;
-      const sheen = ctx.createLinearGradient(0, band - 70, W, band + 70);
+      const band = 220 + Math.sin(t * 0.7) * 160;
+      const sheenTop = band - 140;
+      const sheenHeight = 280;
+      const sheen = ctx.createLinearGradient(0, sheenTop, 0, sheenTop + sheenHeight);
+      const sheenHue = (t * 50) % 360;
       sheen.addColorStop(0, 'rgba(255,255,255,0)');
-      sheen.addColorStop(0.45, `hsl(${(t * 50) % 360} 90% 72%)`);
+      sheen.addColorStop(0.22, `hsla(${sheenHue}, 90%, 72%, 0.15)`);
+      sheen.addColorStop(0.5, `hsla(${sheenHue}, 90%, 74%, 0.85)`);
+      sheen.addColorStop(0.78, `hsla(${sheenHue}, 90%, 72%, 0.15)`);
       sheen.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.globalAlpha = liveBoard ? 0.2 : 0.09;
       ctx.fillStyle = sheen;
-      ctx.fillRect(36, Math.max(40, band - 70), 640, 120);
+      ctx.fillRect(0, sheenTop, W, sheenHeight);
       ctx.restore();
       const edge = liveBoard ? 22 : 8;
       for (let i = 0; i < edge; i++) {

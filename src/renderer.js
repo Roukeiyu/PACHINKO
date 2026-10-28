@@ -449,7 +449,16 @@ function create3DRenderer(canvas) {
   const flashMap = new THREE.CanvasTexture(flashCanvas); flashMap.colorSpace = THREE.SRGBColorSpace;
   const flashSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashMap, transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending }));
   flashSprite.scale.set(40, 40, 1); flashSprite.visible = false; flashSprite.renderOrder = 5; table.add(flashSprite);
-  const shineFlash = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashMap, transparent: true, depthWrite: false, depthTest: false, toneMapped: false, blending: THREE.AdditiveBlending }));
+  const shineFlashCanvas = document.createElement('canvas'); shineFlashCanvas.width = 32; shineFlashCanvas.height = 128;
+  const shineFlashCtx = shineFlashCanvas.getContext('2d');
+  const shineFlashGradient = shineFlashCtx.createLinearGradient(0, 0, 0, 128);
+  shineFlashGradient.addColorStop(0, 'rgba(255,248,232,1)');
+  shineFlashGradient.addColorStop(0.72, 'rgba(255,248,232,1)');
+  shineFlashGradient.addColorStop(0.8, 'rgba(255,248,232,0.1)');
+  shineFlashGradient.addColorStop(1, 'rgba(255,248,232,0.1)');
+  shineFlashCtx.fillStyle = shineFlashGradient; shineFlashCtx.fillRect(0, 0, 32, 128);
+  const shineFlashMap = new THREE.CanvasTexture(shineFlashCanvas); shineFlashMap.colorSpace = THREE.SRGBColorSpace;
+  const shineFlash = new THREE.Sprite(new THREE.SpriteMaterial({ map: shineFlashMap, transparent: true, depthWrite: false, depthTest: false, toneMapped: false, blending: THREE.AdditiveBlending }));
   shineFlash.visible = false; shineFlash.renderOrder = 20; scene.add(shineFlash);
   let starMemory = null, starFlash = null, starPaintKey = '';
   function paintStar(multiplier, calm, label, daylight) {
@@ -598,6 +607,7 @@ function create3DRenderer(canvas) {
       if (theme.hueLock) {
         wallSide.color.set(theme.wallSide);
         floorSide.color.set(theme.floor);
+        spring.material.color.set(theme.accent);
         if (theme.spinner) spinnerSide.color.set(theme.spinner);
         if (theme.jar) purpleSide.color.set(theme.jar);
       }
@@ -787,9 +797,11 @@ function create3DRenderer(canvas) {
     shineFlash.visible = shine3d && !state.calm && shineFlashLeft > 0;
     if (shineFlash.visible) {
       camera.getWorldDirection(shineForward);
-      shineFlash.position.copy(camera.position).addScaledVector(shineForward, 26);
-      shineFlash.scale.set(260, 160, 1);
-      shineFlash.material.opacity = Math.min(0.32, shineFlashLeft / 240);
+      const flashDistance = 26;
+      const flashHalfH = flashDistance * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+      shineFlash.position.copy(camera.position).addScaledVector(shineForward, flashDistance);
+      shineFlash.scale.set(flashHalfH * 2 * camera.aspect, flashHalfH * 2, 1);
+      shineFlash.material.opacity = Math.min(0.28, shineFlashLeft / 240);
     }
     webgl.render(scene, camera);
     lastInfo.calls = webgl.info.render.calls;
