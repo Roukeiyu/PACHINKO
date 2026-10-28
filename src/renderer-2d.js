@@ -3,7 +3,8 @@ import { sceneMotionAt, project2DMotion } from './scene-motion.js';
 import { TABLE, LAUNCH_SQUASH } from './physics.js';
 import { BOARD_CROWD_LOCK, DRAIN_WALL } from './round.js';
 import { ballOwnFactor, ballRimStyle } from './ball-rim.js';
-import { skinById } from './skins.js';
+import { activeSkinId, skinById } from './skins.js';
+import { paintBallFace } from './ball-face.js';
 import { blendSlotLayout } from './slot-transition.js';
 import { SLOT_DISPLAY, BALL_SYMBOL, REEL_WEIGHTS, reelBox, PROGRESS_TOP, PROGRESS_HEIGHT, slotBonusLabel } from './slot-machine.js';
 import { drawReelSymbol } from './reel-icons.js';
@@ -12,8 +13,8 @@ import { slotIcon, slotColorIndex } from './slot-icons.js';
 
 export function createRenderer(canvas, { textureMode = false } = {}) {
   const ctx = canvas.getContext('2d');
-  let activePalette = null, paintingBall = false, motion = sceneMotionAt(0, {}, {}), starMemory = null, starFlash = null;
-  const paintColor = (value, role) => paintingBall ? value : activePalette?.color(value, role) ?? value;
+  let activePalette = null, paintingBall = false, hueLock = false, motion = sceneMotionAt(0, {}, {}), starMemory = null, starFlash = null;
+  const paintColor = (value, role) => paintingBall || hueLock ? value : activePalette?.color(value, role) ?? value;
   const { width: W, height: H } = TABLE;
   function resize() {
     const dpr = textureMode ? 1 : Math.min(window.devicePixelRatio || 1, 2);
@@ -35,26 +36,29 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     if (textureMode) return;
     paintingBall = true;
     ctx.save(); ctx.globalAlpha = opacity;
-    // Gift balls stay pearly lavender so the purple multiplier rim still reads.
-    // A fruit skin only recolors a launched ball; the rim is drawn afterwards.
+    // Gift balls stay pearly lavender. A fruit skin fills the disc itself;
+    // the multiplier ring is drawn later, outside this radius.
     const skin = gift ? null : skinById(skinId);
-    const flat = gift ? '#e4dcff' : skin?.flat || '#ffdb76';
-    const glow = gift ? '#d7ccf6' : skin?.glow || '#ffd862';
-    const rim = gift ? '#c9b6ea' : skin?.edge || '#a4425d';
-    const mid = gift ? '#f7f4ff' : skin?.mid || '#fffde8';
-    const edge = gift ? '#c5b4f0' : skin?.edge || '#ffdb76';
-    if (cheap) {
-      circle(x, y, 11.5, paintColor(flat));
-      ctx.restore();
-      paintingBall = false;
-      return;
+    if (!skin) {
+      const flat = gift ? '#e4dcff' : '#ffdb76';
+      const glow = gift ? '#d7ccf6' : '#ffd862';
+      const rim = gift ? '#c9b6ea' : '#a4425d';
+      const mid = gift ? '#f7f4ff' : '#fffde8';
+      const edge = gift ? '#c5b4f0' : '#ffdb76';
+      if (cheap) circle(x, y, 11.5, flat);
+      else {
+        ctx.shadowColor = glow; ctx.shadowBlur = 18;
+        circle(x, y, 11.5, rim); ctx.shadowBlur = 0;
+        const g = ctx.createRadialGradient(x - 3, y - 4, 0, x, y, 12);
+        g.addColorStop(0, '#ffffff'); g.addColorStop(.55, mid); g.addColorStop(1, edge);
+        circle(x, y, 11.2, g);
+        circle(x - 3, y - 4, 3.2, '#fff');
+      }
+    } else if (cheap) {
+      circle(x, y, 11.5, skin.fruit === 20 ? '#e1062c' : skin.fruit === 10 ? '#f0b400' : skin.fruit === 5 ? '#6a2498' : skin.fruit === 3 ? '#f06a00' : '#d0122d');
+    } else {
+      paintBallFace(ctx, x, y, 11.4, skin);
     }
-    ctx.shadowColor = paintColor(glow, 'glow'); ctx.shadowBlur = 25;
-    circle(x, y, 14, rim); ctx.shadowBlur = 0;
-    const g = ctx.createRadialGradient(x - 3, y - 4, 0, x, y, 12); g.addColorStop(0, paintColor('#ffffff')); g.addColorStop(.6, paintColor(mid)); g.addColorStop(1, paintColor(edge));
-    circle(x, y, 11.5, g);
-    circle(x - 3, y - 4, 3.5, '#fff');
-    if (skin?.tier === 2) text(skin.mark, x + 3, y + 3, 8, '#fff');
     ctx.restore(); paintingBall = false;
   }
   function ownRim(x, y, factor, quiet, gift = false) {
@@ -94,8 +98,23 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     if (!shift) return blendSlotLayout(state.slots, state.slots, 1);
     return blendSlotLayout(shift.from, shift.to, (performance.now() - shift.startedAt) / shift.duration);
   }
+  function drawMotif(theme) {
+    if (!theme.motif) return;
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    const spots = [[28, 210], [732, 260], [28, 620], [732, 680]];
+    for (const [x, y] of spots) {
+      if (theme.motif === 'cherry') { circle(x, y, 7, '#d0122d'); circle(x + 8, y - 2, 6, '#e23b4a'); }
+      else if (theme.motif === 'orange') { circle(x, y, 8, '#f06a00', '#c2410c', 1); }
+      else if (theme.motif === 'grape') { circle(x, y, 5, '#6a2498'); circle(x + 7, y + 2, 4, '#8e44c4'); circle(x - 2, y + 7, 4, '#4a1578'); }
+      else if (theme.motif === 'pineapple') { box(x - 6, y - 8, 12, 16, 2, '#f0b400', '#8a5a12'); }
+      else if (theme.motif === 'watermelon') { circle(x, y, 8, '#e1062c', '#1f8a3e', 2); }
+    }
+    ctx.restore();
+  }
   function draw(game, theme, state, fx, palette = null) {
     activePalette = palette;
+    hueLock = theme.hueLock === true;
     const t = state.calm ? 0 : game.clock / 1000;
     ctx.clearRect(0, 0, W, H); ctx.fillStyle = paintColor(theme.bg, 'surface'); ctx.fillRect(0, 0, W, H);
     ctx.save();
@@ -107,11 +126,12 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     ctx.fillStyle = paintColor('#b8b08b1d', 'object');
     for (let x = 12; x < W; x += 24) for (let y = 12; y < H; y += 24) circle(x, y, .8, '#b8b08b26');
     // The shooter remains separate, without a flight-mode label or booster.
-    box(38, 43, 620, 741, 30, '#ffffff29', '#c3c4a93b');
-    box(689, 128, 47, 739, 21, '#d9e6d299');
+    box(38, 43, 620, 741, 30, theme.field || '#ffffff29', theme.fieldEdge || '#c3c4a93b');
+    box(689, 128, 47, 739, 21, theme.lane || '#d9e6d299');
+    drawMotif(theme);
     ctx.save(); ctx.strokeStyle = paintColor('#afc09a75', 'line'); ctx.lineWidth = 2; ctx.setLineDash([3, 10]); ctx.beginPath(); ctx.moveTo(713, 750); ctx.lineTo(713, 154); ctx.stroke(); ctx.restore();
     for (let i = 0; i < 3; i++) { const y = 650 + i * 60 - (t * 45 % 60); ctx.beginPath(); ctx.moveTo(704, y + 8); ctx.lineTo(713, y); ctx.lineTo(722, y + 8); ctx.strokeStyle = paintColor('#86a869a0', 'line'); ctx.lineWidth = 3; ctx.stroke(); }
-    text('P O N  P O N', 351, 112, 24, '#69815d', 'bold');
+    text('P O N  P O N', 351, 112, 24, theme.ink || '#69815d', 'bold');
     const bonus = game.slotMachine, bonusLabel = slotBonusLabel(bonus, game.clock);
     text(bonusLabel || 'LITTLE PINBALL CLUB', 351, 133, 11, bonus.multiplier === 5 ? '#8b59b5' : bonus.multiplier === 2 ? '#99712d' : '#9ca184', bonusLabel ? 'bold' : '');
     if (bonusLabel) { ctx.save(); ctx.lineWidth = 2; ctx.strokeStyle = paintColor(bonus.multiplier === 5 ? '#b494d0' : '#d5b069', 'line'); ctx.strokeRect(43, 46, 609, 737); ctx.restore(); }
@@ -120,7 +140,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     [[104, 209], [597, 647], [402, 196], [86, 639]].forEach(([x, y], i) => star(x, y + Math.sin(t + i) * 3, 4, '#d4b78475', t * .1));
     // Painted guide rings provide motion cues without competing with the ball.
     for (const bumper of game.bumpers) { const { x, y } = bumper.position; ctx.save(); ctx.setLineDash([3, 9]); circle(x, y, bumper.plugin.radius + 17, null, '#cfbf9a55'); ctx.restore(); }
-    for (const wall of game.walls) bodyShape(wall, '#aebf99', '#dce6ce');
+    for (const wall of game.walls) bodyShape(wall, theme.wall || '#aebf99', theme.wallEdge || '#dce6ce');
     // A diagonal one-way flap intercepts descending balls; the dashed vertical
     // line shows the separate upward path, which is never blocked by the flap.
     ctx.save();ctx.globalAlpha=.8;bodyShape(game.gates[1], game.rewards.gateGlow ? '#f8cc77' : '#d7bf97', '#fff3d6', false);ctx.restore();
@@ -156,7 +176,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
         ctx.save(); ctx.globalAlpha = 1 - eased; text(slotIcon(region.fromMultiplier), mid, TABLE.slotTop + 23, iconSize, '#627454'); ctx.restore();
         ctx.save(); ctx.globalAlpha = eased; text(slotIcon(region.toMultiplier), mid, TABLE.slotTop + 23, iconSize, '#627454'); ctx.restore();
       }
-      text(formatMultiplier(region.fromMultiplier, region.toMultiplier, eased, bonus.multiplier), mid, TABLE.slotTop + 54, scoreSize, '#4c6648', 'bold');
+      text(formatMultiplier(region.fromMultiplier, region.toMultiplier, eased, bonus.multiplier), mid, TABLE.slotTop + 54, scoreSize, theme.slotInk || '#4c6648', 'bold');
       if (bonus.multiplier > 1) text(`进洞 ×${bonus.multiplier}`, mid, TABLE.slotTop + 73, 9, bonus.multiplier === 5 ? '#8b59b5' : '#99712d');
       else {
         const lucky = (region.luckyFrom ? 1 - eased : 0) + (region.luckyTo ? eased : 0);
@@ -348,7 +368,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
         }
         ctx.restore();
       }
-      ball(TABLE.launchX, TABLE.launchY + compression, .88, false, false, state.equippedSkin);
+      ball(TABLE.launchX, TABLE.launchY + compression, .88, false, false, activeSkinId(state.equippedSkin));
     }
     text('PULL', 713, 850 + compression * .3, 9, '#65785c', 'bold');
     if (game.star) starMemory = { id: game.star.id, x: game.star.x, y: game.star.y, multiplier: game.star.multiplier };
@@ -552,7 +572,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     const crowded = game.balls.length >= BOARD_CROWD_LOCK;
     for (const b of game.balls) {
       if (!state.calm && !(crowded && b.bonus)) b.trail.forEach((pos, i) => { ctx.save(); ctx.globalAlpha = i / b.trail.length * .5; circle(pos.x, pos.y, 3 + i / b.trail.length * 7, b.bonus ? '#d9cff6' : '#f7b863'); ctx.restore(); });
-      ball(b.body.position.x, b.body.position.y, 1, crowded && b.bonus, b.bonus, state.equippedSkin);
+      ball(b.body.position.x, b.body.position.y, 1, crowded && b.bonus, b.bonus, activeSkinId(state.equippedSkin));
       if (!textureMode) ownRim(b.body.position.x, b.body.position.y, ballOwnFactor(b), state.calm || crowded, b.bonus);
     }
     ctx.restore();

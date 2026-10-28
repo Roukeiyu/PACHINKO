@@ -8,7 +8,8 @@ import { reelBox } from './slot-machine.js';
 import { chargeEffectsAt } from './charge.js';
 import { sceneMotionAt } from './scene-motion.js';
 import { ballOwnFactor, ballRimStyle } from './ball-rim.js';
-import { skinById } from './skins.js';
+import { activeSkinId, skinById } from './skins.js';
+import { ballTexture } from './ball-face.js';
 
 const W = TABLE.width, H = TABLE.height;
 const world = (x, y, z = 0) => new THREE.Vector3(x - W / 2, H / 2 - y, z);
@@ -266,7 +267,7 @@ function create3DRenderer(canvas) {
   const BALL_CAPACITY = 512;
   const sphere = new THREE.SphereGeometry(11, 24, 16);
   const burstSphere = new THREE.SphereGeometry(11, 16, 12);
-  const ballMaterial = new THREE.MeshStandardMaterial({ color: '#ffffff', metalness: .6, roughness: .2, envMapIntensity: 1.4 });
+  const ballMaterial = new THREE.MeshPhysicalMaterial({ color: '#ffedb0', metalness: .12, roughness: .42, clearcoat: 0, clearcoatRoughness: .25, envMapIntensity: 1.1 });
   const burstMaterial = new THREE.MeshLambertMaterial({ color: '#f4f1ff', emissive: '#b7a4e6', emissiveIntensity: 0.55 });
   const ballDummy = new THREE.Object3D();
   function makeBalls(geometry, material, shadows) {
@@ -279,7 +280,7 @@ function create3DRenderer(canvas) {
   const bonusBalls = makeBalls(burstSphere, burstMaterial, false);
   // One instanced ring for every ball, including lavender gifts. A per-instance
   // span and color keep ×1 thin and let ×2/×4/×8 grow outward without a mesh per ball.
-  const RIM_INNER = 12.3, RIM_OUTER = 18.2;
+  const RIM_INNER = 13.8, RIM_OUTER = 19.8;
   const rimGeometry = new THREE.RingGeometry(RIM_INNER, RIM_OUTER, 32);
   const rimSpan = new THREE.InstancedBufferAttribute(new Float32Array(BALL_CAPACITY), 1);
   rimSpan.setUsage(THREE.DynamicDrawUsage);
@@ -307,9 +308,36 @@ function create3DRenderer(canvas) {
   const rimDummy = new THREE.Object3D();
   const rimColor = new THREE.Color();
   const glowColor = new THREE.Color();
-  const readyMaterial = ballMaterial.clone();
-  const readyBall = new THREE.Mesh(sphere, readyMaterial); readyBall.castShadow = true; table.add(readyBall);
-  const ballColor = new THREE.Color('#ffedb0');
+  const readyBall = new THREE.Mesh(sphere, ballMaterial); readyBall.castShadow = true; table.add(readyBall);
+  const ballColor = new THREE.Color('#ffffff');
+  const skinTextures = new Map();
+  let appliedSkin = '';
+  function applyBallSkin(skinId) {
+    if (appliedSkin === skinId) return;
+    appliedSkin = skinId;
+    const skin = skinById(skinId);
+    const previous = ballMaterial.map;
+    if (!skin) {
+      ballMaterial.map = null;
+      ballMaterial.color.set('#ffedb0');
+      ballMaterial.roughness = 0.42;
+      ballMaterial.clearcoat = 0;
+    } else {
+      if (!skinTextures.has(skin.id)) {
+        const texture = new THREE.CanvasTexture(ballTexture(skin));
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.anisotropy = 4;
+        skinTextures.set(skin.id, texture);
+      }
+      ballMaterial.map = skinTextures.get(skin.id);
+      ballMaterial.color.set('#ffffff');
+      ballMaterial.roughness = skin.tier === 2 ? 0.16 : 0.5;
+      ballMaterial.clearcoat = skin.tier === 2 ? 0.9 : 0.05;
+      ballMaterial.metalness = skin.tier === 2 ? 0.04 : 0.08;
+    }
+    if (previous && previous !== ballMaterial.map) previous.needsUpdate = true;
+    ballMaterial.needsUpdate = true;
+  }
   const springPoints = Array.from({ length: 193 }, (_, i) => { const t = i / 192, a = t * Math.PI * 12; return new THREE.Vector3(Math.cos(a) * 9, t * 52, 9 + Math.sin(a) * 5); });
   const spring = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(springPoints), 192, 1.7, 6, false), material('#a4ac93', 'object', { metalness: .7, roughness: .3 }));
   spring.position.copy(world(TABLE.launchX, 865)); spring.castShadow = true; table.add(spring);
@@ -506,10 +534,15 @@ function create3DRenderer(canvas) {
     const paletteChanged = currentPalette !== palette || currentTheme !== theme;
     if (paletteChanged) {
       currentPalette = palette; currentTheme = theme;
-      colored.forEach(({ value, color, role }) => value.color.set(palette?.color(color, role) ?? color));
-      [railSide, drumSide].forEach(m => m.color.set(palette?.color(theme.accent) ?? theme.accent));
-      pinSide.color.set(palette?.color(theme.pin) ?? theme.pin);
-      scene.background = new THREE.Color(palette?.color(theme.bg, 'surface') ?? theme.bg);
+      colored.forEach(({ value, color, role }) => value.color.set(theme.hueLock ? color : palette?.color(color, role) ?? color));
+      const tint = (hex) => theme.hueLock ? hex : palette?.color(hex) ?? hex;
+      [railSide, drumSide].forEach(m => m.color.set(tint(theme.accent)));
+      pinSide.color.set(tint(theme.pin));
+      if (theme.hueLock) {
+        wallSide.color.set(theme.wallSide);
+        floorSide.color.set(theme.floor);
+      }
+      scene.background = new THREE.Color(theme.hueLock ? theme.bg : palette?.color(theme.bg, 'surface') ?? theme.bg);
     }
     const now = performance.now(), paintState = `${state.slots}:${state.charging}:${state.theme}:${state.calm}`;
     if (paletteChanged || now - lastAtlas >= 1000 / 30 || paintState !== paintedState) {
@@ -527,7 +560,8 @@ function create3DRenderer(canvas) {
         ctx.fillText(value, 64, 34); well.texture.needsUpdate = true; well.last = value;
       }
     }
-    const daylight = palette?.phase?.id !== 'night';
+    applyBallSkin(activeSkinId(state.equippedSkin));
+    const daylight = !theme.hueLock && palette?.phase?.id !== 'night';
     ballPositions.clear();
     let playerCount = 0, bonusCount = 0, rimCount = 0, glowCount = 0;
     glowMaterial.opacity = daylight ? 0.32 : 0.48;
@@ -541,10 +575,7 @@ function create3DRenderer(canvas) {
         ballDummy.scale.set(1, 1, 1);
         ballDummy.updateMatrix();
         mesh.setMatrixAt(index, ballDummy.matrix);
-        if (!ball.bonus) {
-          ballColor.set(skinById(state.equippedSkin)?.flat || '#ffedb0');
-          playerBalls.setColorAt(index, ballColor);
-        }
+        if (!ball.bonus) playerBalls.setColorAt(index, ballColor);
       }
       ballPositions.set(ball.id, { x: ball.body.position.x, y: ball.body.position.y, z: 12 });
       if (rimCount < BALL_CAPACITY) {
@@ -573,7 +604,6 @@ function create3DRenderer(canvas) {
     bonusBalls.count = Math.min(bonusCount, BALL_CAPACITY);
     rimMesh.count = rimCount;
     glowMesh.count = glowCount;
-    readyMaterial.color.set(skinById(state.equippedSkin)?.flat || '#ffedb0');
     playerBalls.instanceMatrix.needsUpdate = true;
     if (playerBalls.instanceColor) playerBalls.instanceColor.needsUpdate = true;
     bonusBalls.instanceMatrix.needsUpdate = true;

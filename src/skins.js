@@ -28,6 +28,102 @@ export function skinById(id) {
   return BALL_SKINS.find(skin => skin.id === id) || null;
 }
 
+export function skinIdFromQuery(raw) {
+  if (!raw) return '';
+  const id = String(raw).trim().toLowerCase().replaceAll('_', '-');
+  return skinById(id) ? id : '';
+}
+
+// Dev builds only: ?skin=watermelon_gloss or ?skin=watermelon-gloss.
+export function devSkinOverride() {
+  if (!import.meta.env?.DEV) return '';
+  try {
+    return skinIdFromQuery(new URLSearchParams(globalThis.location?.search || '').get('skin'));
+  } catch {
+    return '';
+  }
+}
+
+export function activeSkinId(equipped = '') {
+  return devSkinOverride() || equipped || '';
+}
+
+const DEFAULT_BOARD = Object.freeze({
+  id: 'default',
+  hueLock: false,
+  motifs: ['🐰', '🐻', '🐱'],
+  bg: '#fbf3e9',
+  pin: '#b2c3a1',
+  accent: '#e994a4',
+  colors: Object.freeze(['#e6ecca', '#f8dfb1', '#efc2cb', '#d5e6d3', '#f6dba7', '#efc2cb', '#e6ecca']),
+  wall: '#aebf99',
+  wallEdge: '#dce6ce',
+  wallSide: '#829d78',
+  floor: '#b6bea5',
+  field: '#ffffff29',
+  fieldEdge: '#c3c4a93b',
+  lane: '#d9e6d299',
+  ink: '#69815d',
+  slotInk: '#4c6648',
+  motif: '',
+});
+
+const GLOSS_BOARDS = Object.freeze({
+  'cherry-gloss': { bg: '#fff0f3', pin: '#e7a3ad', accent: '#d4536c', wall: '#f0c3cb', wallEdge: '#ffe4ea', wallSide: '#c47b8a', floor: '#e7c9cf', field: '#fff5f729', fieldEdge: '#e7b4c03b', ink: '#7a3144', slotInk: '#5c2433', colors: ['#ffd0d8', '#ffe1c4', '#f3c4e0', '#ffd9a8', '#ffb7c5', '#f3c4e0', '#ffd0d8'], motif: 'cherry' },
+  'orange-gloss': { bg: '#fff6e8', pin: '#f0b56a', accent: '#e07a2f', wall: '#f3d0a0', wallEdge: '#fff1dc', wallSide: '#c48a4e', floor: '#ead4b0', field: '#fff8ec29', fieldEdge: '#e7c49a3b', ink: '#7a4516', slotInk: '#5c3210', colors: ['#ffe0bf', '#ffd09a', '#f7c8a0', '#ffe7a3', '#ffc48a', '#f7c8a0', '#ffe0bf'], motif: 'orange' },
+  'grape-gloss': { bg: '#f7f1fb', pin: '#c9aee0', accent: '#8d5cc4', wall: '#dcc8ee', wallEdge: '#f6eeff', wallSide: '#8d74aa', floor: '#d4c6e4', field: '#f8f2ff29', fieldEdge: '#cbb6e03b', ink: '#4d2d6e', slotInk: '#3a2154', colors: ['#ead8f8', '#f0d4c4', '#d7c2f2', '#e7d4a8', '#c9b0ea', '#d7c2f2', '#ead8f8'], motif: 'grape' },
+  'pineapple-gloss': { bg: '#f8f6d4', pin: '#c9c45a', accent: '#b8891a', wall: '#e4e09a', wallEdge: '#fbf8d8', wallSide: '#8f8a3e', floor: '#ddd8a4', field: '#fbfae429', fieldEdge: '#d5cf8a3b', ink: '#5c5420', slotInk: '#3f3a14', colors: ['#f4efb0', '#f6e0a8', '#e7e49a', '#f3d98a', '#e4d56a', '#e7e49a', '#f4efb0'], motif: 'pineapple' },
+  'watermelon-gloss': { bg: '#f3fff5', pin: '#7dba86', accent: '#e25b6a', wall: '#b7e0bc', wallEdge: '#e7ffea', wallSide: '#4f8a5c', floor: '#c5e2c8', field: '#f4fff629', fieldEdge: '#9dcea63b', ink: '#245c34', slotInk: '#1c4026', colors: ['#d8f5de', '#ffd0c8', '#c8efd0', '#ffe0b0', '#f7b7c0', '#c8efd0', '#d8f5de'], motif: 'watermelon' },
+});
+
+function rgb(hex) {
+  const raw = hex.slice(1);
+  return [0, 2, 4].map(index => parseInt(raw.slice(index, index + 2), 16));
+}
+
+function mix(hex, target, t) {
+  const a = rgb(hex), b = rgb(target);
+  return `#${a.map((value, index) => Math.round(value + (b[index] - value) * t).toString(16).padStart(2, '0')).join('')}`;
+}
+
+const NIGHT_AMOUNT = Object.freeze({ day: 0, dawn: 0.22, dusk: 0.4, night: 0.62 });
+
+function nightBoard(day, phase) {
+  const amount = NIGHT_AMOUNT[phase] ?? 0;
+  if (!amount) return day;
+  const shadow = day.motif === 'grape' ? '#120818' : day.motif === 'watermelon' ? '#06140c' : day.motif === 'pineapple' ? '#161404' : '#1a0c10';
+  const slotAmount = amount * 0.42;
+  return {
+    ...day,
+    bg: mix(day.bg, shadow, amount),
+    pin: mix(day.pin, shadow, amount * 0.85),
+    accent: mix(day.accent, shadow, amount * 0.55),
+    wall: mix(day.wall, shadow, amount * 0.8),
+    wallEdge: mix(day.wallEdge, shadow, amount * 0.7),
+    wallSide: mix(day.wallSide, shadow, amount * 0.75),
+    floor: mix(day.floor, shadow, amount * 0.8),
+    field: day.field,
+    fieldEdge: day.fieldEdge,
+    ink: mix(day.ink, '#fff6ea', amount * 0.72),
+    slotInk: mix(day.slotInk, '#1a120c', amount * 0.15),
+    colors: day.colors.map(color => mix(color, shadow, slotAmount)),
+  };
+}
+
+const boardCache = new Map();
+
+export function boardTheme(skinId, phase = 'day') {
+  const skin = skinById(skinId);
+  const gloss = skin?.tier === 2 ? GLOSS_BOARDS[skin.id] : null;
+  if (!gloss) return DEFAULT_BOARD;
+  const key = `${skin.id}:${phase}`;
+  if (!boardCache.has(key)) {
+    const day = { ...DEFAULT_BOARD, ...gloss, id: skin.id, hueLock: true, motifs: DEFAULT_BOARD.motifs };
+    boardCache.set(key, Object.freeze(nightBoard(day, phase)));
+  }
+  return boardCache.get(key);
+}
+
 export function emptyFruit() {
   return Object.fromEntries(FRUIT_IDS.map(id => [id, 0]));
 }

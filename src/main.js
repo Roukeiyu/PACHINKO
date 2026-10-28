@@ -14,7 +14,8 @@ import { sceneMotionAt } from './scene-motion.js';
 import { celebrateReward, advanceCelebrations } from './reward-effects.js';
 import { createCrowdFireworks } from './crowd-fireworks.js';
 import { COLLECTION_TYPES, restoreCollections } from './collections.js';
-import { emptyFruit, normalizeFruit, skinById, skinCatalog } from './skins.js';
+import { activeSkinId, boardTheme, emptyFruit, normalizeFruit, skinById, skinCatalog } from './skins.js';
+import { paintBallFace } from './ball-face.js';
 import { workerUrl } from './worker-url.js';
 import { createProfileClient, PROFILE_ERRORS } from './profile-client.js';
 import { nextSlotCount, SLOT_UNLOCK_7, SLOT_UNLOCK_9 } from './slots.js';
@@ -34,6 +35,9 @@ const icons = {
 };
 const icon = (name, size = 18) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
 const animalScene = { motifs: ['🐰','🐻','🐱'], bg: '#fbf3e9', pin: '#b2c3a1', accent: '#e994a4', colors: ['#e6ecca','#f8dfb1','#efc2cb','#d5e6d3','#f6dba7','#efc2cb','#e6ecca'] };
+function currentBoardTheme() {
+  return boardTheme(activeSkinId(state.equippedSkin), timePalette?.phase?.id || 'day');
+}
 
 let saved = {};
 try { saved = JSON.parse(localStorage.getItem('ponpon-settings') || '{}'); } catch {}
@@ -100,8 +104,9 @@ function updateTimeFlow(now = performance.now(), force = false) {
   timePalette = state.timeFlow ? createTimePalette(Date.now() - state.timeFlowStartedAt) : null;
   applyTimePalette(document.documentElement, timeTokens, timePalette);
   $('#time-cycle-info').hidden = !state.timeFlow;
-  document.documentElement.style.setProperty('--accent', timePalette?.color(animalScene.accent) ?? animalScene.accent);
-  $('.board-wrap').style.background = timePalette?.color(animalScene.bg, 'surface') ?? animalScene.bg;
+  const theme = currentBoardTheme();
+  document.documentElement.style.setProperty('--accent', theme.hueLock ? theme.accent : timePalette?.color(animalScene.accent) ?? animalScene.accent);
+  $('.board-wrap').style.background = theme.hueLock ? theme.bg : timePalette?.color(animalScene.bg, 'surface') ?? animalScene.bg;
   if (timePalette) {
     const phase = timePalette.phase, seconds = Math.ceil(phase.remaining / 1000);
     $('#time-phase').textContent = phase.label;
@@ -171,7 +176,7 @@ haptics.setEnabled(state.vibrate);
 const game = createTable({ slots: state.slots, collections: state.collections, centerHitWeight: triggeringGiftScale, giftScale: triggeringGiftScale, onHit: hit => {
   playCanon(hit);
   haptics.collision(hit.speed);
-  if (!state.calm) fx.ripples.push({ ...hit, life: 1, color: animalScene.accent });
+  if (!state.calm) fx.ripples.push({ ...hit, life: 1, color: currentBoardTheme().accent });
 }, onScore: award, onReturn: ({ reason } = {}) => { if (perf.on && reason === 'out') perf.outs += 1; state.combo = 0; toast(reason === 'timeout' ? '这颗弹珠停留太久，先收回来了' : reason === 'out' ? '弹珠掉出球台了，再来一颗吧' : '弹珠已回收，再试试另一种力度吧'); }, onDrain: miss => {
   state.combo = 0;
   fx.shake = Math.max(fx.shake, 2);
@@ -983,7 +988,8 @@ function tick(now) {
   else $('.game-layout').style.removeProperty('transform');
   if (state.slotTransition && performance.now() >= state.slotTransition.startedAt + state.slotTransition.duration) state.slotTransition = null;
   const drawStart = performance.now();
-  renderer.draw(game, animalScene, state, fx, timePalette);
+  const theme = currentBoardTheme();
+  renderer.draw(game, theme, state, fx, theme.hueLock ? null : timePalette);
   const drawEnd = performance.now();
   if (perf.on && rawDelta > 0 && !document.hidden && !miniGames.open) {
     const info = renderer.frameInfo?.() || {};
@@ -1024,6 +1030,7 @@ function applyServerProfile(data, token) {
   roundFruit = emptyFruit();
   paintProfile();
   updateCollections();
+  updateTimeFlow(performance.now(), true);
   persist();
 }
 function forgetProfile() {
@@ -1036,6 +1043,7 @@ function forgetProfile() {
   profileClient.writeOutbox([]);
   paintProfile();
   updateCollections();
+  updateTimeFlow(performance.now(), true);
   persist();
 }
 function paintProfile() {
@@ -1089,6 +1097,7 @@ async function equipSkin(skin) {
     const data = await profileClient.equip(skin);
     state.equippedSkin = data.equipped || '';
     updateCollections();
+    updateTimeFlow(performance.now(), true);
   } catch (error) {
     if (error.code === 'unauthorized') forgetProfile();
     toast(PROFILE_ERRORS[error.code] || '皮肤没换上');
@@ -1165,10 +1174,25 @@ function updateCollections() {
     skins.replaceChildren(...rows.map(skin => {
       const row = document.createElement('div');
       row.className = 'skin-row';
+      const preview = document.createElement('canvas');
+      preview.className = 'skin-ball';
+      preview.width = preview.height = 64;
+      paintBallFace(preview.getContext('2d'), 32, 32, 30, skinById(skin.id));
       const label = document.createElement('span');
       const ready = skin.have >= skin.need;
-      label.textContent = ready ? `${skin.name} 已解锁` : `${skin.name} ${skin.have.toLocaleString()}/${skin.need.toLocaleString()}`;
-      row.append(label);
+      label.textContent = `${ready ? `${skin.name} 已解锁` : `${skin.name} ${skin.have.toLocaleString()}/${skin.need.toLocaleString()}`}${skin.tier === 2 ? ' · 台面主题' : ''}`;
+      row.append(preview, label);
+      if (skin.tier === 2) {
+        const swatch = document.createElement('span');
+        swatch.className = 'theme-swatch';
+        swatch.title = '糖霜解锁这个台面颜色';
+        for (const color of [boardTheme(skin.id, 'day').bg, boardTheme(skin.id, 'day').pin, boardTheme(skin.id, 'day').accent]) {
+          const chip = document.createElement('i');
+          chip.style.background = color;
+          swatch.append(chip);
+        }
+        row.append(swatch);
+      }
       if (sessionToken && skin.unlocked) {
         const button = document.createElement('button');
         button.type = 'button';

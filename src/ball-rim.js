@@ -15,16 +15,16 @@ export function ballOwnFactor(ball) {
 // strengthens the halo a little. Player balls use gold and orange. Gift balls
 // use the same shapes in purple, so the lavender fill stays readable.
 const RIMS = {
-  1: { tier: 1, color: '#e6c878', glow: null, span: 0.24, glowScale: 1, width: 2.6, radius: 14.7 },
-  2: { tier: 2, color: '#e2891c', glow: null, span: 0.46, glowScale: 1, width: 3.4, radius: 15.7 },
-  4: { tier: 4, color: '#f2b13a', glow: '#ffe1a0', span: 0.56, glowScale: 1, width: 3.6, radius: 16.0 },
-  8: { tier: 8, color: '#e44522', glow: '#ff6a3a', span: 0.72, glowScale: 1.16, width: 4.0, radius: 16.4 },
+  1: { tier: 1, color: '#e6c878', glow: null, span: 0.24, glowScale: 1, width: 2.4, radius: 16.4 },
+  2: { tier: 2, color: '#e2891c', glow: null, span: 0.46, glowScale: 1, width: 3.2, radius: 17.1 },
+  4: { tier: 4, color: '#f2b13a', glow: '#ffe1a0', span: 0.56, glowScale: 1, width: 3.4, radius: 17.4 },
+  8: { tier: 8, color: '#e44522', glow: '#ff6a3a', span: 0.72, glowScale: 1.16, width: 3.8, radius: 17.8 },
 };
 const GIFT_RIMS = {
-  1: { tier: 1, color: '#c084fc', glow: null, span: 0.24, glowScale: 1, width: 2.6, radius: 14.7 },
-  2: { tier: 2, color: '#9333ea', glow: null, span: 0.46, glowScale: 1, width: 3.4, radius: 15.7 },
-  4: { tier: 4, color: '#6d28d9', glow: '#e9d5ff', span: 0.56, glowScale: 1, width: 3.6, radius: 16.0 },
-  8: { tier: 8, color: '#e879f9', glow: '#f5d0fe', span: 0.72, glowScale: 1.16, width: 4.0, radius: 16.4 },
+  1: { tier: 1, color: '#c084fc', glow: null, span: 0.24, glowScale: 1, width: 2.4, radius: 16.4 },
+  2: { tier: 2, color: '#9333ea', glow: null, span: 0.46, glowScale: 1, width: 3.2, radius: 17.1 },
+  4: { tier: 4, color: '#6d28d9', glow: '#e9d5ff', span: 0.56, glowScale: 1, width: 3.4, radius: 17.4 },
+  8: { tier: 8, color: '#e879f9', glow: '#f5d0fe', span: 0.72, glowScale: 1.16, width: 3.8, radius: 17.8 },
 };
 
 export function ballRimStyle(factor, gift = false) {

@@ -348,6 +348,10 @@ html:not(.calm) .ball-count.is-low{animation:ball-low 900ms ease-in-out infinite
 .profile-field{display:flex;flex-direction:column;gap:4px;margin:10px 0;font-size:13px}
 .profile-field input{min-height:40px;border-radius:10px;border:1px solid var(--flow-line-d8cbbc,#d8cbbc);padding:0 12px;font-size:16px}
 .skin-list{display:flex;flex-direction:column;gap:4px;margin-top:8px}
-.skin-row{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:11px;color:var(--flow-ink-647659,#647659)}
+.skin-row{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--flow-ink-647659,#647659)}
+.skin-ball{width:28px;height:28px;border-radius:50%;flex:none}
+.skin-row>span:nth-child(2){flex:1;min-width:0}
+.theme-swatch{display:inline-flex;width:28px;height:14px;border-radius:7px;overflow:hidden;flex:none;border:1px solid #0002}
+.theme-swatch i{flex:1}
 .skin-equip{border:1px solid var(--flow-line-ccd8bd,#ccd8bd);background:#fff;border-radius:8px;padding:2px 8px;min-height:24px;font-size:11px;cursor:pointer}
 .skin-equip:disabled{opacity:.7;cursor:default}
