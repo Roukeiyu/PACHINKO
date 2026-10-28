@@ -121,12 +121,13 @@ const trappedRadius = trappedBell.plugin.radius + 26;
 Matter.Body.setPosition(trappedBall.body, { x: trappedBell.position.x, y: trappedBell.position.y - trappedRadius });
 Matter.Body.setVelocity(trappedBall.body, { x: 0, y: -bellShot });
 let stayedAbove = true;
-for (let i = 0; i < Math.round(3000 / STEP); i++) {
+for (let i = 0; i < Math.round(1200 / STEP); i++) {
   trapped.step();
   const live = trapped.balls.find(ball => ball.id === trappedBall.id);
-  if (!live || Math.abs(live.body.position.x - trappedBell.position.x) > 2 || live.body.position.y > trappedBell.position.y) { stayedAbove = false; break; }
+  if (!live || Math.abs(live.body.position.x - trappedBell.position.x) > 24 || live.body.position.y > trappedBell.position.y) { stayedAbove = false; break; }
 }
-assert.equal(stayedAbove, true, 'a straight-up 12 o\'clock shot keeps bouncing above the bell');
+assert.equal(stayedAbove, false, 'a ball bouncing above the bell is pushed out of that column within 1.2s');
+assert.equal(trapped.stats.clockBursts, 0, 'leaving the column does not by itself fire the clock');
 
 const tilted = [];
 const freed = createTable({

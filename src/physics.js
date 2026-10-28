@@ -374,6 +374,11 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     bumper.plugin.radius = radius;
   }
   function recordBumperHit(bumper, ball) {
+    // A secret visit keeps the table moving so the other balls can drain, but
+    // that wait must not fill a drum or arm a reward. The 12-shot clock in
+    // particular was queuing here and only appearing once the mini-game
+    // released the held shots.
+    if (emissionPaused) return;
     const index = bumper.plugin.index;
     // Center drum only (index 2, the meter that pays the 12-ball clock).
     // Left and right drums always advance by 1. Omitting the hook keeps +1.
@@ -659,11 +664,14 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
       const inMouth = Math.abs(mouthDelta) <= 0.7;
       const onShelf = shelf && y < shelf.y - 6 && x > shelf.x - 50 && x < shelf.x + 110
         && Math.hypot(shelfDx, shelfDy) > HOLE_SINK + 8 && !inMouth;
+      const bell = bumpers[2];
+      const aboveBell = Math.abs(x - bell.position.x) < 24 && y < bell.position.y - bell.plugin.radius + 6 && y > bell.position.y - 140;
+      if (!aboveBell) ball.columnSince = 0;
       if (onShelf && ball.stuck > SHELF_LIMIT) {
-        // Off the closed rim and the guide/wall corner. Left and slightly up
-        // clears that pocket; the mouth exemption above keeps the shove off
-        // the opening.
-        Body.setVelocity(body, { x: -6, y: -0.8 });
+        // Down and slightly right: off the closed rim, away from the left-facing
+        // mouth and away from the center drum. A leftward shove was aimed at
+        // that drum.
+        Body.setVelocity(body, { x: 2.4, y: 5 });
         ball.stuck = 0; ball.anchorX = x; ball.anchorY = y;
       } else if (onFloor && ball.stuck > 800 && body.speed < 0.9) {
         let best = x, bestDist = Infinity;
@@ -676,6 +684,17 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
         const dir = Math.abs(best - x) > 1 ? Math.sign(best - x) : (ball.id % 2 ? 1 : -1);
         Body.setVelocity(body, { x: dir * 3.5, y: 7 });
         ball.stuck = 0; ball.anchorX = x; ball.anchorY = y;
+      } else if (aboveBell) {
+        // The pin above the center drum and the drum itself form a vertical
+        // bounce. Contact stays fast enough that the 12px dwell never fills,
+        // so one ball used to count a hit every 100ms until the clock fired.
+        if (!ball.columnSince) ball.columnSince = clock;
+        else if (clock - ball.columnSince > 800) {
+          const side = ball.id % 2 ? 1 : -1;
+          Body.setVelocity(body, { x: side * 4.5, y: 2.5 });
+          ball.columnSince = clock;
+          ball.stuck = 0; ball.anchorX = x; ball.anchorY = y;
+        }
       } else if (ball.stuck > DWELL_LIMIT) {
         const rim = holes.find(h => Math.hypot(x - h.x, y - h.y) < HOLE_RIM);
         if (rim) { ball.ignoreHoleUntil = clock + HOLE_IGNORE; body.collisionFilter.group = HOLE_GROUP; }

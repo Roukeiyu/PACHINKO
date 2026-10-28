@@ -74,3 +74,40 @@ const timeout=returns.launch();timeout.entered=true;timeout.born=returns.clock-4
 Matter.Body.setPosition(timeout.body,{x:200,y:400});Matter.Body.setVelocity(timeout.body,{x:0,y:0});
 returns.step();assert.equal(reasons.at(-1),'timeout');assert.equal(returns.stats.timeouts,1);
 console.log('PASS: actual secret entry locks every launcher, cancels pending charged shots, preserves earned stored drops and resumes their release schedule. The center enlarge keeps expiring during that pause, clock-burst pips stay frozen, and returns report weak/out/timeout.');
+
+// A secret visit used to let a ball keep tapping the center drum while shots
+// were held. The meter filled, and the 12-shot clock appeared when the
+// mini-game ended. The visit itself must not move the meter or arm a clock.
+{
+  const visit = createTable({ random: () => 0.4, centerHitWeight: ball => {
+    const raw = Math.floor(Number(ball?.valueFactor));
+    return Number.isFinite(raw) && raw > 0 ? raw : 1;
+  } });
+  visit.rewards.hits[2] = 4;
+  const farmer = visit.launch();
+  farmer.entered = true;
+  farmer.valueFactor = 8;
+  Matter.Body.setPosition(farmer.body, { x: 350, y: 340 });
+  Matter.Body.setVelocity(farmer.body, { x: 0, y: 1 });
+  const hole = visit.holes[0];
+  const secret = visit.launch();
+  secret.entered = true;
+  secret.valueFactor = 8;
+  Matter.Body.setPosition(secret.body, { x: hole.x, y: hole.y });
+  Matter.Body.setVelocity(secret.body, { x: 0, y: 0 });
+  visit.step();
+  assert.equal(visit.stats.jackpots, 1, 'the placed ball still opens the secret hole');
+  const hitsAtStart = visit.rewards.hits[2];
+  const pendingAtStart = visit.pendingShotCount;
+  const clocksAtStart = visit.stats.clockBursts;
+  visit.setEmissionPaused(true);
+  for (let i = 0; i < Math.round(4000 / STEP); i++) visit.step();
+  visit.setEmissionPaused(false);
+  for (let i = 0; i < Math.round(2000 / STEP); i++) visit.step();
+  assert.equal(visit.rewards.hits[2], hitsAtStart, 'a secret visit does not advance the center drum');
+  assert.equal(visit.stats.clockBursts, clocksAtStart, 'a secret visit fires no clock');
+  assert.equal(visit.pendingShotCount, pendingAtStart, 'a secret visit does not queue clock shots');
+  const still = visit.balls.find(ball => ball.id === farmer.id);
+  if (still) assert.ok(Math.abs(still.body.position.x - 350) > 24 || still.body.position.y > 400, 'the ball above the bell is not left in that column');
+  console.log('PASS: finishing a secret visit leaves the clock meter and pending shots unchanged.');
+}
