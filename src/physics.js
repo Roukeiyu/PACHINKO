@@ -28,12 +28,12 @@ const FILTER = { world: 1, ascending: 2, playing: 4, returnRamp: 8, launchDoor: 
 // that lip, so the rim can no longer push it back out between checks.
 const HOLE_SINK = 30, HOLE_RIM = 56, HOLE_IGNORE = 200, HOLE_GROUP = -2;
 // Mouth direction. Angle 0 points right and increases clockwise, because y
-// grows downward. 3π/4 is 7:30: 45° down-left, 225° clockwise from 12 o'clock.
-// The cup sits just off the seam's lower-left end. Balls rolling off that end
-// still reach this down-left mouth, so the opening stays at 7:30.
+// grows downward. π is 9:00: due left. Balls reach this cup from above and
+// the upper-left; a down-left mouth caught almost none of them, and an
+// upper-left mouth caught too many. Due left is the edge of that stream.
 export const SECRET_HOLE_X = 580;
 export const SECRET_HOLE_Y = 470;
-export const SECRET_HOLE_FACING = Math.PI * 3 / 4;
+export const SECRET_HOLE_FACING = Math.PI;
 const DWELL_RADIUS = 12, DWELL_LIMIT = 1500, COLLECTOR_HOLD = 48;
 // The shelf above the secret hole (the +500 label and the guide/wall corner)
 // must not hold a ball. The slow board-wide nudge is too late for that pocket.
@@ -113,8 +113,9 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   // from nearby obstacles even when pointing left, allowing full-circle shots.
   const triangle = add(Bodies.fromVertices(99, 466, [[{ x: 34, y: 0 }, { x: -17, y: -23 }, { x: -17, y: 23 }]], { isStatic: true, label: 'deflector', restitution: .8, friction: 0 }), deflectors, { radius: 34, angle: -Math.PI / 3, hits: 0 });
   Body.setAngle(triangle, triangle.plugin.angle);
-  // Recessed cup. The missing arc is the mouth, centered on facing (7:30,
-  // down-left). A jackpot is earned by actually reaching the hole.
+  // Recessed cup. The missing arc is the mouth, centered on facing (9:00,
+  // due left). The same arc is the visual gap in 2D and 3D. A jackpot is
+  // earned by actually reaching the hole.
   for (const hole of holes) {
     for (let i = 0; i < 12; i++) {
       const a = hole.facing + .55 + i * (Math.PI * 2 - 1.1) / 12;
@@ -650,12 +651,18 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
       // instead of popping it straight up into the same notch.
       const onFloor = y > TABLE.slotTop - 18 && y < 940;
       const shelf = holes[0];
+      const shelfDx = shelf ? x - shelf.x : 0, shelfDy = shelf ? y - shelf.y : 0;
+      const shelfAngle = Math.atan2(shelfDy, shelfDx);
+      const mouthDelta = shelf ? Math.atan2(Math.sin(shelfAngle - shelf.facing), Math.cos(shelfAngle - shelf.facing)) : Math.PI;
+      // The open arc is ±0.55 rad. A ball already in that gap is approaching
+      // the cup, so the shelf shove must not kick it back out.
+      const inMouth = Math.abs(mouthDelta) <= 0.7;
       const onShelf = shelf && y < shelf.y - 6 && x > shelf.x - 50 && x < shelf.x + 110
-        && Math.hypot(x - shelf.x, y - shelf.y) > HOLE_SINK + 8;
+        && Math.hypot(shelfDx, shelfDy) > HOLE_SINK + 8 && !inMouth;
       if (onShelf && ball.stuck > SHELF_LIMIT) {
-        // Left and slightly up: off the rim, away from the lane wall, and not
-        // down into the mouth. A shove toward the cup would turn a stuck ball
-        // into a jackpot.
+        // Off the closed rim and the guide/wall corner. Left and slightly up
+        // clears that pocket; the mouth exemption above keeps the shove off
+        // the opening.
         Body.setVelocity(body, { x: -6, y: -0.8 });
         ball.stuck = 0; ball.anchorX = x; ball.anchorY = y;
       } else if (onFloor && ball.stuck > 800 && body.speed < 0.9) {

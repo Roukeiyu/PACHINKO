@@ -197,14 +197,15 @@ for (const slots of [5, 7, 9]) for (const seedOffset of [0, 100, 200]) {
 }
 assert.ok(totals.jackpots > 0 && totals.jackpots < 108, 'physical bonus cups should be attainable and uncommon (<10% in seeded sample)');
 
-// Approach the cup through the down-left mouth. Capture scores exactly once,
+// Approach the cup through the open mouth. Capture scores exactly once,
 // while a trajectory into the closed arc does not receive a jackpot.
 {
   const scores = [], game = createTable({ onScore: score => scores.push(score) });
   assert.equal(game.holes.length, 1, 'only the right secret hole remains');
   const h = game.holes[0];
   assert.ok(h.x > TABLE.width / 2);
-  assert.equal(h.facing, SECRET_HOLE_FACING, 'the mouth faces 7:30, 45° down-left');
+  assert.equal(SECRET_HOLE_FACING, Math.PI, 'the mouth faces 9:00, due left');
+  assert.equal(h.facing, SECRET_HOLE_FACING, 'the hit sensor uses the same facing as the rim gap');
   assert.equal(h.x, SECRET_HOLE_X);
   assert.equal(h.y, SECRET_HOLE_Y);
   const open = game.guards.filter(guard => guard.plugin.hole);
@@ -212,7 +213,7 @@ assert.ok(totals.jackpots > 0 && totals.jackpots < 108, 'physical bonus cups sho
   for (const guard of open) {
     const angle = Math.atan2(guard.position.y - h.y, guard.position.x - h.x);
     const delta = Math.atan2(Math.sin(angle - h.facing), Math.cos(angle - h.facing));
-    assert.ok(Math.abs(delta) >= 0.5, 'the wall arc leaves the down-left mouth open');
+    assert.ok(Math.abs(delta) >= 0.5, 'the wall arc leaves the mouth open');
   }
   const ball = game.launch(); ball.entered = true;
   Matter.Body.setPosition(ball.body, { x: h.x + Math.cos(h.facing) * 47, y: h.y + Math.sin(h.facing) * 47 });
