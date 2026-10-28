@@ -44,4 +44,15 @@ const missing = createHaptics({ vibrate: undefined });
 assert.equal(missing.collision(8, 0), false);
 assert.equal(missing.score({ kind: 'slot', multiplier: 10 }, 0), false);
 
+const beforeLaunch = calls.length;
+assert.equal(haptics.noteLaunch(true, 5000), false, 'a normal five-ball launch does not add its own buzz');
+assert.equal(calls.length, beforeLaunch);
+assert.equal(haptics.collision(10, 5010), true);
+assert.equal(haptics.collision(10, 5060), false, 'five-ball collisions stay spaced instead of buzzing continuously');
+assert.equal(haptics.collision(10, 5170), true);
+haptics.setSoftLaunch(true);
+assert.equal(haptics.noteLaunch(true, 6000), true);
+assert.equal(calls.at(-1), 8, 'reduced launch vibration is a light tap');
+assert.equal(haptics.collision(10, 6100), false, 'the launch tap replaces the collision buzz');
+haptics.setSoftLaunch(false);
 console.log('PASS: vibration grades, collision throttle, stronger pulses overriding weaker ones, and silent skip when vibrate is missing or throws.');

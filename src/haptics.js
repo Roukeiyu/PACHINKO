@@ -18,9 +18,11 @@ function defaultVibrate(pattern) {
 
 export function createHaptics({ vibrate = defaultVibrate, now = () => performance.now() } = {}) {
   let enabled = true;
+  let soften = false;
   let lastCollisionAt = -Infinity;
   let activeRank = 0;
   let activeUntil = -Infinity;
+  let launchQuietUntil = -Infinity;
   function buzz(pattern, rank, at) {
     if (!enabled) return false;
     // A weaker pulse must not cut off a stronger one that is still running.
@@ -41,10 +43,17 @@ export function createHaptics({ vibrate = defaultVibrate, now = () => performanc
       }
     },
     get enabled() { return enabled; },
+    setSoftLaunch(value) { soften = !!value; },
+    noteLaunch(burst = false, at = now()) {
+      launchQuietUntil = at + (burst ? 480 : 240);
+      if (!soften) return false;
+      return buzz(8, RANK.collision, at);
+    },
     collision(speed, at = now()) {
       if (!(speed >= HAPTIC_MIN_SPEED)) return false;
-      if (at - lastCollisionAt < HAPTIC_MIN_INTERVAL) return false;
-      const played = buzz(HAPTIC_COLLISION_MS, RANK.collision, at);
+      const gap = at < launchQuietUntil ? (soften ? Infinity : 160) : HAPTIC_MIN_INTERVAL;
+      if (at - lastCollisionAt < gap) return false;
+      const played = buzz(soften && at < launchQuietUntil ? 8 : HAPTIC_COLLISION_MS, RANK.collision, at);
       if (played) lastCollisionAt = at;
       return played;
     },

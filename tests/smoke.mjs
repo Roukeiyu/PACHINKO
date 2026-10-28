@@ -80,6 +80,7 @@ try {
   await page.locator('#settings-button').click();
   await page.locator('#calm').check();
   assert.equal(await page.locator('#vibrate').isChecked(), true, 'vibration defaults on');
+  assert.equal(await page.locator('#soft-launch').isChecked(), false, 'reduced launch shake defaults off');
   await page.keyboard.press('Escape');
   await page.locator('#sound-button').click();
   await page.locator('#settings-button').click();
