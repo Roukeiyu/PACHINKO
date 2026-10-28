@@ -1254,6 +1254,7 @@ function updateCollections() {
   if (shine?.unlocked) paintBallFace(context, 32, 32, 30, skinById('shine'), performance.now());
   else { context.fillStyle = '#1c140c'; context.beginPath(); context.arc(32, 32, 30, 0, Math.PI * 2); context.fill(); context.fillStyle = '#f6d48a'; context.font = 'bold 28px sans-serif'; context.textAlign = 'center'; context.textBaseline = 'middle'; context.fillText('?', 32, 34); }
   const copy = document.createElement('div');
+  copy.className = 'skin-copy';
   const title = document.createElement('strong');
   title.textContent = shine?.unlocked ? '闪耀皮肤' : '？？？';
   const detail = document.createElement('small');

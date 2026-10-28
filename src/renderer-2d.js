@@ -102,7 +102,8 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     if (!theme.motif) return;
     ctx.save();
     ctx.globalAlpha = 0.55;
-    const spots = [[64, 175], [640, 175], [64, 520], [640, 600]];
+    // Inside the playfield, clear of pegs, rails, the deflector label and 回流口.
+    const spots = [[64, 175], [640, 175], [72, 310], [630, 250]];
     for (const [x, y] of spots) {
       if (theme.motif === 'cherry') { circle(x, y, 7, '#d0122d'); circle(x + 8, y - 2, 6, '#e23b4a'); }
       else if (theme.motif === 'orange') { circle(x, y, 8, '#f06a00', '#c2410c', 1); }
@@ -215,7 +216,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       if (bonus.multiplier > 1) text(`进洞 ×${bonus.multiplier}`, mid, TABLE.slotTop + 73, 9, bonus.multiplier === 5 ? '#8b59b5' : '#99712d');
       else {
         const lucky = (region.luckyFrom ? 1 - eased : 0) + (region.luckyTo ? eased : 0);
-        if (lucky > 0.04) { ctx.save(); ctx.globalAlpha = Math.min(1, lucky); text('LUCKY', mid, TABLE.slotTop + 73, 8, '#aa8243'); ctx.restore(); }
+        if (lucky > 0.04) { ctx.save(); ctx.globalAlpha = Math.min(1, lucky); text('LUCKY', mid, TABLE.slotTop + 73, 8, theme.motif === 'pineapple' ? '#1a1408' : '#aa8243'); ctx.restore(); }
       }
     }
     // Pockets that meet share one board-colored wall. A wide mouth keeps the
@@ -242,7 +243,10 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       text(`+${500 * bonus.multiplier}`, hole.x, hole.y - 51, 15, '#b39153', 'bold');
       text('秘密洞', hole.x, hole.y + 52, 12, caption || '#9e9375');
     }
-    for (const guard of game.guards) bodyShape(guard, guard.plugin.storage ? '#b9a6ce' : '#d8c69c', guard.plugin.storage ? '#f4eafb' : '#efe5c8', false);
+    for (const guard of game.guards) {
+      const jar = guard.plugin.storage && theme.hueLock;
+      bodyShape(guard, jar ? theme.jar : guard.plugin.storage ? '#b9a6ce' : '#d8c69c', jar ? theme.wallEdge : guard.plugin.storage ? '#f4eafb' : '#efe5c8', false);
+    }
     const storage = game.collector;
     // The cup, live counter and visible inlet all share the physical coordinates.
     circle(storage.x, storage.y + 2, 22, '#827590');

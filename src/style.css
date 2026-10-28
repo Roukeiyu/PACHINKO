@@ -354,7 +354,9 @@ html:not(.calm) .ball-count.is-low{animation:ball-low 900ms ease-in-out infinite
 .skin-copy small{white-space:nowrap}
 .theme-swatch{display:inline-flex;width:28px;height:14px;border-radius:7px;overflow:hidden;flex:none;border:1px solid #0002}
 .theme-swatch i{flex:1}
-.shine-card{display:flex;align-items:center;gap:8px;margin-top:10px}
+.shine-card{display:flex;align-items:center;gap:6px;margin-top:10px}
+.shine-card .skin-copy{flex:1;min-width:0;gap:4px}
+.shine-card .skin-equip{margin-left:auto}
 .shine-reveal{text-align:center;background:radial-gradient(circle at 50% 0%, #3a2a68, #16122c 70%)}
 .shine-reveal h2{font-size:28px;color:#fff6d4;text-shadow:0 0 18px #ffe7a1}
 .shine-reveal-copy{color:#f6d48a;line-height:1.6}
