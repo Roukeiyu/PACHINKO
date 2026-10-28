@@ -35,6 +35,9 @@ export const SECRET_HOLE_X = 580;
 export const SECRET_HOLE_Y = 470;
 export const SECRET_HOLE_FACING = Math.PI * 3 / 4;
 const DWELL_RADIUS = 12, DWELL_LIMIT = 1500, COLLECTOR_HOLD = 48;
+// The shelf above the secret hole (the +500 label and the guide/wall corner)
+// must not hold a ball. The slow board-wide nudge is too late for that pocket.
+const SHELF_LIMIT = 650;
 // Same negative group: a phased ball skips the secret-hole ring only.
 // Collector guards stay on group 0, so storage is never phased open.
 
@@ -129,10 +132,11 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
       collector.x + Math.cos(b) * 33, collector.y + Math.sin(b) * 33, 8, guards, 'guard', .25);
     rim.plugin.storage = true;
   }
-  // Cover the outer seam between the recessed cup and the side wall, so a
-  // falling ball cannot wedge into the narrow space behind the cup. The cup
-  // sits just off this rail's lower-left end, on the side balls roll off.
-  segment(665, 413, 615, 438, 13, walls);
+  // Slope from the lane wall down onto the cup's upper-right rim. The old
+  // tip stopped short of the ring, and a ball could rest in that notch under
+  // the +500 label, pinched between the guide and the rim. This rail meets
+  // the rim, so the corner is a slope instead of a pocket.
+  segment(668, 400, 590, 430, 13, walls);
   // Fixed left/right pairs mirrored across the center bumper's vertical x=350 axis.
   // Coordinates leave space for moving rails, enlarged bumpers and the hole.
   // The side-by-side pair between the bunny and bear drums, (320,270) and
@@ -645,7 +649,16 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
       // After a short rest, shove it toward the nearest mouth that can hold it
       // instead of popping it straight up into the same notch.
       const onFloor = y > TABLE.slotTop - 18 && y < 940;
-      if (onFloor && ball.stuck > 800 && body.speed < 0.9) {
+      const shelf = holes[0];
+      const onShelf = shelf && y < shelf.y - 6 && x > shelf.x - 50 && x < shelf.x + 110
+        && Math.hypot(x - shelf.x, y - shelf.y) > HOLE_SINK + 8;
+      if (onShelf && ball.stuck > SHELF_LIMIT) {
+        // Left and slightly up: off the rim, away from the lane wall, and not
+        // down into the mouth. A shove toward the cup would turn a stuck ball
+        // into a jackpot.
+        Body.setVelocity(body, { x: -6, y: -0.8 });
+        ball.stuck = 0; ball.anchorX = x; ball.anchorY = y;
+      } else if (onFloor && ball.stuck > 800 && body.speed < 0.9) {
         let best = x, bestDist = Infinity;
         for (const region of slotFrame(slots).regions) {
           if (region.kind !== 'slot' && region.kind !== 'drain') continue;

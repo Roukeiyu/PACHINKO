@@ -6,6 +6,17 @@ export const LEADERBOARD_LIMIT = 20;
 export const LEADERBOARD_QUALIFY_SCORE = 50000;
 export const NAME_MAX_LENGTH = 12;
 export const LEADERBOARD_STORAGE_KEY = 'ponpon-leaderboard';
+export const LEADERBOARD_OUTBOX_KEY = 'ponpon-leaderboard-outbox';
+
+export const LEADERBOARD_ERRORS = {
+  offline: '排行榜连不上，名字先记在这台设备上，连上后再送',
+  rate_limited: '排行榜这会儿太忙，名字先记着，待会儿再送',
+  github_error: '排行榜没送成，名字先记着，待会儿再送',
+  not_configured: '排行榜还没准备好，名字先记着，待会儿再送',
+  invalid_score: '这局分数没有达到排行榜的要求',
+  invalid_name: '这个名字排行榜没有收下',
+  invalid_run: '这一局的编号排行榜没有收下',
+};
 
 // Rank 1 is 101220 and rank 20 is 50010. The eighteen scores between them were
 // drawn once from a seeded generator, then frozen. Every value is a multiple of 10.
@@ -70,6 +81,12 @@ function resolveStorage(storage) {
   return memoryStorage();
 }
 
+function retryableFailure(code, status) {
+  if (!status) return true;
+  if (status === 429 || status >= 500) return true;
+  return code === 'offline' || code === 'rate_limited' || code === 'github_error' || code === 'not_configured';
+}
+
 function remoteUrls(url) {
   const base = String(url || '').trim().replace(/\/+$/, '');
   if (!base) return null;
@@ -108,8 +125,55 @@ export function createLeaderboard({ url = '', storage, fetchImpl, presets = PRES
     store.setItem(LEADERBOARD_STORAGE_KEY, JSON.stringify({ entries }));
   }
 
+  function readOutbox() {
+    try {
+      const parsed = JSON.parse(store.getItem(LEADERBOARD_OUTBOX_KEY) || '[]');
+      return (Array.isArray(parsed) ? parsed : []).map(normalize).filter(item => item.runId);
+    } catch {
+      return [];
+    }
+  }
+
+  function writeOutbox(entries) {
+    if (!entries.length) {
+      if (typeof store.removeItem === 'function') store.removeItem(LEADERBOARD_OUTBOX_KEY);
+      else store.setItem(LEADERBOARD_OUTBOX_KEY, '[]');
+      return;
+    }
+    store.setItem(LEADERBOARD_OUTBOX_KEY, JSON.stringify(entries));
+  }
+
+  function queuePending(entry) {
+    const pending = readOutbox().filter(item => item.runId !== entry.runId);
+    pending.push({ runId: entry.runId, name: entry.name, score: entry.score });
+    writeOutbox(pending);
+  }
+
+  function dropPending(runId) {
+    writeOutbox(readOutbox().filter(item => item.runId !== runId));
+  }
+
   function localTop() {
     return topEntries([...presets.map(entry => ({ name: entry.name, score: entry.score, runId: '' })), ...readSaved()]);
+  }
+
+  function markPending(rows) {
+    const pending = new Set(readOutbox().map(item => item.runId));
+    return rows.map(row => ({ ...row, pending: Boolean(row.runId && pending.has(row.runId)) }));
+  }
+
+  // A just-submitted row has to show even when /top is stale or never received
+  // the post. Server rows stay first so a confirmed remote score wins ties.
+  function withSaved(rows) {
+    const seen = new Set();
+    const merged = [];
+    for (const row of [...rows, ...readSaved()]) {
+      const key = row.runId || `preset:${row.name}:${row.score}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(row);
+    }
+    return markPending(topEntries(merged));
   }
 
   async function fetchTop() {
@@ -120,12 +184,40 @@ export function createLeaderboard({ url = '', storage, fetchImpl, presets = PRES
         const data = await response.json();
         const rows = Array.isArray(data) ? data : data?.entries;
         if (!Array.isArray(rows)) throw new Error('leaderboard response was not a list');
-        return topEntries(rows.map(normalize).filter(Boolean));
+        return withSaved(rows.map(normalize).filter(Boolean));
       } catch {
-        return localTop();
+        return markPending(localTop());
       }
     }
-    return localTop();
+    return markPending(localTop());
+  }
+
+  async function postScore(entry, keepalive) {
+    let response;
+    try {
+      response = await request(endpoint.submit, {
+        method: 'POST',
+        credentials: 'omit',
+        keepalive,
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: entry.runId, name: entry.name, score: entry.score }),
+      });
+    } catch {
+      const error = new Error('offline');
+      error.code = 'offline';
+      throw error;
+    }
+    if (!response?.ok) {
+      let code = 'offline';
+      try {
+        const data = await response.json();
+        if (data?.error) code = String(data.error);
+      } catch { /* a non-JSON failure is still a failed submit */ }
+      const error = new Error(code);
+      error.code = code;
+      error.status = response.status;
+      throw error;
+    }
   }
 
   async function submit(entry, { keepalive = false, remote = true } = {}) {
@@ -138,21 +230,46 @@ export function createLeaderboard({ url = '', storage, fetchImpl, presets = PRES
     if (existing) existing.score = score;
     else saved.push({ runId, name, score });
     writeSaved(saved);
-    const stored = existing || saved[saved.length - 1];
-    if (remote && endpoint && request) {
-      try {
-        const response = await request(endpoint.submit, {
-          method: 'POST',
-          credentials: 'omit',
-          keepalive,
-          headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-          body: JSON.stringify({ runId, name: stored.name, score: stored.score }),
-        });
-        if (!response?.ok) throw new Error('leaderboard submit failed');
-      } catch { /* the local row is already stored */ }
+    const stored = { ...(existing || saved[saved.length - 1]) };
+    if (!(remote && endpoint && request)) {
+      dropPending(runId);
+      return { ok: true, pending: false, entry: stored };
     }
-    return { ...stored };
+    try {
+      await postScore(stored, keepalive);
+      dropPending(runId);
+      return { ok: true, pending: false, entry: stored };
+    } catch (error) {
+      const code = error.code || 'offline';
+      const pending = retryableFailure(code, error.status);
+      if (pending) queuePending(stored);
+      else dropPending(runId);
+      return { ok: false, pending, error: code, entry: stored };
+    }
   }
 
-  return { fetchTop, submit, readSaved };
+  async function flush({ keepalive = false } = {}) {
+    if (!endpoint || !request) return { ok: true, sent: 0, pending: 0 };
+    const left = [];
+    let sent = 0;
+    for (const item of readOutbox()) {
+      try {
+        await postScore(item, keepalive);
+        sent += 1;
+      } catch (error) {
+        if (retryableFailure(error.code || 'offline', error.status)) left.push(item);
+      }
+    }
+    writeOutbox(left);
+    return { ok: left.length === 0, sent, pending: left.length };
+  }
+
+  function forget(runId) {
+    const id = String(runId || '');
+    if (!id) return;
+    writeSaved(readSaved().filter(item => item.runId !== id));
+    dropPending(id);
+  }
+
+  return { fetchTop, submit, flush, forget, readSaved, readOutbox };
 }

@@ -161,6 +161,7 @@ html:not(.calm) .ball-count.is-low{animation:ball-low 900ms ease-in-out infinite
 .lb-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lb-score{font-variant-numeric:tabular-nums}
 .lb-row.is-you{background:#3a2a12;color:#fff6d4;border-radius:6px}
+.lb-pending{margin-left:6px;color:#e0b15a;font-size:11px}
 #player-name{display:block;width:100%;box-sizing:border-box;margin:0 0 8px;background:#0e0a06;color:#ffe7a3;border:2px solid #e7b14a;font:inherit;font-size:22px;letter-spacing:2px;text-align:center;padding:10px;-webkit-user-select:text;user-select:text}
 .name-error{margin:0 0 8px;text-align:center;color:#ffb4a2;font-size:12px}
 .name-actions{display:grid;gap:8px}

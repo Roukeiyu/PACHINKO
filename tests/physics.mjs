@@ -393,6 +393,52 @@ function stillWedged(table, ball, hole, ms = 2500) {
   assert.equal(parked.balls.length, 0, 'switching slots removes a ball sitting in the cusp');
   console.log(`PASS: secret-hole rim scan (${samples.length} angles and speeds) sinks or ejects, and slot changes clear a wedged ball.`);
 }
+// The guide used to stop short of the cup. Balls rested in that notch, under
+// the +500 label, until the 1.5s nudge. Drops into the shelf must clear it.
+{
+  const shelf = (x, y) => x > 540 && x < 690 && y > 370 && y < 465;
+  const parked = [];
+  const scored = [];
+  for (let y = 390; y <= 450; y += 12) {
+    for (let x = 560; x <= 670; x += 12) {
+      const table = createTable({ slots: 7, random: () => 0.4, onScore: s => scored.push(s) });
+      const ball = table.launch();
+      ball.entered = true;
+      Matter.Body.setPosition(ball.body, { x, y });
+      Matter.Body.setVelocity(ball.body, { x: x > 640 ? -0.6 : 0.2, y: 0.8 });
+      const hist = [];
+      for (let i = 0; i < Math.round(2200 / STEP); i++) {
+        table.step();
+        if (!table.balls.includes(ball)) break;
+        const p = ball.body.position;
+        hist.push(p.x, p.y);
+        if (hist.length < Math.round(1000 / STEP) * 2) continue;
+        const slice = hist.slice(-Math.round(1000 / STEP) * 2);
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (let k = 0; k < slice.length; k += 2) {
+          minX = Math.min(minX, slice[k]); maxX = Math.max(maxX, slice[k]);
+          minY = Math.min(minY, slice[k + 1]); maxY = Math.max(maxY, slice[k + 1]);
+        }
+        const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+        if (shelf(cx, cy) && Math.hypot(maxX - minX, maxY - minY) < 16) {
+          parked.push({ x: Math.round(cx), y: Math.round(cy), from: `${x},${y}` });
+          break;
+        }
+      }
+      release(table, ball);
+    }
+  }
+  assert.equal(parked.length, 0, `a ball rested on the secret-hole shelf: ${JSON.stringify(parked.slice(0, 4))}`);
+  const nudged = createTable({ slots: 7, random: () => 0, onScore: s => scored.push(s) });
+  const before = scored.length;
+  const stuck = nudged.launch();
+  stuck.entered = true;
+  Matter.Body.setPosition(stuck.body, { x: 602, y: 420 });
+  Matter.Body.setVelocity(stuck.body, { x: 0, y: 0.2 });
+  for (let i = 0; i < Math.round(1800 / STEP); i++) nudged.step();
+  assert.equal(scored.length, before, 'freeing the shelf must not award a secret-hole jackpot');
+  console.log('PASS: secret-hole shelf drops leave within a second and do not score the cup.');
+}
 // A ball balanced away from the hole and the storage cup is the global dwell case.
 {
   const table = createTable({ slots: 7, random: () => 0 });

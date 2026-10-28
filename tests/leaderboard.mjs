@@ -52,15 +52,82 @@ assert.deepEqual((await remote.fetchTop()).map(entry => entry.name), ['SRV']);
 assert.equal(calls[0].url, 'https://leaderboard.example/scores/top');
 assert.equal(calls[0].headers.Authorization, undefined);
 assert.equal(calls[0].headers.authorization, undefined);
-await remote.submit({ runId: 'run', name: '<img src=x>', score: 60000 });
+const rejected = await remote.submit({ runId: 'run', name: '<img src=x>', score: 60000 });
+assert.equal(rejected.ok, false);
+assert.equal(rejected.pending, true);
+assert.equal(rejected.error, 'offline');
 assert.equal(remote.readSaved()[0].name, '<img src=x>');
+assert.equal(remote.readOutbox().length, 1);
 assert.equal(calls.at(-1).url, 'https://leaderboard.example/scores/submit');
 assert.equal(calls.at(-1).method, 'POST');
 assert.equal(calls.at(-1).headers.Authorization, undefined);
+const visible = await remote.fetchTop();
+assert.equal(visible.some(entry => entry.name === '<img src=x>' && entry.pending), true, 'a failed submit stays on the board as not yet sent');
+assert.equal(visible.some(entry => entry.name === 'SRV'), true);
 const failed = createLeaderboard({
   url: 'https://leaderboard.example/scores',
   storage: memory(),
   fetchImpl: async () => { throw new Error('offline'); },
 });
 assert.equal((await failed.fetchTop())[0].name, 'AAA', 'a failed request falls back to the local board');
-console.log('PASS: fixed preset ranks, saved rows beyond 20, name limits, and token-free fetch with local fallback.');
+const queued = createLeaderboard({
+  url: 'https://leaderboard.example/scores',
+  storage: memory(),
+  fetchImpl: async (url, init) => {
+    if (init.method === 'POST') return { ok: false, status: 502, json: async () => ({ error: 'github_error' }) };
+    return { ok: true, json: async () => ({ entries: [{ name: 'SRV', score: 42, runId: '' }] }) };
+  },
+});
+const first = await queued.submit({ runId: 'run-queued', name: 'MIO', score: 88000 });
+assert.equal(first.ok, false);
+assert.equal(first.pending, true);
+assert.equal(queued.readOutbox().length, 1);
+const refused = createLeaderboard({
+  url: 'https://leaderboard.example/scores',
+  storage: memory(),
+  fetchImpl: async () => ({ ok: false, status: 400, json: async () => ({ error: 'invalid_score' }) }),
+});
+const bad = await refused.submit({ runId: 'run-bad', name: 'NOPE', score: 100 });
+assert.equal(bad.ok, false);
+assert.equal(bad.pending, false);
+assert.equal(bad.error, 'invalid_score');
+assert.equal(refused.readOutbox().length, 0, 'a rejected score is not retried');
+let posts = 0;
+const recovered = createLeaderboard({
+  url: 'https://leaderboard.example/scores',
+  storage: memory(),
+  fetchImpl: async (url, init) => {
+    if (init?.method === 'POST') {
+      posts += 1;
+      return { ok: true, json: async () => ({ ok: true }) };
+    }
+    return { ok: true, json: async () => ({ entries: [{ name: 'OLD', score: 70000, runId: 'other' }] }) };
+  },
+});
+const sent = await recovered.submit({ runId: 'run-ok', name: 'MIO', score: 88000 });
+assert.equal(sent.ok, true);
+assert.equal(sent.pending, false);
+assert.equal(recovered.readOutbox().length, 0);
+const shown = await recovered.fetchTop();
+assert.equal(shown[0].name, 'MIO');
+assert.equal(shown[0].pending, false, 'a confirmed score shows immediately, ahead of a stale top list');
+assert.equal(posts, 1);
+let online = false;
+const again = createLeaderboard({
+  url: 'https://leaderboard.example/scores',
+  storage: memory(),
+  fetchImpl: async (url, init) => {
+    if (init?.method === 'POST' && !online) return { ok: false, status: 502, json: async () => ({ error: 'github_error' }) };
+    if (init?.method === 'POST') return { ok: true, json: async () => ({ ok: true }) };
+    return { ok: true, json: async () => [] };
+  },
+});
+await again.submit({ runId: 'run-later', name: 'LATE', score: 91000 });
+assert.equal(again.readOutbox().length, 1);
+online = true;
+const flushed = await again.flush();
+assert.equal(flushed.sent, 1);
+assert.equal(again.readOutbox().length, 0);
+again.forget('run-later');
+assert.equal(again.readSaved().some(entry => entry.runId === 'run-later'), false);
+console.log('PASS: fixed preset ranks, saved rows beyond 20, name limits, token-free fetch, and a retried outbox.');

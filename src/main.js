@@ -20,7 +20,7 @@ import { workerUrl } from './worker-url.js';
 import { createProfileClient, PROFILE_ERRORS } from './profile-client.js';
 import { nextSlotCount, SLOT_UNLOCK_7, SLOT_UNLOCK_9 } from './slots.js';
 import { SLOT_TRANSITION_MS } from './slot-transition.js';
-import { createLeaderboard, createRunId, PRESET_BOARD, sanitizeName } from './leaderboard.js';
+import { createLeaderboard, createRunId, LEADERBOARD_ERRORS, PRESET_BOARD, sanitizeName } from './leaderboard.js';
 import { START_BALLS, LOW_BALLS, LAUNCH_COST, BURST_COST, SECRET_BALLS, SLOT_MACHINE_BALLS, DRUM_RANDOM_BALLS, DRUM_ENLARGE_BALLS, DRUM_CLOCK_BALLS, secretHoleBalls, shotCost, clampBallCost, nextBallCost, roundCanEnd, jarRefundable, qualifiesForLeaderboard, freshRound, restoreRun, pocketCenter, slotFrame, ballValue, triggeringGiftScale, BOARD_CROWD_LOCK, boardCrowdUnlock, crowdLaunchLocked, ROUND_IDLE_MS } from './round.js';
 import { slotIcon } from './slot-icons.js';
 import './style.css';
@@ -577,12 +577,19 @@ function renderLeaderboard(rows) {
     const item = document.createElement('li');
     item.className = 'lb-row';
     if (row.runId && row.runId === runId) item.classList.add('is-you');
+    if (row.pending) item.classList.add('is-pending');
     const rank = document.createElement('span');
     rank.className = 'lb-rank';
     rank.textContent = String(index + 1).padStart(2, '0');
     const name = document.createElement('span');
     name.className = 'lb-name';
     name.textContent = row.name;
+    if (row.pending) {
+      const mark = document.createElement('small');
+      mark.className = 'lb-pending';
+      mark.textContent = '待送出';
+      name.append(' ', mark);
+    }
     const score = document.createElement('span');
     score.className = 'lb-score';
     score.textContent = Number(row.score).toLocaleString();
@@ -590,10 +597,22 @@ function renderLeaderboard(rows) {
     list.append(item);
   });
 }
+async function flushLeaderboard({ announce = false } = {}) {
+  const result = await leaderboard.flush();
+  if (!announce || !result.sent) return result;
+  toast('名字送到排行榜了');
+  if ($('#name-entry').open) $('#name-entry').close();
+  renderLeaderboard(await leaderboard.fetchTop());
+  openPanel('leaderboard');
+  return result;
+}
 async function showLeaderboard() {
+  await flushLeaderboard();
   renderLeaderboard(await leaderboard.fetchTop());
   openPanel('leaderboard');
 }
+flushLeaderboard();
+window.addEventListener('online', () => { flushLeaderboard({ announce: true }); });
 function award(result) {
   if (result.kind === 'hit') {
     addScore(result.points);
@@ -1321,18 +1340,29 @@ $('#collection-button').addEventListener('click', () => openPanel('collection-bo
 $('#leaderboard-button').addEventListener('click', () => showLeaderboard());
 $('#close-leaderboard').addEventListener('click', () => $('#leaderboard').close());
 $('#leaderboard-return').addEventListener('click', () => $('#leaderboard').close());
-$('#name-form').addEventListener('submit', event => {
+$('#name-form').addEventListener('submit', async event => {
   event.preventDefault();
   const name = sanitizeName($('#player-name').value);
-  if (!name) { $('#name-error').hidden = false; $('#player-name').focus(); return; }
+  const error = $('#name-error');
+  if (!name) { error.hidden = false; error.textContent = '请输入 1 到 12 个字符'; $('#player-name').focus(); return; }
   playerName = name;
   state.nameDecided = true;
-  leaderboard.submit({ runId, name, score: state.score });
   persist();
+  const result = await leaderboard.submit({ runId, name, score: state.score });
+  if (!result?.ok) {
+    const message = LEADERBOARD_ERRORS[result?.error] || LEADERBOARD_ERRORS.offline;
+    error.hidden = false;
+    error.textContent = message;
+    toast(message, 4200);
+    return;
+  }
+  error.hidden = true;
   $('#name-entry').close();
   toast('名字已记下');
+  renderLeaderboard(await leaderboard.fetchTop());
+  openPanel('leaderboard');
 });
-$('#name-skip').addEventListener('click', () => { state.nameDecided = true; persist(); $('#name-entry').close(); });
+$('#name-skip').addEventListener('click', () => { state.nameDecided = true; leaderboard.forget(runId); persist(); $('#name-entry').close(); });
 $('#name-entry').addEventListener('close', () => { if (state.over && !state.nameDecided) { state.nameDecided = true; persist(); } });
 $('#settlement').addEventListener('cancel', event => event.preventDefault());
 $('#settlement').addEventListener('close', () => {
