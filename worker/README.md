@@ -140,4 +140,4 @@ npx wrangler deploy
 
 API Token 需要原来的 Workers 部署权限，再加 Account 的 D1 Edit。没有 D1 权限时，迁移这一步会失败，排行榜的 GitHub token 不用重设。
 
-GitHub Actions 的 `Deploy leaderboard worker` 会在 `wrangler deploy` 之前执行同一条迁移命令。档案上多出来的闪耀皮肤在 `migrations/0002_shine.sql`：给 `profiles` 加上 `shine_unlocked` 和 `best_score`。部署时同一条 `migrations apply` 会按顺序补上还没跑过的 `0002_shine.sql`，不必改 `0001`。单局分数随 `/round-result` 的 `score` 上报，达到 1000000 且是 10 的倍数才解锁，同一个 `runId` 不会重复计算。
+GitHub Actions 的 `Deploy leaderboard worker` 会在 `wrangler deploy` 之前执行同一条迁移命令。档案上多出来的闪耀皮肤在 `migrations/0002_shine.sql`：给 `profiles` 加上 `shine_unlocked` 和 `best_score`。`migrations/0003_gm.sql` 再加 `is_gm`，默认 0。注册和登录都不能自己改这个字段；`/me`、登录和新建档案的响应里用 `isGm` 返回。部署时同一条 `migrations apply` 会按顺序补上还没跑过的迁移，不必改 `0001`。单局分数随 `/round-result` 的 `score` 上报，达到 1000000 且是 10 的倍数才解锁，同一个 `runId` 不会重复计算。

@@ -5,7 +5,7 @@ import { Miniflare } from 'miniflare';
 import { PIN_FAILS } from '../src/profiles.js';
 
 const scriptPath = fileURLToPath(new URL('../src/index.js', import.meta.url));
-const migration = ['0001_profiles.sql', '0002_shine.sql'].map(name => readFileSync(new URL(`../migrations/${name}`, import.meta.url), 'utf8')).join('\n');
+const migration = ['0001_profiles.sql', '0002_shine.sql', '0003_gm.sql'].map(name => readFileSync(new URL(`../migrations/${name}`, import.meta.url), 'utf8')).join('\n');
 const runId = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
 const worker = new Miniflare({
@@ -51,8 +51,9 @@ try {
   assert.equal(badPin.status, 400);
   assert.equal(badPin.body.error, 'invalid_pin');
 
-  const created = await call('/register', { method: 'POST', body: { name: '小圆', pin: '1234' } });
+  const created = await call('/register', { method: 'POST', body: { name: '小圆', pin: '1234', isGm: true, is_gm: 1 } });
   assert.equal(created.status, 201);
+  assert.equal(created.body.isGm, false, 'register cannot grant GM');
   assert.equal(created.body.name, '小圆');
   assert.equal(created.body.fruits[2], 0);
   assert.equal(created.body.equipped, '');
@@ -133,6 +134,12 @@ try {
   assert.equal(repeat.body.fruits[2], legend.body.fruits[2]);
   const worn = await call('/equip', { method: 'POST', token: live, body: { skin: 'shine' } });
   assert.equal(worn.body.equipped, 'shine');
+  assert.equal(worn.body.isGm, false);
+  await db.prepare('UPDATE profiles SET is_gm = 1 WHERE name = ?').bind('小圆').run();
+  const promoted = await call('/me', { token: live });
+  assert.equal(promoted.body.isGm, true);
+  const stillGuest = await call('/me', { token: other.body.token });
+  assert.equal(stillGuest.body.isGm, false, 'another profile stays a normal account');
   console.log('PASS: register, PIN lock, idempotent fruit, skins, and separate profiles.');
 } finally {
   await worker.dispose();

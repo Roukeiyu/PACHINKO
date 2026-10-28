@@ -91,6 +91,10 @@ function shineOn(row) {
   return row?.shine_unlocked === 1;
 }
 
+function gmOn(row) {
+  return row?.is_gm === 1;
+}
+
 function publicProfile(row, fruits) {
   const unlocked = shineOn(row);
   const equipped = skinById(row.equipped_skin) ? row.equipped_skin : '';
@@ -100,6 +104,7 @@ function publicProfile(row, fruits) {
     equipped,
     shineUnlocked: unlocked,
     shineJustUnlocked: row.shineJustUnlocked === true,
+    isGm: gmOn(row),
     skins: skinCatalog(fruits, equipped, unlocked),
   };
 }
@@ -121,7 +126,7 @@ async function readSession(db, request, now) {
   const match = /^Bearer\s+([0-9a-f]{64})$/i.exec(header);
   if (!match) return null;
   const row = await db.prepare(`
-    SELECT sessions.profile_id, sessions.expires_at, profiles.name, profiles.equipped_skin, profiles.shine_unlocked
+    SELECT sessions.profile_id, sessions.expires_at, profiles.name, profiles.equipped_skin, profiles.shine_unlocked, profiles.is_gm
     FROM sessions JOIN profiles ON profiles.id = sessions.profile_id
     WHERE sessions.token_hash = ?
   `).bind(await sha256Hex(match[1])).first();
@@ -203,7 +208,7 @@ export async function handleProfile(request, env, route, origin, json) {
     }
     await db.prepare('UPDATE profiles SET equipped_skin = ? WHERE id = ?').bind(skin, session.profile_id).run();
     const fruits = await readFruit(db, session.profile_id);
-    return json({ ok: true, ...publicProfile({ name: session.name, equipped_skin: skin, shine_unlocked: session.shine_unlocked }, fruits) }, 200, origin);
+    return json({ ok: true, ...publicProfile({ name: session.name, equipped_skin: skin, shine_unlocked: session.shine_unlocked, is_gm: session.is_gm }, fruits) }, 200, origin);
   }
   if (route === 'round') {
     if (!isRunId(body?.runId)) return json({ ok: false, error: 'invalid_run' }, 400, origin);

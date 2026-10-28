@@ -96,11 +96,13 @@ try {
  await page.clock.runFor(1200);assert.ok((await state()).stats.launches>2,'automatic firing resumes after returning');
  await page.locator('#settings-button').click();await page.locator('#auto').uncheck();
  assert.equal(await page.locator('#gm-tools').isVisible(),false);
- for(let clicks=1;clicks<=3;clicks++){await page.locator('#gm-dot').click();await page.clock.runFor(200);assert.equal((await state()).gm,clicks===3);}
- assert.equal(await page.locator('#gm-tools').isVisible(),true);assert.equal(await page.locator('[data-mini=aim]').count(),0);assert.equal(await page.locator('[data-mini]').count(),5);assert.equal(await page.locator('#gm-dot').getAttribute('aria-pressed'),'true');
+ assert.equal(await page.locator('#gm-dot').count(),0,'the triple-tap GM control is gone');
+ assert.equal((await state()).gm,false);
+ await page.locator('[data-mini="pairs"]').click({force:true});
+ assert.equal(await page.locator('#mini-game').evaluate(el=>el.open),false,'a guest cannot start a GM mini-game');
  await page.locator('#time-flow').check();await page.clock.fastForward(330000);assert.equal(await page.locator('#time-phase').textContent(),'夜间');
  async function start(kind){
-  await page.locator(`[data-mini="${kind}"]`).click();await page.clock.runFor(50);
+  await page.evaluate(name => window.__ponpon.openMini(name), kind);await page.clock.runFor(50);
   assert.equal(await page.locator('#settings').evaluate(el=>el.open),false);
   assert.equal(await page.locator('#mini-game').getAttribute('data-phase'),'intro');
   assert.equal(await mini(),null);
@@ -207,8 +209,7 @@ try {
  await page.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});
  for(let i=0;i<14&&(await mini()).status==='playing';i++)await page.clock.fastForward(MOLE_WAVE_MS+MOLE_FLIP_MS);
  assert.equal((await mini()).status,'complete');await back();
- for(let i=0;i<3;i++){await page.locator('#gm-dot').click();await page.clock.runFor(200);}assert.equal((await state()).gm,false);assert.equal(await page.locator('#gm-tools').isVisible(),false);
- assert.equal(await page.locator('#gm-dot').getAttribute('aria-pressed'),'false');
+ assert.equal((await state()).gm,false);assert.equal(await page.locator('#gm-tools').isVisible(),false);
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&document.documentElement.scrollHeight<=innerHeight+1));
  await page.locator('#done-settings').click();
  await page.evaluate(()=>window.__secretFixture.drain());

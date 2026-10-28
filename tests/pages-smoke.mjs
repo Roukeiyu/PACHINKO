@@ -5,7 +5,6 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve, relative, extname } from 'node:path';
 import { chromium } from 'playwright';
-import { comboPoints, PAIR_POINT, PAIR_TARGET, PAIR_CLEAR_BONUS } from '../src/mini-games.js';
 
 const root = resolve('dist');
 const prefix = '/PACHINKO/';
@@ -111,34 +110,13 @@ try {
   await page.reload();
   assert.equal(await page.locator('#board').getAttribute('data-renderer'), '2d');
   assert.equal(await page.locator('#three-d').isChecked(), false);
-  // Hidden GM shortcuts and mini-game scoring must work in the production
-  // bundle too, without relying on development-only diagnostics or fixtures.
-  const beforeMini=await page.locator('#score').textContent();
   await page.locator('#settings-button').click();
-  for(let i=0;i<3;i++) await page.locator('#gm-dot').click();
-  assert.equal(await page.locator('#gm-tools').isVisible(),true);
-  await page.locator('[data-mini="pairs"]').click();
-  assert.equal(await page.locator('#mini-game').getAttribute('data-phase'),'intro');
-  assert.equal(await page.locator('#mini-grid button').count(),0);
-  await page.locator('#mini-start').click();
-  assert.equal(await page.locator('#mini-grid button').count(),64);
-  const iconCount=await page.locator('#mini-grid button').evaluateAll(buttons=>new Set(buttons.map(button=>button.dataset.icon)).size);
-  assert.equal(iconCount,16, '16 suits, four copies each');
-  await page.evaluate(target=>{
-    const pairs=new Map();
-    for(const button of document.querySelectorAll('#mini-grid button')) {const group=pairs.get(button.dataset.icon)||[];group.push(button);pairs.set(button.dataset.icon,group);}
-    let matched=0;
-    for(const group of pairs.values()) { if(matched>=target) break; matched+=1; for(const button of group) button.click(); }
-  }, PAIR_TARGET);
-  const pairTotal=Array.from({length:PAIR_TARGET},(_,i)=>comboPoints(PAIR_POINT,i+1)).reduce((a,b)=>a+b)+PAIR_CLEAR_BONUS;
-  assert.equal(await page.locator('#mini-score').textContent(), await page.evaluate(n=>n.toLocaleString(), pairTotal));
-  assert.equal(await page.locator('#mini-result').isVisible(),true);
-  assert.equal(await page.locator('#mini-result-math').textContent(), `全部配对 +${PAIR_CLEAR_BONUS}`);
-  assert.equal(Number((await page.locator('#score').textContent()).replaceAll(',','')),Number(beforeMini.replaceAll(',',''))+pairTotal);
-  await page.locator('#mini-return').click();
-  assert.equal(await page.locator('#settings').evaluate(el=>el.open),true);
+  assert.equal(await page.locator('#gm-dot').count(), 0, 'the triple-tap GM control is not in the production build');
+  assert.equal(await page.locator('#gm-tools').isVisible(), false, 'guests do not see the GM panel');
+  await page.locator('[data-mini="pairs"]').click({ force: true });
+  assert.equal(await page.locator('#mini-game').evaluate(el => el.open), false, 'a guest click cannot start a GM mini-game');
   assert.deepEqual(errors, []);
-  console.log('PASS: production assets load under /PACHINKO/, a ball scores, 2D/3D switching and preferences persist, GM mini-games score correctly, and no browser errors occur.');
+  console.log('PASS: production assets load under /PACHINKO/, a ball scores, 2D/3D switching and preferences persist, guests cannot open GM tools, and no browser errors occur.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

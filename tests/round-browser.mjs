@@ -62,9 +62,7 @@ try {
   assert.equal(await page.evaluate(() => window.__ponpon.holdBall()), true);
   await page.clock.runFor(60);
   assert.equal(await page.locator('#settlement').evaluate(el => el.open), false, 'a ball on the table blocks game over');
-  await page.locator('#settings-button').click();
-  for (let i = 0; i < 3; i++) await page.locator('#gm-dot').click();
-  await page.locator('[data-mini="pairs"]').click();
+  await page.evaluate(() => window.__ponpon.openMini('pairs'));
   await page.evaluate(() => window.__ponpon.releaseWave());
   await page.clock.runFor(80);
   assert.equal(await page.locator('#mini-game').evaluate(el => el.open), true);
@@ -108,9 +106,10 @@ try {
 
   await page.evaluate(() => { window.__ponpon.setStock(64); window.__ponpon.grant(2500); });
   await page.locator('#settings-button').click();
-  for (let i = 0; i < 3; i++) await page.locator('#gm-dot').click();
+  await page.locator('#settings-button').click();
   assert.equal(await page.locator('#keep-progress').isChecked(), false, 'keep-progress defaults off');
-  await page.locator('#keep-progress').check();
+  assert.equal(await page.locator('#gm-tools').isVisible(), false);
+  await page.evaluate(() => window.__ponpon.setKeepProgress(true));
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('ponpon-settings')).run.score), 2500, 'turning keep-progress on saves the current run');
   await page.keyboard.press('Escape');
   await page.reload();
@@ -263,9 +262,7 @@ try {
   await page.locator('#mini-return').click();
   await page.clock.runFor(40);
 
-  await page.locator('#settings-button').click();
-  for (let i = 0; i < 3; i++) await page.locator('#gm-dot').click();
-  await page.locator('#keep-progress').uncheck();
+  await page.evaluate(() => window.__ponpon.setKeepProgress(false));
   const cleared = await page.evaluate(() => JSON.parse(localStorage.getItem('ponpon-settings')));
   assert.equal(cleared.keepProgress, false, 'turning keep-progress off is saved');
   assert.equal(Object.hasOwn(cleared, 'run'), false, 'turning keep-progress off clears the saved run');
@@ -414,9 +411,7 @@ try {
   assert.match(await paid.locator('#toast').textContent(), /不够 ×4/);
   await paid.locator('#double-ball').click();
   assert.equal(await paid.locator('#double-ball').getAttribute('data-factor'), '8');
-  await paid.locator('#settings-button').click();
-  for (let i = 0; i < 3; i++) await paid.locator('#gm-dot').click();
-  await paid.locator('#keep-progress').check();
+  await paid.evaluate(() => window.__ponpon.setKeepProgress(true));
   await paid.reload();
   await paid.clock.runFor(40);
   assert.equal(await paid.evaluate(() => window.__ponpon.ballCost), 8, 'keep-progress restores the ×8 tier');

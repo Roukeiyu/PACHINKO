@@ -17,12 +17,9 @@ async function setup(viewport, mobile=false) {
 }
 const snapshot=page=>page.evaluate(()=>window.__ponpon);
 const mini=async page=>(await snapshot(page)).miniGame;
-async function gm(page) {
-  await page.locator('#settings-button').click();
-  for(let i=0;i<3;i++) await page.locator('#gm-dot').click();
-}
+async function gm() {}
 async function start(page) {
-  await page.locator('[data-mini=sling]').click();
+  await page.evaluate(() => window.__ponpon.openMini('sling'));
   assert.equal((await snapshot(page)).miniGame,null,'intro never starts the timer');
   assert.match(await page.locator('#mini-intro-goal').textContent(),/25.*30/);
   await page.locator('#mini-start').click();await page.clock.runFor(20);
