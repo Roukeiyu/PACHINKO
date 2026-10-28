@@ -58,6 +58,25 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       circle(x, y, 11.5, skin.fruit === 20 ? '#e1062c' : skin.fruit === 10 ? '#f0b400' : skin.fruit === 5 ? '#6a2498' : skin.fruit === 3 ? '#f06a00' : '#d0122d');
     } else {
       paintBallFace(ctx, x, y, 11.4, skin, performance.now());
+      if (skin.id === 'shine') {
+        const halo = ctx.createRadialGradient(x, y, 8, x, y, 26);
+        halo.addColorStop(0, 'rgba(255,255,255,0)');
+        halo.addColorStop(0.45, 'hsla(48, 100%, 72%, 0.45)');
+        halo.addColorStop(1, 'rgba(120, 200, 255, 0)');
+        ctx.globalAlpha = 0.7;
+        ctx.fillStyle = halo;
+        ctx.beginPath(); ctx.arc(x, y, 26, 0, Math.PI * 2); ctx.fill();
+        if (((performance.now() + x * 13) % 640) < 90) {
+          ctx.globalAlpha = 0.9; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.moveTo(x - 16, y); ctx.lineTo(x + 16, y);
+          ctx.moveTo(x, y - 16); ctx.lineTo(x, y + 16);
+          ctx.moveTo(x - 9, y - 9); ctx.lineTo(x + 9, y + 9);
+          ctx.moveTo(x - 9, y + 9); ctx.lineTo(x + 9, y - 9);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      }
     }
     ctx.restore(); paintingBall = false;
   }
@@ -114,16 +133,30 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     }
     ctx.restore();
   }
-  const SPARK_POOL = Array.from({ length: 48 }, () => ({ x: 0, y: 0, vx: 0, vy: 0, life: 0, color: '#fff' }));
-  let sparkSlot = 0, sparkBudget = 28, lastSparkAt = 0;
-  function pushSpark(x, y, color) {
+  const SPARK_POOL = Array.from({ length: 160 }, () => ({ x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1, color: '#fff', size: 3, gravity: 0, rect: false }));
+  const SHINE_RINGS = Array.from({ length: 28 }, () => ({ x: 0, y: 0, life: 0 }));
+  let sparkSlot = 0, sparkBudget = 28, ringSlot = 0, lastSparkAt = 0, shineFlashUntil = 0, shineEdgeUntil = 0;
+  const pinSeen = new Map();
+  const slotSeen = [];
+  const shineFlashed = new WeakSet();
+  function pushSpark(x, y, color, extra = {}) {
+    if (sparkBudget < 1) return;
     const spark = SPARK_POOL[sparkSlot];
     sparkSlot = (sparkSlot + 1) % sparkBudget;
     spark.x = x; spark.y = y;
-    spark.vx = (sparkSlot % 7 - 3) * 8;
-    spark.vy = -18 - (sparkSlot % 5) * 6;
-    spark.life = 0.7;
+    spark.vx = extra.vx ?? (sparkSlot % 7 - 3) * 40;
+    spark.vy = extra.vy ?? (-120 - (sparkSlot % 5) * 24);
+    spark.life = extra.life ?? 0.55;
+    spark.max = spark.life;
     spark.color = color;
+    spark.size = extra.size ?? 3.4;
+    spark.gravity = extra.gravity ?? 60;
+    spark.rect = extra.rect === true;
+  }
+  function pushRing(x, y) {
+    const ring = SHINE_RINGS[ringSlot];
+    ringSlot = (ringSlot + 1) % SHINE_RINGS.length;
+    ring.x = x; ring.y = y; ring.life = 0.26;
   }
   function drawSparks(dt) {
     for (const spark of SPARK_POOL) {
@@ -131,8 +164,23 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       spark.life -= dt;
       spark.x += spark.vx * dt;
       spark.y += spark.vy * dt;
-      ctx.globalAlpha = Math.max(0, spark.life);
-      star(spark.x, spark.y, 3.2 + spark.life * 2, spark.color, spark.life);
+      spark.vy += spark.gravity * dt;
+      const fade = Math.max(0, spark.life / spark.max);
+      ctx.globalAlpha = fade;
+      if (spark.rect) { ctx.fillStyle = spark.color; ctx.fillRect(spark.x, spark.y, spark.size, spark.size * 0.55); }
+      else star(spark.x, spark.y, spark.size * (0.6 + fade), spark.color, spark.life * 4);
+    }
+    ctx.globalAlpha = 1;
+  }
+  function drawShineRings(dt) {
+    for (const ring of SHINE_RINGS) {
+      if (ring.life <= 0) continue;
+      ring.life -= dt;
+      const age = 1 - ring.life / 0.26;
+      ctx.globalAlpha = Math.max(0, ring.life / 0.26) * 0.85;
+      ctx.strokeStyle = `hsl(${(age * 280) % 360} 95% 68%)`;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath(); ctx.arc(ring.x, ring.y, 8 + age * 28, 0, Math.PI * 2); ctx.stroke();
     }
     ctx.globalAlpha = 1;
   }
@@ -142,7 +190,8 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     const nowMs = performance.now();
     const frame = Math.min(0.05, (nowMs - lastSparkAt) / 1000 || 0.016);
     lastSparkAt = nowMs;
-    sparkBudget = frame > 0.034 ? 12 : frame > 0.022 ? 22 : 36;
+    const liveBoard = !textureMode;
+    sparkBudget = state.calm ? 0 : frame > 0.034 ? (liveBoard ? 36 : 20) : frame > 0.022 ? (liveBoard ? 80 : 36) : (liveBoard ? 150 : 48);
     const t = state.calm ? 0 : game.clock / 1000;
     ctx.clearRect(0, 0, W, H); ctx.fillStyle = paintColor(theme.bg, 'surface'); ctx.fillRect(0, 0, W, H);
     ctx.save();
@@ -295,7 +344,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       const { x, y } = pin.position;
       circle(x, y + 3, 8.5, '#65794c2b');
       circle(x, y, pin.plugin.glow > 0 ? 8.5 : 7.5, pin.plugin.glow > .3 ? '#ffe2a1' : theme.pin, '#f4f8e1', 1.5);
-      if (theme.motif === 'shine') { ctx.globalAlpha = 0.35 + 0.65 * Math.abs(Math.sin(t * 7 + x * 0.07)); circle(x - 2, y - 2, 2.4, '#fff'); ctx.globalAlpha = 1; if (pin.plugin.glow > 0.45) pushSpark(x, y, '#fff6c2'); }
+      if (theme.motif === 'shine') { ctx.globalAlpha = 0.35 + 0.65 * Math.abs(Math.sin(t * 7 + x * 0.07)); circle(x - 2, y - 2, 2.4, '#fff'); ctx.globalAlpha = 1; }
       else circle(x - 2, y - 2, 2.2, '#ffffffa0');
     }
     for (const kicker of game.kickers) {
@@ -612,21 +661,134 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     const crowded = game.balls.length >= BOARD_CROWD_LOCK;
     const shineOn = activeSkinId(state.equippedSkin) === 'shine';
     for (const b of game.balls) {
-      if (!state.calm && !(crowded && b.bonus)) b.trail.forEach((pos, i) => { ctx.save(); ctx.globalAlpha = i / b.trail.length * .5; circle(pos.x, pos.y, 3 + i / b.trail.length * 7, shineOn && !b.bonus ? `hsl(${(pos.x + t * 40) % 360} 90% 70%)` : b.bonus ? '#d9cff6' : '#f7b863'); ctx.restore(); });
+      const shineBall = shineOn && !b.bonus;
+      if (!state.calm && !(crowded && b.bonus)) b.trail.forEach((pos, i) => {
+        const along = (i + 1) / b.trail.length;
+        ctx.save(); ctx.globalAlpha = along * (shineBall ? 0.9 : 0.5);
+        circle(pos.x, pos.y, shineBall ? 5 + along * 13 : 3 + along * 7, shineBall ? `hsl(${(pos.x * 2 + t * 120) % 360} 95% 66%)` : b.bonus ? '#d9cff6' : '#f7b863');
+        ctx.restore();
+      });
       ball(b.body.position.x, b.body.position.y, 1, crowded && b.bonus, b.bonus, activeSkinId(state.equippedSkin));
       if (!textureMode) ownRim(b.body.position.x, b.body.position.y, ballOwnFactor(b), state.calm || crowded, b.bonus);
-      if (shineOn && !b.bonus && !textureMode && game.clock % 100 < 18) pushSpark(b.body.position.x, b.body.position.y - 6, '#fff');
+      if (shineBall && !state.calm) {
+        const shed = sparkBudget > 80 ? 3 : 1;
+        for (let s = 0; s < shed; s++) {
+          const hue = (b.body.position.x + t * 200 + s * 40) % 360;
+          pushSpark(b.body.position.x, b.body.position.y, `hsl(${hue} 95% 68%)`, {
+            vx: (s - 1) * 36, vy: -20 - s * 16, life: 0.45, size: 2.2, gravity: 40,
+          });
+        }
+      }
     }
-    if (shineOn) {
-      const ambient = textureMode ? Math.min(6, Math.floor(sparkBudget / 4)) : Math.max(4, Math.floor(sparkBudget / 3));
+    if (shineOn && !state.calm) {
+      for (const pin of game.pins) {
+        const glow = pin.plugin.glow || 0;
+        const prev = pinSeen.get(pin.id) || 0;
+        if (glow > prev + 0.18) {
+          const count = sparkBudget > 80 ? 16 : sparkBudget > 30 ? 8 : 4;
+          for (let i = 0; i < count; i++) {
+            const angle = i / count * Math.PI * 2;
+            pushSpark(pin.position.x, pin.position.y, `hsl(${i * 24} 95% 64%)`, {
+              vx: Math.cos(angle) * 160, vy: Math.sin(angle) * 160, life: 0.48, size: 3.2, gravity: 70,
+            });
+          }
+          pushRing(pin.position.x, pin.position.y);
+        }
+        pinSeen.set(pin.id, glow);
+      }
+      const layoutNow = slotLayout(state);
+      for (const region of layoutNow.regions) {
+        if (region.kind !== 'slot') continue;
+        const glow = fx.slotGlows?.[region.column] || 0;
+        const prev = slotSeen[region.column] || 0;
+        if (glow > prev + 0.35) {
+          const mid = (region.x0 + region.x1) / 2;
+          const count = sparkBudget > 80 ? 18 : 8;
+          for (let i = 0; i < count; i++) {
+            pushSpark(mid + (i - count / 2) * 3, TABLE.slotTop + 16, `hsl(${(i * 20 + mid) % 360} 95% 66%)`, {
+              vx: (i - count / 2) * 14, vy: -180 - (i % 4) * 30, life: 0.7, size: 3.1, gravity: 220,
+            });
+          }
+        }
+        slotSeen[region.column] = glow;
+      }
+      for (const burst of fx.celebrations || []) {
+        const big = burst.kind === 'jackpot' || burst.scene === 'lucky' || burst.scene === 'treasure' || (burst.profile?.tier || 0) >= 4;
+        if (!big || shineFlashed.has(burst)) continue;
+        shineFlashed.add(burst);
+        shineFlashUntil = nowMs + 240;
+        shineEdgeUntil = nowMs + 280;
+        for (let i = 0; i < (sparkBudget > 40 ? 20 : 8); i++) {
+          const angle = i / 20 * Math.PI * 2;
+          pushSpark(burst.x, burst.y, `hsl(${i * 18} 100% 70%)`, {
+            vx: Math.cos(angle) * 220, vy: Math.sin(angle) * 220, life: 0.5, size: 4, gravity: 20,
+          });
+        }
+      }
+      if (fx.shineCue && nowMs - fx.shineCue < 1400) {
+        const count = sparkBudget > 80 ? 8 : 3;
+        for (let i = 0; i < count; i++) {
+          pushSpark(50 + ((sparkSlot * 53 + i * 90) % 660), 24, `hsl(${(sparkSlot * 29) % 360} 90% 64%)`, {
+            vx: (i - count / 2) * 24, vy: 70 + (i % 5) * 22, life: 1.2, size: 3.4, gravity: 30, rect: i % 2 === 0,
+          });
+        }
+      }
+      const ambient = liveBoard ? Math.min(72, Math.max(12, Math.floor(sparkBudget / 2))) : Math.min(18, Math.floor(sparkBudget / 3));
       for (let i = 0; i < ambient; i++) {
-        ctx.globalAlpha = 0.3 + 0.5 * Math.abs(Math.sin(t * 3 + i));
-        star(70 + ((i * 113 + t * 24) % 620), 90 + ((i * 71 + t * 16) % 680), 2.6, `hsl(${(i * 36 + t * 50) % 360} 90% 74%)`, t + i);
+        ctx.globalAlpha = 0.25 + 0.6 * Math.abs(Math.sin(t * 3 + i));
+        star(48 + ((i * 97 + t * 28) % 660), 70 + ((i * 61 + t * 18) % 700), i % 5 === 0 ? 4.2 : 2.4, `hsl(${(i * 27 + t * 60) % 360} 95% 74%)`, t + i);
       }
       ctx.globalAlpha = 1;
-      const slotFlash = textureMode ? 0.8 : 0.65;
-      for (let column = 0; column < (fx.slotGlows || []).length; column++) if ((fx.slotGlows[column] || 0) > slotFlash) pushSpark(80 + column * 55, TABLE.slotTop + 20, '#ffe7a1');
+      if (liveBoard && sparkBudget > 30 && (Math.floor(game.clock / 2200) !== Math.floor((game.clock - frame * 1000) / 2200))) {
+        pushSpark(40, 80 + (game.clock % 500), '#fff6c8', { vx: 520, vy: 80, life: 0.45, size: 4.5, gravity: 0 });
+      }
+      const drift = sparkBudget > 80 ? 5 : sparkBudget > 30 ? 2 : 0;
+      for (let i = 0; i < drift; i++) {
+        pushSpark(60 + ((sparkSlot * 41) % 640), 100 + ((sparkSlot * 29) % 560), `hsl(${(t * 80 + i * 50) % 360} 90% 76%)`, {
+          vx: 12, vy: -18, life: 1.4, size: 2, gravity: -8,
+        });
+      }
+      ctx.save();
+      ctx.globalAlpha = liveBoard ? 0.14 : 0.07;
+      const band = 200 + Math.sin(t * 0.7) * 180;
+      const sheen = ctx.createLinearGradient(0, band - 70, W, band + 70);
+      sheen.addColorStop(0, 'rgba(255,255,255,0)');
+      sheen.addColorStop(0.45, `hsl(${(t * 50) % 360} 90% 72%)`);
+      sheen.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = sheen;
+      ctx.fillRect(36, Math.max(40, band - 70), 640, 120);
+      ctx.restore();
+      const edge = liveBoard ? 22 : 8;
+      for (let i = 0; i < edge; i++) {
+        const along = (i / edge + t * 0.08) % 1;
+        const x = along < 0.5 ? 48 + along * 2 * 620 : 668;
+        const y = along < 0.5 ? 56 : 56 + (along - 0.5) * 2 * 700;
+        ctx.globalAlpha = 0.35 + 0.65 * Math.abs(Math.sin(t * 5 + i));
+        star(along < 0.5 ? x : 48 + (1 - along) * 620, along < 0.5 ? (i % 2 ? 70 : 760) : y, 2.2, `hsl(${(i * 40) % 360} 100% 75%)`, t);
+      }
+      ctx.globalAlpha = 1;
+      drawShineRings(frame);
       drawSparks(frame);
+      if (liveBoard && nowMs < shineEdgeUntil) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, (shineEdgeUntil - nowMs) / 280) * 0.85;
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = `hsl(${(t * 200) % 360} 100% 70%)`;
+        ctx.strokeRect(18, 18, W - 36, H - 36);
+        ctx.restore();
+      }
+      if (liveBoard && nowMs < shineFlashUntil) {
+        const alpha = Math.max(0, (shineFlashUntil - nowMs) / 240) * 0.38;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = '#fff8e8';
+        ctx.fillRect(0, 0, W, 790);
+        ctx.globalAlpha = alpha * 0.12;
+        ctx.fillRect(0, 790, W, H - 790);
+        ctx.restore();
+      }
+    } else if (!shineOn) {
+      pinSeen.clear();
     }
     ctx.restore();
   }

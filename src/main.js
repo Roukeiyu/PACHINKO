@@ -206,6 +206,7 @@ let chargeStart = 0, chargeSource = null, suppressAssistClickUntil = 0;
 const secretWave = createSecretWave();
 let secretBallFlash = 0;
 const miniGames = createMiniGamesUI({ root: $('#mini-game'), isGM:()=>state.gm, onFinish: result => {
+  if (result.score > 0) fx.shineWin = true;
   addScore(result.score);
   if (result.bestCombo) state.bestCombo = Math.max(state.bestCombo, result.bestCombo);
   if (result.source === 'secret' && !result.idle) {
@@ -215,6 +216,7 @@ const miniGames = createMiniGamesUI({ root: $('#mini-game'), isGM:()=>state.gm, 
   }
 },
   onPoints: () => tone(784,.12,'sine',0,.12), vibrate: ms => haptics.tap(ms), onExit: source => {
+    if (fx.shineWin) { fx.shineCue = performance.now(); fx.shineWin = false; }
     if (source === 'secret') {
       state.secretPending = false; game.setEmissionPaused(false); secretWave.reset();
       if (secretBallFlash) {
@@ -482,6 +484,7 @@ function showSettlement() {
 function finishRound() {
   if (state.over) { showSettlement(); return; }
   state.over = true;
+  fx.shineCue = performance.now();
   state.auto = false;
   endCharge(false);
   syncLaunchControls();

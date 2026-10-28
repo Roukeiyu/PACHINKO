@@ -413,10 +413,34 @@ function create3DRenderer(canvas) {
   const starSparks = Array.from({ length: 6 }, () => {
     const spark = new THREE.Sprite(sparkMaterial); spark.scale.set(14, 14, 1); spark.renderOrder = 4; table.add(spark); return spark;
   });
-  const shineMaterial = sparkMaterial.clone();
-  const shineSprites = Array.from({ length: 18 }, () => {
-    const spark = new THREE.Sprite(shineMaterial); spark.scale.set(10, 10, 1); spark.visible = false; spark.renderOrder = 4; table.add(spark); return spark;
-  });
+  const SHINE_N = 240;
+  const shineMat = new THREE.MeshBasicMaterial({ map: sparkMap, transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending });
+  const shineMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), shineMat, SHINE_N);
+  shineMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SHINE_N * 3), 3);
+  shineMesh.frustumCulled = false; shineMesh.renderOrder = 6; shineMesh.count = SHINE_N; table.add(shineMesh);
+  const shineBits = Array.from({ length: SHINE_N }, () => ({ x: 0, y: 0, z: 0, vx: 0, vy: 0, life: 0, max: 1, size: 8, hue: 0 }));
+  const shineDummy = new THREE.Object3D();
+  const shineColor = new THREE.Color();
+  const shineForward = new THREE.Vector3();
+  let shineCursor = 0, shineFlashUntil = 0;
+  const shinePinSeen = new Map();
+  const shineSlotSeen = [];
+  const shineFlashed = new WeakSet();
+  function emitShine(x, y, count, speed, life = 0.5, cap = SHINE_N, down = false) {
+    const n = Math.min(count, cap);
+    for (let i = 0; i < n; i++) {
+      const bit = shineBits[shineCursor];
+      shineCursor = (shineCursor + 1) % cap;
+      const angle = (i / Math.max(1, n)) * Math.PI * 2;
+      const boost = 0.55 + (i % 5) * 0.12;
+      bit.x = x; bit.y = y; bit.z = 18 + (i % 6) * 3;
+      bit.vx = down ? (i % 7 - 3) * 28 : Math.cos(angle) * speed * boost;
+      bit.vy = down ? 90 + (i % 5) * 26 : Math.sin(angle) * speed * boost;
+      bit.life = life; bit.max = life;
+      bit.size = 6 + (i % 4) * 3;
+      bit.hue = (i % 12) / 12;
+    }
+  }
   const flashCanvas = document.createElement('canvas'); flashCanvas.width = flashCanvas.height = 256;
   const flashCtx = flashCanvas.getContext('2d');
   const flashGradient = flashCtx.createRadialGradient(128, 128, 8, 128, 128, 120);
@@ -425,6 +449,8 @@ function create3DRenderer(canvas) {
   const flashMap = new THREE.CanvasTexture(flashCanvas); flashMap.colorSpace = THREE.SRGBColorSpace;
   const flashSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashMap, transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending }));
   flashSprite.scale.set(40, 40, 1); flashSprite.visible = false; flashSprite.renderOrder = 5; table.add(flashSprite);
+  const shineFlash = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashMap, transparent: true, depthWrite: false, depthTest: false, toneMapped: false, blending: THREE.AdditiveBlending }));
+  shineFlash.visible = false; shineFlash.renderOrder = 20; scene.add(shineFlash);
   let starMemory = null, starFlash = null, starPaintKey = '';
   function paintStar(multiplier, calm, label, daylight) {
     const key = `${multiplier}:${calm ? 1 : 0}:${daylight ? 1 : 0}:${label}:${starPixels}`;
@@ -604,35 +630,60 @@ function create3DRenderer(canvas) {
       pinSide.color.set(theme.pin).multiplyScalar(pulse);
     }
     const shine3d = activeSkinId(state.equippedSkin) === 'shine';
-    const shineCap = slowFrames >= 16 ? 4 : slowFrames >= 8 ? 8 : shineSprites.length;
-    let shineUsed = 0;
-    if (shine3d) {
-      const perBall = slowFrames >= 8 ? 1 : 2;
+    const shineCap = state.calm ? 0 : slowFrames >= 16 ? 48 : slowFrames >= 8 ? 120 : SHINE_N;
+    const shineDt = Math.min(0.05, frameDt / 1000);
+    if (shine3d && shineCap > 0) {
+      for (const pin of game.pins) {
+        const glow = pin.plugin.glow || 0;
+        const prev = shinePinSeen.get(pin.id) || 0;
+        if (glow > prev + 0.18) emitShine(pin.position.x, pin.position.y, slowFrames >= 8 ? 8 : 18, 170, 0.48, shineCap);
+        shinePinSeen.set(pin.id, glow);
+      }
       for (const ball of game.balls) {
-        if (shineUsed >= shineCap) break;
         if (ball.bonus) continue;
-        const vx = ball.body.velocity.x, vy = ball.body.velocity.y;
-        const speed = Math.hypot(vx, vy) || 1;
-        for (let i = 0; i < perBall && shineUsed < shineCap; i++) {
-          const spark = shineSprites[shineUsed++];
-          spark.visible = true;
-          const back = (i + 1) * 9;
-          const wobble = Math.sin(frameNow / 90 + ball.id + i) * 4;
-          spark.position.copy(world(ball.body.position.x - vx / speed * back + wobble, ball.body.position.y - vy / speed * back, 18));
-          spark.scale.setScalar(6 + (1 - i) * 3);
+        const shed = slowFrames >= 8 ? 1 : 3;
+        for (let i = 0; i < shed; i++) emitShine(ball.body.position.x, ball.body.position.y, 1, 40, 0.4, shineCap);
+      }
+      const layoutSlots = fx.slotGlows || [];
+      for (let column = 0; column < layoutSlots.length; column++) {
+        const glow = layoutSlots[column] || 0;
+        const prev = shineSlotSeen[column] || 0;
+        if (glow > prev + 0.35) {
+          const mid = 39 + (column + 0.5) * ((655 - 39) / layoutSlots.length);
+          emitShine(mid, TABLE.slotTop + 8, slowFrames >= 8 ? 8 : 16, 150, 0.65, shineCap);
         }
+        shineSlotSeen[column] = glow;
       }
-      const ambient = Math.min(6, shineCap - shineUsed);
-      for (let i = 0; i < ambient; i++) {
-        const spark = shineSprites[shineUsed++];
-        spark.visible = true;
-        const x = 80 + ((i * 113 + frameNow / 40) % 600);
-        const y = 120 + ((i * 97 + frameNow / 55) % 640);
-        spark.position.copy(world(x, y, 28));
-        spark.scale.setScalar(5 + (i % 3));
+      for (const burst of fx.celebrations || []) {
+        const big = burst.kind === 'jackpot' || burst.scene === 'lucky' || burst.scene === 'treasure' || (burst.profile?.tier || 0) >= 4;
+        if (!big || shineFlashed.has(burst)) continue;
+        shineFlashed.add(burst);
+        shineFlashUntil = frameNow + 240;
+        emitShine(burst.x, burst.y, slowFrames >= 8 ? 12 : 28, 210, 0.55, shineCap);
       }
+      if (fx.shineCue && frameNow - fx.shineCue < 1400) emitShine(60 + (shineCursor * 37) % 620, 30, slowFrames >= 8 ? 2 : 6, 20, 1.2, shineCap, true);
+      if (shineCursor % 5 === 0) emitShine(70 + (frameNow / 30) % 600, 140 + (frameNow / 40) % 500, 1, 16, 1.3, shineCap);
+    } else shinePinSeen.clear();
+    for (let i = 0; i < SHINE_N; i++) {
+      const bit = shineBits[i];
+      if (!shine3d || bit.life <= 0) shineDummy.scale.set(0, 0, 0);
+      else {
+        bit.life -= shineDt;
+        bit.x += bit.vx * shineDt;
+        bit.y += bit.vy * shineDt;
+        bit.vy += 50 * shineDt;
+        const fade = Math.max(0, bit.life / bit.max);
+        shineDummy.position.set(bit.x - W / 2, H / 2 - bit.y, bit.z);
+        shineDummy.lookAt(camera.position);
+        shineDummy.scale.setScalar(fade > 0 ? bit.size * (0.4 + fade) : 0);
+        shineColor.setHSL(bit.hue, 0.95, 0.62);
+        shineMesh.setColorAt(i, shineColor);
+      }
+      shineDummy.updateMatrix();
+      shineMesh.setMatrixAt(i, shineDummy.matrix);
     }
-    for (let i = shineUsed; i < shineSprites.length; i++) shineSprites[i].visible = false;
+    shineMesh.instanceMatrix.needsUpdate = true;
+    if (shineMesh.instanceColor) shineMesh.instanceColor.needsUpdate = true;
     const daylight = !theme.hueLock && palette?.phase?.id !== 'night';
     ballPositions.clear();
     let playerCount = 0, bonusCount = 0, rimCount = 0, glowCount = 0;
@@ -732,6 +783,14 @@ function create3DRenderer(canvas) {
     camera.up.set(0, 1, 0); camera.lookAt(lookAt);
     camera.updateMatrixWorld();
     table.updateMatrixWorld(true); boardInverse.value.copy(table.matrixWorld).invert();
+    const shineFlashLeft = shineFlashUntil - performance.now();
+    shineFlash.visible = shine3d && !state.calm && shineFlashLeft > 0;
+    if (shineFlash.visible) {
+      camera.getWorldDirection(shineForward);
+      shineFlash.position.copy(camera.position).addScaledVector(shineForward, 26);
+      shineFlash.scale.set(260, 160, 1);
+      shineFlash.material.opacity = Math.min(0.32, shineFlashLeft / 240);
+    }
     webgl.render(scene, camera);
     lastInfo.calls = webgl.info.render.calls;
     lastInfo.triangles = webgl.info.render.triangles;
