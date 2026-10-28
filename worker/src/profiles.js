@@ -2,7 +2,8 @@
 // opaque tokens; only the SHA-256 of the token is stored.
 import { sanitizeName } from '../../src/leaderboard.js';
 import { isRunId } from './rules.js';
-import { BALL_SKINS, FRUIT_IDS, emptyFruit, fruitDelta, normalizeFruit, skinById, skinCatalog, skinUnlocked } from '../../src/skins.js';
+import { SCORE_MAX } from './rules.js';
+import { BALL_SKINS, FRUIT_IDS, SHINE_SCORE, SHINE_SKIN, emptyFruit, fruitDelta, normalizeFruit, skinById, skinCatalog, skinUnlocked } from '../../src/skins.js';
 
 export const PIN_ITERATIONS = 100_000;
 export const PIN_LOCK_MS = 15 * 60 * 1000;
@@ -86,14 +87,27 @@ async function readFruit(db, profileId) {
   return normalizeFruit(counts);
 }
 
+function shineOn(row) {
+  return row?.shine_unlocked === 1;
+}
+
 function publicProfile(row, fruits) {
+  const unlocked = shineOn(row);
   const equipped = skinById(row.equipped_skin) ? row.equipped_skin : '';
   return {
     name: row.name,
     fruits,
     equipped,
-    skins: skinCatalog(fruits, equipped),
+    shineUnlocked: unlocked,
+    shineJustUnlocked: row.shineJustUnlocked === true,
+    skins: skinCatalog(fruits, equipped, unlocked),
   };
+}
+
+function parseScore(value) {
+  if (value == null) return { score: null };
+  if (typeof value !== 'number' || !Number.isInteger(value) || value % 10 !== 0 || value < 0 || value > SCORE_MAX) return { error: 'invalid_score' };
+  return { score: value };
 }
 
 async function issueSession(db, profileId, now) {
@@ -107,7 +121,7 @@ async function readSession(db, request, now) {
   const match = /^Bearer\s+([0-9a-f]{64})$/i.exec(header);
   if (!match) return null;
   const row = await db.prepare(`
-    SELECT sessions.profile_id, sessions.expires_at, profiles.name, profiles.equipped_skin
+    SELECT sessions.profile_id, sessions.expires_at, profiles.name, profiles.equipped_skin, profiles.shine_unlocked
     FROM sessions JOIN profiles ON profiles.id = sessions.profile_id
     WHERE sessions.token_hash = ?
   `).bind(await sha256Hex(match[1])).first();
@@ -184,30 +198,42 @@ export async function handleProfile(request, env, route, origin, json) {
     if (skin) {
       const found = skinById(skin);
       const fruits = await readFruit(db, session.profile_id);
-      if (!found || !skinUnlocked(found, fruits)) return json({ ok: false, error: 'skin_locked' }, 403, origin);
+      const allowed = found?.id === SHINE_SKIN.id ? shineOn(session) : found && skinUnlocked(found, fruits);
+      if (!allowed) return json({ ok: false, error: 'skin_locked' }, 403, origin);
     }
     await db.prepare('UPDATE profiles SET equipped_skin = ? WHERE id = ?').bind(skin, session.profile_id).run();
     const fruits = await readFruit(db, session.profile_id);
-    return json({ ok: true, ...publicProfile({ name: session.name, equipped_skin: skin }, fruits) }, 200, origin);
+    return json({ ok: true, ...publicProfile({ name: session.name, equipped_skin: skin, shine_unlocked: session.shine_unlocked }, fruits) }, 200, origin);
   }
   if (route === 'round') {
     if (!isRunId(body?.runId)) return json({ ok: false, error: 'invalid_run' }, 400, origin);
+    const score = parseScore(body?.score);
+    if (score.error) return json({ ok: false, error: score.error }, 400, origin);
     const parsed = fruitDelta(body);
-    if (parsed.error) return json({ ok: false, error: parsed.error }, 400, origin);
+    if (parsed.error && !(parsed.error === 'empty_round' && score.score != null)) return json({ ok: false, error: parsed.error }, 400, origin);
+    const fruitsIn = parsed.fruits || emptyFruit();
     const already = await db.prepare('SELECT 1 AS ok FROM round_credits WHERE profile_id = ? AND run_id = ?').bind(session.profile_id, body.runId).first();
+    const prior = await db.prepare('SELECT shine_unlocked FROM profiles WHERE id = ?').bind(session.profile_id).first();
+    let shineJustUnlocked = false;
     if (!already) {
       const statements = [db.prepare('INSERT INTO round_credits (profile_id, run_id, created_at) VALUES (?, ?, ?)').bind(session.profile_id, body.runId, now)];
       for (const id of FRUIT_IDS) {
-        if (!parsed.fruits[id]) continue;
+        if (!fruitsIn[id]) continue;
         statements.push(db.prepare(`
           INSERT INTO fruit_counts (profile_id, fruit_id, count) VALUES (?, ?, ?)
           ON CONFLICT(profile_id, fruit_id) DO UPDATE SET count = count + excluded.count
-        `).bind(session.profile_id, id, parsed.fruits[id]));
+        `).bind(session.profile_id, id, fruitsIn[id]));
+      }
+      if (score.score != null) {
+        shineJustUnlocked = !prior?.shine_unlocked && score.score >= SHINE_SCORE;
+        statements.push(db.prepare('UPDATE profiles SET best_score = MAX(best_score, ?), shine_unlocked = CASE WHEN shine_unlocked = 1 OR ? >= ? THEN 1 ELSE 0 END WHERE id = ?')
+          .bind(score.score, score.score, SHINE_SCORE, session.profile_id));
       }
       await db.batch(statements);
     }
     const fruits = await readFruit(db, session.profile_id);
-    return json({ ok: true, updated: !already, ...publicProfile(session, fruits) }, 200, origin);
+    const shineUnlocked = shineJustUnlocked || shineOn(prior) || shineOn(session);
+    return json({ ok: true, updated: !already, ...publicProfile({ ...session, shine_unlocked: shineUnlocked ? 1 : 0, shineJustUnlocked }, fruits) }, 200, origin);
   }
   return json({ ok: false, error: 'not_found' }, 404, origin);
 }

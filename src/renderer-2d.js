@@ -57,7 +57,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     } else if (cheap) {
       circle(x, y, 11.5, skin.fruit === 20 ? '#e1062c' : skin.fruit === 10 ? '#f0b400' : skin.fruit === 5 ? '#6a2498' : skin.fruit === 3 ? '#f06a00' : '#d0122d');
     } else {
-      paintBallFace(ctx, x, y, 11.4, skin);
+      paintBallFace(ctx, x, y, 11.4, skin, performance.now());
     }
     ctx.restore(); paintingBall = false;
   }
@@ -98,7 +98,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     if (!shift) return blendSlotLayout(state.slots, state.slots, 1);
     return blendSlotLayout(shift.from, shift.to, (performance.now() - shift.startedAt) / shift.duration);
   }
-  function drawMotif(theme) {
+  function drawMotif(theme, spin = 0) {
     if (!theme.motif) return;
     ctx.save();
     ctx.globalAlpha = 0.55;
@@ -109,12 +109,39 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       else if (theme.motif === 'grape') { circle(x, y, 5, '#6a2498'); circle(x + 7, y + 2, 4, '#8e44c4'); circle(x - 2, y + 7, 4, '#4a1578'); }
       else if (theme.motif === 'pineapple') { box(x - 6, y - 8, 12, 16, 2, '#f0b400', '#8a5a12'); }
       else if (theme.motif === 'watermelon') { circle(x, y, 8, '#e1062c', '#1f8a3e', 2); }
+      else if (theme.motif === 'shine') { star(x, y, 6, '#fff6c8', spin); star(x + 10, y + 6, 3, '#9ad7ff', -spin); }
     }
     ctx.restore();
+  }
+  const SPARK_POOL = Array.from({ length: 48 }, () => ({ x: 0, y: 0, vx: 0, vy: 0, life: 0, color: '#fff' }));
+  let sparkSlot = 0, sparkBudget = 28, lastSparkAt = 0;
+  function pushSpark(x, y, color) {
+    const spark = SPARK_POOL[sparkSlot];
+    sparkSlot = (sparkSlot + 1) % sparkBudget;
+    spark.x = x; spark.y = y;
+    spark.vx = (sparkSlot % 7 - 3) * 8;
+    spark.vy = -18 - (sparkSlot % 5) * 6;
+    spark.life = 0.7;
+    spark.color = color;
+  }
+  function drawSparks(dt) {
+    for (const spark of SPARK_POOL) {
+      if (spark.life <= 0) continue;
+      spark.life -= dt;
+      spark.x += spark.vx * dt;
+      spark.y += spark.vy * dt;
+      ctx.globalAlpha = Math.max(0, spark.life);
+      star(spark.x, spark.y, 3.2 + spark.life * 2, spark.color, spark.life);
+    }
+    ctx.globalAlpha = 1;
   }
   function draw(game, theme, state, fx, palette = null) {
     activePalette = palette;
     hueLock = theme.hueLock === true;
+    const nowMs = performance.now();
+    const frame = Math.min(0.05, (nowMs - lastSparkAt) / 1000 || 0.016);
+    lastSparkAt = nowMs;
+    sparkBudget = frame > 0.034 ? 12 : frame > 0.022 ? 22 : 36;
     const t = state.calm ? 0 : game.clock / 1000;
     ctx.clearRect(0, 0, W, H); ctx.fillStyle = paintColor(theme.bg, 'surface'); ctx.fillRect(0, 0, W, H);
     ctx.save();
@@ -128,7 +155,7 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
     // The shooter remains separate, without a flight-mode label or booster.
     box(38, 43, 620, 741, 30, theme.field || '#ffffff29', theme.fieldEdge || '#c3c4a93b');
     box(689, 128, 47, 739, 21, theme.lane || '#d9e6d299');
-    drawMotif(theme);
+    drawMotif(theme, t);
     ctx.save(); ctx.strokeStyle = paintColor('#afc09a75', 'line'); ctx.lineWidth = 2; ctx.setLineDash([3, 10]); ctx.beginPath(); ctx.moveTo(713, 750); ctx.lineTo(713, 154); ctx.stroke(); ctx.restore();
     for (let i = 0; i < 3; i++) { const y = 650 + i * 60 - (t * 45 % 60); ctx.beginPath(); ctx.moveTo(704, y + 8); ctx.lineTo(713, y); ctx.lineTo(722, y + 8); ctx.strokeStyle = paintColor('#86a869a0', 'line'); ctx.lineWidth = 3; ctx.stroke(); }
     text('P O N  P O N', 351, 112, 24, theme.ink || '#69815d', 'bold');
@@ -168,6 +195,12 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       const toColor = paintColor(theme.colors[slotColorIndex(region.toMultiplier)], 'object');
       const inset = Math.min(3, width / 6);
       box(region.x0 + inset, TABLE.slotTop, width - inset * 2, 86, 8, mixHex(fromColor, toColor, eased));
+      if (theme.motif === 'shine' && width >= 16) {
+        ctx.save(); ctx.globalAlpha = 0.55 + 0.35 * Math.sin(t * 5 + mid);
+        ctx.strokeStyle = `hsl(${(mid + t * 80) % 360} 90% 70%)`; ctx.lineWidth = 2;
+        ctx.strokeRect(region.x0 + inset, TABLE.slotTop, width - inset * 2, 86);
+        ctx.restore();
+      }
       const glow = fx.slotGlows[region.column] || 0;
       if (glow) { const p = rewardProfile({ multiplier: region.toMultiplier }); ctx.save(); ctx.globalAlpha = glow * .65; ctx.shadowBlur = 8 + p.tier * 5; ctx.shadowColor = paintColor(p.color, 'glow'); box(region.x0 + inset, TABLE.slotTop, width - inset * 2, 86, 8, p.color); ctx.restore(); }
       if (width < 16) continue;
@@ -256,7 +289,8 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       const { x, y } = pin.position;
       circle(x, y + 3, 8.5, '#65794c2b');
       circle(x, y, pin.plugin.glow > 0 ? 8.5 : 7.5, pin.plugin.glow > .3 ? '#ffe2a1' : theme.pin, '#f4f8e1', 1.5);
-      circle(x - 2, y - 2, 2.2, '#ffffffa0');
+      if (theme.motif === 'shine') { ctx.globalAlpha = 0.35 + 0.65 * Math.abs(Math.sin(t * 7 + x * 0.07)); circle(x - 2, y - 2, 2.4, '#fff'); ctx.globalAlpha = 1; if (pin.plugin.glow > 0.45) pushSpark(x, y, '#fff6c2'); }
+      else circle(x - 2, y - 2, 2.2, '#ffffffa0');
     }
     for (const kicker of game.kickers) {
       const { x, y } = kicker.position, glow = kicker.plugin.glow;
@@ -570,10 +604,23 @@ export function createRenderer(canvas, { textureMode = false } = {}) {
       const x = Math.max(115, Math.min(550, p.x)); ctx.strokeText(p.text, x, p.y); ctx.fillStyle = paintColor(p.color || (p.big ? '#b67a26' : '#b1667b'), 'ink'); ctx.fillText(p.text, x, p.y); ctx.restore();
     }
     const crowded = game.balls.length >= BOARD_CROWD_LOCK;
+    const shineOn = activeSkinId(state.equippedSkin) === 'shine';
     for (const b of game.balls) {
-      if (!state.calm && !(crowded && b.bonus)) b.trail.forEach((pos, i) => { ctx.save(); ctx.globalAlpha = i / b.trail.length * .5; circle(pos.x, pos.y, 3 + i / b.trail.length * 7, b.bonus ? '#d9cff6' : '#f7b863'); ctx.restore(); });
+      if (!state.calm && !(crowded && b.bonus)) b.trail.forEach((pos, i) => { ctx.save(); ctx.globalAlpha = i / b.trail.length * .5; circle(pos.x, pos.y, 3 + i / b.trail.length * 7, shineOn && !b.bonus ? `hsl(${(pos.x + t * 40) % 360} 90% 70%)` : b.bonus ? '#d9cff6' : '#f7b863'); ctx.restore(); });
       ball(b.body.position.x, b.body.position.y, 1, crowded && b.bonus, b.bonus, activeSkinId(state.equippedSkin));
       if (!textureMode) ownRim(b.body.position.x, b.body.position.y, ballOwnFactor(b), state.calm || crowded, b.bonus);
+      if (shineOn && !b.bonus && !textureMode && game.clock % 100 < 18) pushSpark(b.body.position.x, b.body.position.y - 6, '#fff');
+    }
+    if (shineOn) {
+      const ambient = textureMode ? Math.min(6, Math.floor(sparkBudget / 4)) : Math.max(4, Math.floor(sparkBudget / 3));
+      for (let i = 0; i < ambient; i++) {
+        ctx.globalAlpha = 0.3 + 0.5 * Math.abs(Math.sin(t * 3 + i));
+        star(70 + ((i * 113 + t * 24) % 620), 90 + ((i * 71 + t * 16) % 680), 2.6, `hsl(${(i * 36 + t * 50) % 360} 90% 74%)`, t + i);
+      }
+      ctx.globalAlpha = 1;
+      const slotFlash = textureMode ? 0.8 : 0.65;
+      for (let column = 0; column < (fx.slotGlows || []).length; column++) if ((fx.slotGlows[column] || 0) > slotFlash) pushSpark(80 + column * 55, TABLE.slotTop + 20, '#ffe7a1');
+      drawSparks(frame);
     }
     ctx.restore();
   }

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { BALL_SKINS, FRUIT_ROUND_CAP, boardTheme, fruitDelta, skinCatalog, skinIdFromQuery, skinUnlocked } from '../src/skins.js';
+import { BALL_SKINS, FRUIT_ROUND_CAP, SHINE_SCORE, boardTheme, fruitDelta, skinCatalog, skinIdFromQuery, skinUnlocked } from '../src/skins.js';
 
 const cherry = BALL_SKINS.find(skin => skin.id === 'cherry');
 const cherryGloss = BALL_SKINS.find(skin => skin.id === 'cherry-gloss');
@@ -32,4 +32,11 @@ assert.equal(day.hueLock, true);
 assert.equal(day.motif, 'watermelon');
 assert.notEqual(day.bg, night.bg);
 assert.notEqual(day.bg, boardTheme('', 'day').bg);
+assert.equal(SHINE_SCORE, 1_000_000);
+assert.equal(skinIdFromQuery('shine'), 'shine');
+assert.equal(boardTheme('shine', 'day').motif, 'shine');
+assert.equal(boardTheme('shine', 'day').hueLock, true);
+assert.notEqual(boardTheme('shine', 'day').bg, boardTheme('shine', 'night').bg);
+assert.equal(skinCatalog(counts, '', false).find(skin => skin.id === 'shine').unlocked, false);
+assert.equal(skinCatalog(counts, 'shine', true).find(skin => skin.id === 'shine').equipped, true);
 console.log('PASS: fruit skins unlock from lifetime counts and reject oversized round deltas.');

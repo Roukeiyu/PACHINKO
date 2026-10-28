@@ -164,13 +164,39 @@ function frost(ctx, x, y, r, id) {
 
 const PAINTERS = { 20: watermelon, 10: pineapple, 5: grape, 3: orange, 2: cherry };
 
-export function paintBallFace(ctx, x, y, r, skin) {
+function shineBall(ctx, x, y, r, now) {
+  const spin = now / 280;
+  for (let i = 0; i < 10; i++) {
+    ctx.fillStyle = `hsl(${(i * 36 + now / 8) % 360} 92% 62%)`;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.arc(x, y, r, spin + i * Math.PI / 5, spin + (i + 1) * Math.PI / 5);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.fillStyle = '#fff';
+  for (let i = 0; i < 6; i++) {
+    const a = spin * 1.7 + i * 1.05;
+    ctx.globalAlpha = 0.45 + 0.55 * Math.abs(Math.sin(now / 140 + i));
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(a) * r * 0.46, y + Math.sin(a) * r * 0.46, r * 0.07, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 0.85;
+  ctx.beginPath();
+  ctx.ellipse(x - r * 0.22, y - r * 0.28, r * 0.2, r * 0.1, -0.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+export function paintBallFace(ctx, x, y, r, skin, now = 0) {
   if (!skin) return false;
   ctx.save();
   clipDisc(ctx, x, y, r);
-  (PAINTERS[skin.fruit] || cherry)(ctx, x, y, r);
-  if (skin.tier === 2) frost(ctx, x, y, r, skin.id);
-  else {
+  if (skin.id === 'shine') shineBall(ctx, x, y, r, now);
+  else (PAINTERS[skin.fruit] || cherry)(ctx, x, y, r);
+  if (skin.id !== 'shine' && skin.tier === 2) frost(ctx, x, y, r, skin.id);
+  else if (skin.id !== 'shine') {
     ctx.globalAlpha = 0.28;
     ctx.fillStyle = '#fff';
     ctx.beginPath();
@@ -181,10 +207,10 @@ export function paintBallFace(ctx, x, y, r, skin) {
   return true;
 }
 
-export function ballTexture(skin, size = 128) {
+export function ballTexture(skin, size = 128, now = 0) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d');
-  paintBallFace(ctx, size / 2, size / 2, size * 0.48, skin);
+  paintBallFace(ctx, size / 2, size / 2, size * 0.48, skin, now);
   return canvas;
 }

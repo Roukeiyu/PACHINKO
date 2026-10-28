@@ -74,7 +74,7 @@ export function createProfileClient({ url = workerUrl(), storage = browserStorag
     login: (name, pin) => send('/login', { method: 'POST', body: { name, pin } }),
     logout: () => send('/logout', { method: 'POST', auth: true }).catch(() => ({ ok: true })),
     me: () => send('/me', { auth: true }),
-    round: (runId, fruits) => send('/round-result', { method: 'POST', auth: true, body: { runId, fruits } }),
+    round: (runId, fruits, score) => send('/round-result', { method: 'POST', auth: true, body: { runId, fruits, ...(score == null ? {} : { score }) } }),
     equip: skin => send('/equip', { method: 'POST', auth: true, body: { skin } }),
   };
 }

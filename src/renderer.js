@@ -9,7 +9,7 @@ import { chargeEffectsAt } from './charge.js';
 import { sceneMotionAt } from './scene-motion.js';
 import { ballOwnFactor, ballRimStyle } from './ball-rim.js';
 import { activeSkinId, skinById } from './skins.js';
-import { ballTexture } from './ball-face.js';
+import { ballTexture, paintBallFace } from './ball-face.js';
 
 const W = TABLE.width, H = TABLE.height;
 const world = (x, y, z = 0) => new THREE.Vector3(x - W / 2, H / 2 - y, z);
@@ -312,11 +312,38 @@ function create3DRenderer(canvas) {
   const ballColor = new THREE.Color('#ffffff');
   const skinTextures = new Map();
   let appliedSkin = '';
-  function applyBallSkin(skinId) {
+  let shineCanvas = null, shineContext = null, shineMap = null, shineFrame = 0;
+  function applyBallSkin(skinId, now) {
+    const skin = skinById(skinId);
+    if (skin?.id === 'shine') {
+      if (!shineCanvas) {
+        shineCanvas = ballTexture(skin, 128, now);
+        shineContext = shineCanvas.getContext('2d');
+        shineMap = new THREE.CanvasTexture(shineCanvas);
+        shineMap.colorSpace = THREE.SRGBColorSpace;
+      } else if (slowFrames < 8 || now - shineFrame > 90) {
+        shineFrame = now;
+        shineContext.clearRect(0, 0, 128, 128);
+        paintBallFace(shineContext, 64, 64, 60, skin, now);
+        shineMap.needsUpdate = true;
+      }
+      if (appliedSkin !== 'shine') {
+        ballMaterial.map = shineMap;
+        ballMaterial.color.set('#ffffff');
+        ballMaterial.roughness = 0.12;
+        ballMaterial.clearcoat = 1;
+        ballMaterial.metalness = 0.2;
+        ballMaterial.emissive.set('#554422');
+        ballMaterial.emissiveIntensity = 0.35;
+        ballMaterial.needsUpdate = true;
+        appliedSkin = 'shine';
+      }
+      return;
+    }
     if (appliedSkin === skinId) return;
     appliedSkin = skinId;
-    const skin = skinById(skinId);
-    const previous = ballMaterial.map;
+    ballMaterial.emissive.set('#000000');
+    ballMaterial.emissiveIntensity = 0;
     if (!skin) {
       ballMaterial.map = null;
       ballMaterial.color.set('#ffedb0');
@@ -335,9 +362,10 @@ function create3DRenderer(canvas) {
       ballMaterial.clearcoat = skin.tier === 2 ? 0.9 : 0.05;
       ballMaterial.metalness = skin.tier === 2 ? 0.04 : 0.08;
     }
-    if (previous && previous !== ballMaterial.map) previous.needsUpdate = true;
     ballMaterial.needsUpdate = true;
   }
+  let slowFrames = 0;
+  let frameStamp = 0;
   const springPoints = Array.from({ length: 193 }, (_, i) => { const t = i / 192, a = t * Math.PI * 12; return new THREE.Vector3(Math.cos(a) * 9, t * 52, 9 + Math.sin(a) * 5); });
   const spring = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(springPoints), 192, 1.7, 6, false), material('#a4ac93', 'object', { metalness: .7, roughness: .3 }));
   spring.position.copy(world(TABLE.launchX, 865)); spring.castShadow = true; table.add(spring);
@@ -385,6 +413,10 @@ function create3DRenderer(canvas) {
   const sparkMaterial = new THREE.SpriteMaterial({ map: sparkMap, transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending });
   const starSparks = Array.from({ length: 6 }, () => {
     const spark = new THREE.Sprite(sparkMaterial); spark.scale.set(14, 14, 1); spark.renderOrder = 4; table.add(spark); return spark;
+  });
+  const shineMaterial = sparkMaterial.clone();
+  const shineSprites = Array.from({ length: 18 }, () => {
+    const spark = new THREE.Sprite(shineMaterial); spark.scale.set(10, 10, 1); spark.visible = false; spark.renderOrder = 4; table.add(spark); return spark;
   });
   const flashCanvas = document.createElement('canvas'); flashCanvas.width = flashCanvas.height = 256;
   const flashCtx = flashCanvas.getContext('2d');
@@ -560,7 +592,46 @@ function create3DRenderer(canvas) {
         ctx.fillText(value, 64, 34); well.texture.needsUpdate = true; well.last = value;
       }
     }
-    applyBallSkin(activeSkinId(state.equippedSkin));
+    const frameNow = performance.now();
+    const frameDt = frameStamp ? frameNow - frameStamp : 16;
+    frameStamp = frameNow;
+    if (frameDt > 34) slowFrames = Math.min(24, slowFrames + 1);
+    else slowFrames = Math.max(0, slowFrames - 1);
+    applyBallSkin(activeSkinId(state.equippedSkin), frameNow);
+    if (theme.motif === 'shine') {
+      const pulse = 0.72 + 0.28 * Math.abs(Math.sin(frameNow / 180));
+      pinSide.color.set(theme.pin).multiplyScalar(pulse);
+    }
+    const shine3d = activeSkinId(state.equippedSkin) === 'shine';
+    const shineCap = slowFrames >= 16 ? 4 : slowFrames >= 8 ? 8 : shineSprites.length;
+    let shineUsed = 0;
+    if (shine3d) {
+      const perBall = slowFrames >= 8 ? 1 : 2;
+      for (const ball of game.balls) {
+        if (shineUsed >= shineCap) break;
+        if (ball.bonus) continue;
+        const vx = ball.body.velocity.x, vy = ball.body.velocity.y;
+        const speed = Math.hypot(vx, vy) || 1;
+        for (let i = 0; i < perBall && shineUsed < shineCap; i++) {
+          const spark = shineSprites[shineUsed++];
+          spark.visible = true;
+          const back = (i + 1) * 9;
+          const wobble = Math.sin(frameNow / 90 + ball.id + i) * 4;
+          spark.position.copy(world(ball.body.position.x - vx / speed * back + wobble, ball.body.position.y - vy / speed * back, 18));
+          spark.scale.setScalar(6 + (1 - i) * 3);
+        }
+      }
+      const ambient = Math.min(6, shineCap - shineUsed);
+      for (let i = 0; i < ambient; i++) {
+        const spark = shineSprites[shineUsed++];
+        spark.visible = true;
+        const x = 80 + ((i * 113 + frameNow / 40) % 600);
+        const y = 120 + ((i * 97 + frameNow / 55) % 640);
+        spark.position.copy(world(x, y, 28));
+        spark.scale.setScalar(5 + (i % 3));
+      }
+    }
+    for (let i = shineUsed; i < shineSprites.length; i++) shineSprites[i].visible = false;
     const daylight = !theme.hueLock && palette?.phase?.id !== 'night';
     ballPositions.clear();
     let playerCount = 0, bonusCount = 0, rimCount = 0, glowCount = 0;

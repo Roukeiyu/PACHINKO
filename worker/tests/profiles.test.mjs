@@ -5,7 +5,7 @@ import { Miniflare } from 'miniflare';
 import { PIN_FAILS } from '../src/profiles.js';
 
 const scriptPath = fileURLToPath(new URL('../src/index.js', import.meta.url));
-const migration = readFileSync(new URL('../migrations/0001_profiles.sql', import.meta.url), 'utf8');
+const migration = ['0001_profiles.sql', '0002_shine.sql'].map(name => readFileSync(new URL(`../migrations/${name}`, import.meta.url), 'utf8')).join('\n');
 const runId = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
 const worker = new Miniflare({
@@ -115,6 +115,24 @@ try {
   assert.equal(back.body.fruits[2], 83);
   assert.equal(back.body.equipped, 'cherry');
 
+  const live = back.body.token;
+  const shy = await call('/round-result', { method: 'POST', token: live, body: { runId: runId(8), fruits: { 2: 1 }, score: 1000005 } });
+  assert.equal(shy.status, 400);
+  assert.equal(shy.body.error, 'invalid_score');
+  const almost = await call('/round-result', { method: 'POST', token: live, body: { runId: runId(8), fruits: { 2: 1 }, score: 999990 } });
+  assert.equal(almost.status, 200);
+  assert.equal(almost.body.shineUnlocked, false);
+  const denied = await call('/equip', { method: 'POST', token: live, body: { skin: 'shine' } });
+  assert.equal(denied.status, 403);
+  const legend = await call('/round-result', { method: 'POST', token: live, body: { runId: runId(9), score: 1000000, fruits: { 2: 1 } } });
+  assert.equal(legend.body.shineJustUnlocked, true);
+  assert.equal(legend.body.shineUnlocked, true);
+  const repeat = await call('/round-result', { method: 'POST', token: live, body: { runId: runId(9), score: 1000000, fruits: { 2: 1 } } });
+  assert.equal(repeat.body.updated, false);
+  assert.equal(repeat.body.shineJustUnlocked, false);
+  assert.equal(repeat.body.fruits[2], legend.body.fruits[2]);
+  const worn = await call('/equip', { method: 'POST', token: live, body: { skin: 'shine' } });
+  assert.equal(worn.body.equipped, 'shine');
   console.log('PASS: register, PIN lock, idempotent fruit, skins, and separate profiles.');
 } finally {
   await worker.dispose();
