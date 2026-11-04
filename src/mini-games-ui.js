@@ -265,7 +265,7 @@ export function createMiniGamesUI({ root, onFinish, onExit, onPoints = () => {},
       }
     })();
   }
-  const BOMB_SVG = '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="18" r="10" fill="#2c2428" stroke="#f4efe4" stroke-width="2"/><path d="M16 8c2-4 6-4 7-2" fill="none" stroke="#e2b43a" stroke-width="2" stroke-linecap="round"/></svg>';
+  const BOMB_SVG = '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="18" r="9" fill="#e56b8a"/><circle cx="13" cy="15" r="2" fill="#fff6d8"/><path d="M18 11c2-4 6-5 7-2" fill="none" stroke="#e2b43a" stroke-width="2" stroke-linecap="round"/><circle cx="24" cy="8" r="1.7" fill="#f0a04a"/></svg>';
   function renderStars(s) {
     const field = $('#mini-field');
     let basket = field.querySelector('.mini-basket');
