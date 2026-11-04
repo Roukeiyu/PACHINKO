@@ -28,11 +28,11 @@ const FILTER = { world: 1, ascending: 2, playing: 4, returnRamp: 8, launchDoor: 
 // that lip, so the rim can no longer push it back out between checks.
 const HOLE_SINK = 30, HOLE_RIM = 56, HOLE_IGNORE = 200, HOLE_GROUP = -2;
 // Mouth direction. Angle 0 points right and increases clockwise, because y
-// grows downward. −3π/4 is 10:30: 45° up-left. The rim gap, the drawn mouth
-// and the sink check all use this same facing.
+// grows downward. 13π/12 is 9:30: 15° above due left. The rim gap, the drawn
+// mouth and the sink check all use this same facing.
 export const SECRET_HOLE_X = 580;
 export const SECRET_HOLE_Y = 470;
-export const SECRET_HOLE_FACING = -Math.PI * 3 / 4;
+export const SECRET_HOLE_FACING = Math.PI * 13 / 12;
 const DWELL_RADIUS = 12, DWELL_LIMIT = 1500, COLLECTOR_HOLD = 48;
 // The shelf above the secret hole (the +500 label and the guide/wall corner)
 // must not hold a ball. The slow board-wide nudge is too late for that pocket.
@@ -112,8 +112,8 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   // from nearby obstacles even when pointing left, allowing full-circle shots.
   const triangle = add(Bodies.fromVertices(99, 466, [[{ x: 34, y: 0 }, { x: -17, y: -23 }, { x: -17, y: 23 }]], { isStatic: true, label: 'deflector', restitution: .8, friction: 0 }), deflectors, { radius: 34, angle: -Math.PI / 3, hits: 0 });
   Body.setAngle(triangle, triangle.plugin.angle);
-  // Recessed cup. The missing arc is the mouth, centered on facing (10:30,
-  // 45° up-left). The same arc is the visual gap in 2D and 3D. A jackpot is
+  // Recessed cup. The missing arc is the mouth, centered on facing (9:30,
+  // 15° above due left). The same arc is the visual gap in 2D and 3D. A jackpot is
   // earned by actually reaching the hole.
   for (const hole of holes) {
     for (let i = 0; i < 12; i++) {

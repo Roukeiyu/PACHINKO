@@ -204,7 +204,7 @@ assert.ok(totals.jackpots > 0 && totals.jackpots < 108, 'physical bonus cups sho
   assert.equal(game.holes.length, 1, 'only the right secret hole remains');
   const h = game.holes[0];
   assert.ok(h.x > TABLE.width / 2);
-  assert.equal(SECRET_HOLE_FACING, -Math.PI * 3 / 4, 'the mouth faces 10:30, 45° up-left');
+  assert.equal(SECRET_HOLE_FACING, Math.PI * 13 / 12, 'the mouth faces 9:30, 15° above due left');
   assert.equal(h.facing, SECRET_HOLE_FACING, 'the hit sensor uses the same facing as the rim gap');
   assert.equal(h.x, SECRET_HOLE_X);
   assert.equal(h.y, SECRET_HOLE_Y);
