@@ -197,8 +197,34 @@ crowdBanner.id = 'crowd-banner';
 crowdBanner.hidden = true;
 crowdBanner.textContent = '✦ 礼花时间 · 球台热闹，稍等再发射';
 $('#board').parentElement.append(crowdCanvas, crowdBanner);
+const secretWait = document.createElement('div');
+secretWait.id = 'secret-wait';
+secretWait.className = 'secret-wait';
+secretWait.setAttribute('aria-hidden', 'true');
+const secretSparkEdges = ['top', 'bottom', 'left', 'right'];
+secretWait.innerHTML = `<div class="secret-wait-glow"></div><div class="secret-wait-rays"></div><div class="secret-wait-sparks" aria-hidden="true">${Array.from({ length: 16 }, (_, i) => `<i data-edge="${secretSparkEdges[i % 4]}" style="--slot:${Math.floor(i / 4)}"></i>`).join('')}</div><p class="secret-wait-banner">秘密即将出现…</p>`;
+$('#app').append(secretWait);
 const fireworks = createCrowdFireworks(crowdCanvas);
 let fireworkAlive = 0;
+let secretSlowFrames = 0;
+let secretWaitShown = false;
+function syncSecretWait(rawDelta) {
+  const show = state.secretPending && !miniGames.open;
+  if (show !== secretWaitShown) {
+    secretWaitShown = show;
+    secretWait.classList.toggle('is-on', show);
+    secretWait.setAttribute('aria-hidden', show ? 'false' : 'true');
+    if (!show) secretSlowFrames = 0;
+  }
+  if (!show) {
+    secretWait.classList.remove('is-sparse');
+    return;
+  }
+  // Same slow-frame ladder as the shine sparks: drop particles, keep the glow.
+  if (rawDelta > 34) secretSlowFrames = Math.min(24, secretSlowFrames + 1);
+  else if (rawDelta > 0) secretSlowFrames = Math.max(0, secretSlowFrames - 1);
+  secretWait.classList.toggle('is-sparse', secretSlowFrames >= 8);
+}
 function reducedMotion() {
   return state.calm || matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
@@ -1008,6 +1034,7 @@ function tick(now) {
     miniGames.start(kind, 'secret', secretWave.multiplier, secretHoleBalls({ valueFactor: secretGiftFactor }).holeBalls);
     syncLaunchControls();
   }
+  syncSecretWait(rawDelta);
   if (miniGames.open) { $('.game-layout').style.removeProperty('transform'); frame = requestAnimationFrame(tick); return; }
   const motion = sceneMotionAt(game.clock, state, fx);
   if (motion.intensity) $('.game-layout').style.transform = `translate(${motion.uiX.toFixed(2)}px, ${motion.uiY.toFixed(2)}px)`;

@@ -246,6 +246,28 @@ html:not(.calm) .ball-count.is-low{animation:ball-low 900ms ease-in-out infinite
 .launch-button.is-crowd-locked{background:#8d7344;color:#fff8e8;box-shadow:0 0 0 3px #e2ae48,0 3px 0 #6d5428;cursor:not-allowed}
 #plunger.is-crowd-locked{cursor:not-allowed}
 @media(prefers-reduced-motion:reduce){#crowd-fireworks{display:none}}
+/* Secret-hole wait. Screen-edge only: the playfield stays readable in 2D and 3D. */
+.secret-wait{position:fixed;inset:0;z-index:8;pointer-events:none;opacity:0;visibility:hidden;transition:opacity .45s ease,visibility 0s linear .45s}
+.secret-wait.is-on{opacity:1;visibility:visible;transition:opacity .4s ease,visibility 0s linear 0s}
+.secret-wait-glow,.secret-wait-rays,.secret-wait-sparks{position:absolute;inset:0}
+.secret-wait-glow{background:radial-gradient(ellipse at center,transparent 46%,rgba(255,198,74,.34) 74%,rgba(255,186,48,.62) 100%),radial-gradient(ellipse at center,transparent 54%,rgba(128,62,206,.22) 80%,rgba(86,28,158,.55) 100%);box-shadow:inset 0 0 0 3px rgba(255,214,130,.4),inset 0 0 100px 18px rgba(150,70,210,.28);animation:secret-glow 2.6s ease-in-out infinite}
+.secret-wait-rays{inset:-12%;background:repeating-conic-gradient(from 0deg,rgba(255,214,120,0) 0deg 14deg,rgba(255,214,120,.5) 14deg 16deg,rgba(190,140,255,0) 16deg 30deg,rgba(190,140,255,.38) 30deg 32deg);-webkit-mask-image:radial-gradient(circle at center,transparent 0 46%,#000 68%);mask-image:radial-gradient(circle at center,transparent 0 46%,#000 68%);animation:secret-rays 36s linear infinite;opacity:.8}
+.secret-wait-sparks i{position:absolute;width:7px;height:7px;margin:-3px;border-radius:50%;background:#fff6d0;box-shadow:0 0 10px 2px #f0c14a;animation:secret-spark 9s ease-in-out infinite;animation-delay:calc(var(--slot) * -1.15s)}
+.secret-wait-sparks i:nth-child(odd){background:#f4e6ff;box-shadow:0 0 10px 2px #c49af0}
+.secret-wait-sparks i[data-edge="top"]{top:4%;left:calc(14% + var(--slot) * 18%)}
+.secret-wait-sparks i[data-edge="bottom"]{bottom:5%;left:calc(18% + var(--slot) * 16%)}
+.secret-wait-sparks i[data-edge="left"]{left:2.5%;top:calc(18% + var(--slot) * 16%)}
+.secret-wait-sparks i[data-edge="right"]{right:2.5%;top:calc(22% + var(--slot) * 14%)}
+.secret-wait-banner{position:absolute;top:max(12px,env(safe-area-inset-top));left:50%;translate:-50% 0;margin:0;padding:10px 22px;border-radius:999px;background:rgba(42,22,72,.9);color:#ffe7a1;border:2px solid #e8c36a;box-shadow:0 0 16px rgba(232,195,106,.45),0 0 26px rgba(150,80,220,.28);font-size:22px;font-weight:800;letter-spacing:.12em;white-space:nowrap;animation:secret-banner 1.8s ease-in-out infinite}
+.secret-wait:not(.is-on) .secret-wait-rays,.secret-wait:not(.is-on) .secret-wait-sparks i,.secret-wait:not(.is-on) .secret-wait-glow,.secret-wait:not(.is-on) .secret-wait-banner{animation-play-state:paused}
+html.calm .secret-wait-rays,html.calm .secret-wait-sparks,.secret-wait.is-sparse .secret-wait-sparks i:nth-child(n+5){display:none}
+html.calm .secret-wait-glow,html.calm .secret-wait-banner{animation:none}
+@keyframes secret-glow{0%,100%{opacity:.78}50%{opacity:1}}
+@keyframes secret-rays{to{transform:rotate(360deg)}}
+@keyframes secret-spark{0%,100%{opacity:.2;transform:translate3d(0,0,0)}50%{opacity:.95;transform:translate3d(0,-14px,0)}}
+@keyframes secret-banner{0%,100%{scale:1;box-shadow:0 0 16px rgba(232,195,106,.45),0 0 26px rgba(150,80,220,.28)}50%{scale:1.06;box-shadow:0 0 26px rgba(255,220,140,.85),0 0 36px rgba(180,110,255,.5)}}
+@media(max-width:740px){.secret-wait-banner{font-size:16px;padding:8px 14px;letter-spacing:.08em}}
+@media(prefers-reduced-motion:reduce){.secret-wait-rays,.secret-wait-sparks{display:none}}
 
 /* Phones keep the table, the score and the charge control. Reward copy, the
    leaderboard, and the hint line stay behind one small toggle. */

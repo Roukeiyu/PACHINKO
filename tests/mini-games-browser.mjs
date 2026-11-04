@@ -56,6 +56,8 @@ try {
  await page.evaluate(()=>window.__secretFixture.enter());await page.clock.runFor(50);
  let s=await state();assert.equal(s.secretPending,true);assert.equal(s.emissionPaused,true);assert.equal(s.activeBalls,1);assert.equal(s.miniGame,null);
  assert.equal(await page.locator('#launch').isDisabled(),true);assert.equal(await page.locator('#launch-label').textContent(),'等待“秘密出现”');
+ assert.equal(await page.locator('#secret-wait').evaluate(el => el.classList.contains('is-on')), true);
+ assert.equal(await page.locator('.secret-wait-banner').textContent(), '秘密即将出现…');
  assert.equal(await page.locator('#launch').isVisible(),true,'auto mode also shows the waiting button');
  assert.equal(await page.locator('#plunger').isDisabled(),true);
  await page.locator('#board').focus();await page.keyboard.down('Space');await page.clock.fastForward(4000);await page.keyboard.up('Space');
@@ -64,6 +66,7 @@ try {
  await page.evaluate(()=>window.__secretFixture.drain());await page.clock.runFor(50);s=await state();
  assert.equal(s.activeBalls,0);assert.equal(s.miniGame,null,'the intro card does not start the round');
  assert.equal(await page.locator('#mini-game').evaluate(el=>el.open),true);
+ assert.equal(await page.locator('#secret-wait').evaluate(el => el.classList.contains('is-on')), false, 'the secret wait glow leaves when the mini-game opens');
  assert.equal(await page.locator('#mini-game').getAttribute('data-phase'),'intro');
  assert.equal(await page.locator('#mini-rule').isVisible(),true);
  assert.equal(await page.locator('#mini-play').evaluate(el=>el.hidden),true);
