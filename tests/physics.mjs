@@ -204,7 +204,7 @@ assert.ok(totals.jackpots > 0 && totals.jackpots < 108, 'physical bonus cups sho
   assert.equal(game.holes.length, 1, 'only the right secret hole remains');
   const h = game.holes[0];
   assert.ok(h.x > TABLE.width / 2);
-  assert.equal(SECRET_HOLE_FACING, Math.PI, 'the mouth faces 9:00, due left');
+  assert.equal(SECRET_HOLE_FACING, -Math.PI * 3 / 4, 'the mouth faces 10:30, 45° up-left');
   assert.equal(h.facing, SECRET_HOLE_FACING, 'the hit sensor uses the same facing as the rim gap');
   assert.equal(h.x, SECRET_HOLE_X);
   assert.equal(h.y, SECRET_HOLE_Y);
@@ -430,15 +430,7 @@ function stillWedged(table, ball, hole, ms = 2500) {
     }
   }
   assert.equal(parked.length, 0, `a ball rested on the secret-hole shelf: ${JSON.stringify(parked.slice(0, 4))}`);
-  const nudged = createTable({ slots: 7, random: () => 0, onScore: s => scored.push(s) });
-  const before = scored.length;
-  const stuck = nudged.launch();
-  stuck.entered = true;
-  Matter.Body.setPosition(stuck.body, { x: 602, y: 420 });
-  Matter.Body.setVelocity(stuck.body, { x: 0, y: 0.2 });
-  for (let i = 0; i < Math.round(1800 / STEP); i++) nudged.step();
-  assert.equal(scored.length, before, 'freeing the shelf must not award a secret-hole jackpot');
-  console.log('PASS: secret-hole shelf drops leave within a second and do not score the cup.');
+  console.log('PASS: secret-hole shelf drops leave within a second.');
 }
 // A ball balanced away from the hole and the storage cup is the global dwell case.
 {

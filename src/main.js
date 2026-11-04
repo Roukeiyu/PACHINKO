@@ -1001,7 +1001,8 @@ function tick(now) {
     maybeEndRound();
   }
   watchRound(now);
-  if (state.secretPending && !game.balls.length && !miniGames.open && !panelOpen() && !document.hidden) {
+  const rewardBusy = game.pendingLaunches > 0 || game.pendingShotCount > 0 || game.pendingDropCount > 0 || game.collector.remaining > 0;
+  if (state.secretPending && !game.balls.length && !rewardBusy && !miniGames.open && !panelOpen() && !document.hidden) {
     const kind = randomMiniGame(Math.random, lastMiniGame);
     noteMiniGame(kind);
     miniGames.start(kind, 'secret', secretWave.multiplier, secretHoleBalls({ valueFactor: secretGiftFactor }).holeBalls);

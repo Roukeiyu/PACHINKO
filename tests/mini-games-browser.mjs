@@ -98,7 +98,7 @@ try {
  assert.equal(await page.locator('#gm-tools').isVisible(),false);
  assert.equal(await page.locator('#gm-dot').count(),0,'the triple-tap GM control is gone');
  assert.equal((await state()).gm,false);
- await page.locator('[data-mini="pairs"]').click({force:true});
+ await page.locator('[data-mini="pairs"]').evaluate(el => el.click());
  assert.equal(await page.locator('#mini-game').evaluate(el=>el.open),false,'a guest cannot start a GM mini-game');
  await page.locator('#time-flow').check();await page.clock.fastForward(330000);assert.equal(await page.locator('#time-phase').textContent(),'夜间');
  async function start(kind){

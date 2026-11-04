@@ -28,12 +28,11 @@ const FILTER = { world: 1, ascending: 2, playing: 4, returnRamp: 8, launchDoor: 
 // that lip, so the rim can no longer push it back out between checks.
 const HOLE_SINK = 30, HOLE_RIM = 56, HOLE_IGNORE = 200, HOLE_GROUP = -2;
 // Mouth direction. Angle 0 points right and increases clockwise, because y
-// grows downward. π is 9:00: due left. Balls reach this cup from above and
-// the upper-left; a down-left mouth caught almost none of them, and an
-// upper-left mouth caught too many. Due left is the edge of that stream.
+// grows downward. −3π/4 is 10:30: 45° up-left. The rim gap, the drawn mouth
+// and the sink check all use this same facing.
 export const SECRET_HOLE_X = 580;
 export const SECRET_HOLE_Y = 470;
-export const SECRET_HOLE_FACING = Math.PI;
+export const SECRET_HOLE_FACING = -Math.PI * 3 / 4;
 const DWELL_RADIUS = 12, DWELL_LIMIT = 1500, COLLECTOR_HOLD = 48;
 // The shelf above the secret hole (the +500 label and the guide/wall corner)
 // must not hold a ball. The slow board-wide nudge is too late for that pocket.
@@ -113,8 +112,8 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   // from nearby obstacles even when pointing left, allowing full-circle shots.
   const triangle = add(Bodies.fromVertices(99, 466, [[{ x: 34, y: 0 }, { x: -17, y: -23 }, { x: -17, y: 23 }]], { isStatic: true, label: 'deflector', restitution: .8, friction: 0 }), deflectors, { radius: 34, angle: -Math.PI / 3, hits: 0 });
   Body.setAngle(triangle, triangle.plugin.angle);
-  // Recessed cup. The missing arc is the mouth, centered on facing (9:00,
-  // due left). The same arc is the visual gap in 2D and 3D. A jackpot is
+  // Recessed cup. The missing arc is the mouth, centered on facing (10:30,
+  // 45° up-left). The same arc is the visual gap in 2D and 3D. A jackpot is
   // earned by actually reaching the hole.
   for (const hole of holes) {
     for (let i = 0; i < 12; i++) {
@@ -374,11 +373,6 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     bumper.plugin.radius = radius;
   }
   function recordBumperHit(bumper, ball) {
-    // A secret visit keeps the table moving so the other balls can drain, but
-    // that wait must not fill a drum or arm a reward. The 12-shot clock in
-    // particular was queuing here and only appearing once the mini-game
-    // released the held shots.
-    if (emissionPaused) return;
     const index = bumper.plugin.index;
     // Center drum only (index 2, the meter that pays the 12-ball clock).
     // Left and right drums always advance by 1. Omitting the hook keeps +1.
@@ -503,15 +497,8 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
   }
   function step(dt = STEP) {
     clock += dt;
-    // Freeze earned bonus/drop schedules while existing balls drain, including
-    // any rewards those balls earn during the wait. Inventory is never lost.
-    if (emissionPaused) {
-      for (const queue of [pendingShots, pendingDrops]) for (const shot of queue) shot.due += dt;
-      // Queued clock-burst shots stay on hold, so their pips do too. The center
-      // drum does not: its 10s enlarge keeps expiring, or a secret wait leaves
-      // the grown drum sitting on the spinner until every ball has drained.
-      if (rewards.burstUntil) rewards.burstUntil += dt;
-    }
+    // A pending secret visit locks only the player's plunger. Drum shots, the
+    // clock burst and jar drops keep their schedule and can chain further rewards.
     slotMachine.advance(clock);
     if (activeStar && clock + 1e-6 >= activeStar.expiresAt) {
       activeStar = null;
@@ -522,16 +509,15 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
     rewards.gateGlow = Math.max(0, rewards.gateGlow - dt / 900);
     collector.glow = Math.max(0, collector.glow - dt / 600);
     for (const outlet of collector.outlets) outlet.glow = Math.max(0, outlet.glow - dt / 320);
-    while (!emissionPaused && pendingDrops.length && pendingDrops[0].due <= clock + 1e-6) emitDrop(pendingDrops.shift());
+    while (pendingDrops.length && pendingDrops[0].due <= clock + 1e-6) emitDrop(pendingDrops.shift());
     collector.remaining = pendingDrops.length;
     while (!emissionPaused && pendingLaunches.length && pendingLaunches[0].due <= clock + 1e-6) {
       const shot = pendingLaunches.shift();
       const ball = emitCharged(shot.ordinal);
       ball.valueFactor = ballValue(shot.valueFactor);
     }
-    // Use the same simulation clock for countdowns and clock-burst scheduling;
-    // opening settings or backgrounding the tab pauses all gameplay together.
-    for (let i = 0; !emissionPaused && i < pendingShots.length;) {
+    // Reward shots keep launching while the player's plunger is locked.
+    for (let i = 0; i < pendingShots.length;) {
       const shot = pendingShots[i];
       if (shot.due > clock + 1e-6) { i++; continue; }
       pendingShots.splice(i, 1); emitFrom(bumpers[shot.index], shot.angle, shot.kind, shot.ordinal);
@@ -657,20 +643,14 @@ export function createTable({ slots = 7, collections = null, random = Math.rando
       const onFloor = y > TABLE.slotTop - 18 && y < 940;
       const shelf = holes[0];
       const shelfDx = shelf ? x - shelf.x : 0, shelfDy = shelf ? y - shelf.y : 0;
-      const shelfAngle = Math.atan2(shelfDy, shelfDx);
-      const mouthDelta = shelf ? Math.atan2(Math.sin(shelfAngle - shelf.facing), Math.cos(shelfAngle - shelf.facing)) : Math.PI;
-      // The open arc is ±0.55 rad. A ball already in that gap is approaching
-      // the cup, so the shelf shove must not kick it back out.
-      const inMouth = Math.abs(mouthDelta) <= 0.7;
       const onShelf = shelf && y < shelf.y - 6 && x > shelf.x - 50 && x < shelf.x + 110
-        && Math.hypot(shelfDx, shelfDy) > HOLE_SINK + 8 && !inMouth;
+        && Math.hypot(shelfDx, shelfDy) > HOLE_SINK + 8;
       const bell = bumpers[2];
       const aboveBell = Math.abs(x - bell.position.x) < 24 && y < bell.position.y - bell.plugin.radius + 6 && y > bell.position.y - 140;
       if (!aboveBell) ball.columnSince = 0;
       if (onShelf && ball.stuck > SHELF_LIMIT) {
-        // Down and slightly right: off the closed rim, away from the left-facing
-        // mouth and away from the center drum. A leftward shove was aimed at
-        // that drum.
+        // Down and slightly right, off the rim and away from the up-left mouth.
+        // A moving approach does not sit still long enough for this to fire.
         Body.setVelocity(body, { x: 2.4, y: 5 });
         ball.stuck = 0; ball.anchorX = x; ball.anchorY = y;
       } else if (onFloor && ball.stuck > 800 && body.speed < 0.9) {

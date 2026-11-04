@@ -15,9 +15,11 @@ for(let n=0;n<20;n++){
  for(let i=0;i<30&&storage.balls.includes(ball);i++)storage.step();
 }
 assert.equal(storage.collector.remaining,20);storage.setEmissionPaused(true);
-for(let i=0;i<600;i++)storage.step();assert.equal(storage.stats.storageDrops,0);assert.equal(storage.collector.remaining,20,'earned drops remain stored during the secret wait');
-storage.setEmissionPaused(false);
-for(let i=0;i<40;i++)storage.step();assert.ok(storage.stats.storageDrops>0&&storage.stats.storageDrops<4,'earned drops resume their original spacing');
+assert.equal(storage.launch(1),null,'the player still cannot launch during the secret wait');
+for(let i=0;i<80;i++)storage.step();
+assert.ok(storage.stats.storageDrops>0,'jar releases keep falling while the player is locked');
+assert.ok(storage.collector.remaining<20);
+assert.equal(storage.launch(1),null);
 const held=createTable({random:()=>.5});
 assert.equal(held.forceEnlarge(),58.5);
 held.rewards.burstUntil=held.clock+1200;
@@ -29,7 +31,7 @@ for(let i=0;i<pausedSteps;i++)held.step();
 const enlargeNow=held.rewards.enlargedUntil-held.clock;
 assert.ok(Math.abs(enlargeNow-(enlargeLeft-pausedSteps*STEP))<1e-3,'center enlarge keeps counting while secret emission is paused');
 assert.equal(held.bumpers[2].plugin.radius,58.5,'the drum stays large until its own 10s elapses');
-assert.ok(Math.abs((held.rewards.burstUntil-held.clock)-burstLeft)<1e-4,'clock-burst pips still freeze while emission is paused');
+assert.ok((held.rewards.burstUntil-held.clock)<burstLeft-2000,'clock-burst pips keep counting while the player is locked');
 const drum=held.bumpers[2],spinner=held.spinners[0];
 let minGap=Infinity,overlaps=0;
 for(let i=0;i<=40;i++){
@@ -73,41 +75,26 @@ returns.step();assert.equal(reasons.at(-1),'out');
 const timeout=returns.launch();timeout.entered=true;timeout.born=returns.clock-45001;
 Matter.Body.setPosition(timeout.body,{x:200,y:400});Matter.Body.setVelocity(timeout.body,{x:0,y:0});
 returns.step();assert.equal(reasons.at(-1),'timeout');assert.equal(returns.stats.timeouts,1);
-console.log('PASS: actual secret entry locks every launcher, cancels pending charged shots, preserves earned stored drops and resumes their release schedule. The center enlarge keeps expiring during that pause, clock-burst pips stay frozen, and returns report weak/out/timeout.');
+console.log('PASS: secret entry locks the player launcher and cancels an unfired burst. Jar drops and the clock burst keep running, enlarge still expires, and returns report weak/out/timeout.');
 
-// A secret visit used to let a ball keep tapping the center drum while shots
-// were held. The meter filled, and the 12-shot clock appeared when the
-// mini-game ended. The visit itself must not move the meter or arm a clock.
 {
-  const visit = createTable({ random: () => 0.4, centerHitWeight: ball => {
-    const raw = Math.floor(Number(ball?.valueFactor));
-    return Number.isFinite(raw) && raw > 0 ? raw : 1;
-  } });
-  visit.rewards.hits[2] = 4;
-  const farmer = visit.launch();
-  farmer.entered = true;
-  farmer.valueFactor = 8;
-  Matter.Body.setPosition(farmer.body, { x: 350, y: 340 });
-  Matter.Body.setVelocity(farmer.body, { x: 0, y: 1 });
-  const hole = visit.holes[0];
-  const secret = visit.launch();
-  secret.entered = true;
-  secret.valueFactor = 8;
-  Matter.Body.setPosition(secret.body, { x: hole.x, y: hole.y });
-  Matter.Body.setVelocity(secret.body, { x: 0, y: 0 });
-  visit.step();
-  assert.equal(visit.stats.jackpots, 1, 'the placed ball still opens the secret hole');
-  const hitsAtStart = visit.rewards.hits[2];
-  const pendingAtStart = visit.pendingShotCount;
-  const clocksAtStart = visit.stats.clockBursts;
+  const visit = createTable({ random: () => 0.4 });
   visit.setEmissionPaused(true);
-  for (let i = 0; i < Math.round(4000 / STEP); i++) visit.step();
-  visit.setEmissionPaused(false);
+  assert.equal(visit.queueClock(1), 12);
+  assert.equal(visit.launch(1), null);
   for (let i = 0; i < Math.round(2000 / STEP); i++) visit.step();
-  assert.equal(visit.rewards.hits[2], hitsAtStart, 'a secret visit does not advance the center drum');
-  assert.equal(visit.stats.clockBursts, clocksAtStart, 'a secret visit fires no clock');
-  assert.equal(visit.pendingShotCount, pendingAtStart, 'a secret visit does not queue clock shots');
-  const still = visit.balls.find(ball => ball.id === farmer.id);
-  if (still) assert.ok(Math.abs(still.body.position.x - 350) > 24 || still.body.position.y > 400, 'the ball above the bell is not left in that column');
-  console.log('PASS: finishing a secret visit leaves the clock meter and pending shots unchanged.');
+  assert.equal(visit.pendingShotCount, 0, 'the clock burst finishes while the player launcher stays locked');
+  assert.ok(visit.stats.bonusBalls >= 12, 'the twelve clock balls were launched');
+  assert.equal(visit.emissionPaused, true);
+  assert.equal(visit.launch(1), null);
+  const hole = visit.holes[0];
+  const again = visit.balls.find(ball => ball.kind === 'clock');
+  assert.ok(again);
+  Matter.Body.setPosition(again.body, { x: hole.x, y: hole.y });
+  Matter.Body.setVelocity(again.body, { x: 0, y: 0 });
+  const jackpotsBefore = visit.stats.jackpots;
+  visit.step();
+  assert.ok(visit.stats.jackpots > jackpotsBefore, 'another ball can still enter the hole during the same wait');
+  assert.equal(visit.emissionPaused, true, 'that entry does not unlock the player or start a second pause');
+  console.log('PASS: reward shots drain during the secret wait, and a later hole entry stays on that same wait.');
 }
